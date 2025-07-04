@@ -1,8 +1,10 @@
-module github.com/devoost/dflow
+module github.com/yepizrene-devoost/dflow
 
 go 1.21
 
+require github.com/spf13/cobra v1.7.0
+
 require (
-	github.com/AlecAivazis/survey/v2 v2.3.7
-	github.com/spf13/cobra v1.7.0
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/spf13/pflag v1.0.5 // indirect
 )
