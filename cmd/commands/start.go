@@ -1,4 +1,4 @@
-package startcmd
+package commands
 
 import (
 	"fmt"

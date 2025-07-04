@@ -5,8 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	initcmd "github.com/yepizrene-devoost/dflow/cmd/init"
-	startcmd "github.com/yepizrene-devoost/dflow/cmd/start"
+	"github.com/yepizrene-devoost/dflow/cmd/commands"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
 )
 
@@ -33,8 +32,8 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.AddCommand(initcmd.InitCmd)
-	rootCmd.AddCommand(startcmd.StartCmd)
+	rootCmd.AddCommand(commands.InitCmd)
+	rootCmd.AddCommand(commands.StartCmd)
 
 	// Personaliza la ayuda
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
