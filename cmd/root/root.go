@@ -3,28 +3,25 @@ package root
 import (
 	"fmt"
 	"os"
+
 	"github.com/spf13/cobra"
+	initcmd "github.com/yepizrene-devoost/dflow/cmd/init"
+	startcmd "github.com/yepizrene-devoost/dflow/cmd/start"
+	"github.com/yepizrene-devoost/dflow/cmd/utils"
 )
-
-var version = "0.1.0"
-
-const banner = `
-                             ██████╗ ███████╗██╗   ██╗ ██████╗  ██████╗ ███████╗████████╗
-                             ██╔══██╗██╔════╝██║   ██║██╔═══██╗██╔═══██╗██╔════╝╚══██╔══╝
-                             ██║  ██║█████╗  ██║   ██║██║   ██║██║   ██║███████╗   ██║   
-                             ██║  ██║██╔══╝  ╚██╗ ██╔╝██║   ██║██║   ██║╚════██║   ██║   
-                             ██████╔╝███████╗ ╚████╔╝ ╚██████╔╝╚██████╔╝███████║   ██║   
-                             ╚═════╝ ╚══════╝  ╚═══╝   ╚═════╝  ╚═════╝ ╚══════╝   ╚═╝   
-
-                                     dflow v%s - Git branching made simple
-`
 
 var rootCmd = &cobra.Command{
 	Use:   "dflow",
 	Short: "dflow is a Git branching flow manager for Devoost",
 	Long:  "A CLI tool to manage Git feature/release/hotfix flows inspired by Git Flow",
+
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		utils.PrintBanner()
+	},
+
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf(banner, version)
+		cmd.SetArgs([]string{"--help"})
+		cmd.Execute()
 	},
 }
 
@@ -33,4 +30,16 @@ func Execute() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+}
+
+func init() {
+	rootCmd.AddCommand(initcmd.InitCmd)
+	rootCmd.AddCommand(startcmd.StartCmd)
+
+	// Personaliza la ayuda
+	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		cmd.Root().SetHelpFunc(nil) // Evita loop
+		_ = cmd.Help()
+	})
+
 }
