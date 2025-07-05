@@ -88,7 +88,8 @@ var getAuthorCmd = &cobra.Command{
 			return nil
 		}
 
-		fmt.Printf("Author: %sEmail: %s", author, email)
+		fmt.Printf("👤 Author: %s", author)
+		fmt.Printf("📧 Email: %s", email)
 		return nil
 	},
 }
