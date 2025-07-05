@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
 	"github.com/yepizrene-devoost/dflow/cmd/gitutils"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
@@ -61,7 +62,6 @@ var StartCmd = &cobra.Command{
 
 		fullName := fmt.Sprintf("%s%s", prefix, branchName)
 
-		// Verificar y hacer checkout de la base
 		if err := gitutils.Checkout(base); err != nil {
 			utils.Error(fmt.Sprintf("Could not checkout base branch '%s'", base))
 			return
@@ -72,12 +72,27 @@ var StartCmd = &cobra.Command{
 			return
 		}
 
-		// Crear la nueva rama desde base
 		if err := gitutils.CheckoutNew(fullName); err != nil {
 			utils.Error(fmt.Sprintf("Failed to create branch '%s'", fullName))
 			return
 		}
 
 		utils.Success(fmt.Sprintf("Created and switched to branch '%s' from '%s'", fullName, base))
+
+		// Ask to push
+		var pushBranch bool
+		err = survey.AskOne(&survey.Confirm{
+			Message: fmt.Sprintf("Do you want to publish '%s' to origin?", fullName),
+			Default: true,
+		}, &pushBranch)
+		if err != nil {
+			fmt.Println("⚠️  Skipping push...")
+			return
+		}
+
+		if pushBranch {
+			gitutils.PushBranch(fullName)
+			utils.Success(fmt.Sprintf("Branch '%s' pushed to origin", fullName))
+		}
 	},
 }

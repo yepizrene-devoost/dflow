@@ -22,7 +22,7 @@ func CheckOrCreateBranch(branch string) {
 	}
 }
 
-// PushBranch publica una rama al remoto 'origin'
+// PushBranch publish branch to 'origin'
 func PushBranch(branch string) {
 	cmd := exec.Command("git", "push", "-u", "origin", branch)
 	if err := cmd.Run(); err != nil {

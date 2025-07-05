@@ -6,7 +6,7 @@ import (
 	"syscall"
 )
 
-// HandleInterrupt imprime un mensaje y cancela el proceso cuando se presiona Ctrl+C
+// HandleInterrupt print message and cancel process with Ctrl+C
 func HandleInterrupt() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
