@@ -13,19 +13,19 @@ var StartCmd = &cobra.Command{
 	Use:   "start [type] [name]",
 	Short: "Create and switch to a new feature, release, or hotfix branch",
 	Long: `Start a new Git branch following the dflow branching model.
+	
+  Valid types:
+    - feat|feature : Starts a new feature branch from the configured 'feature_base'
+    - release      : Starts a new release branch from the configured 'release_base'
+    - hotfix       : Starts a new hotfix branch from the configured 'hotfix_base'
 
-	Valid types:
-		- feat|feature : Starts a new feature branch from the configured 'feature_base'
-		- release      : Starts a new release branch from the configured 'release_base'
-		- hotfix       : Starts a new hotfix branch from the configured 'hotfix_base'
+  Examples:
+    dflow start feat login-form
+    dflow start release v1.0.0
+    dflow start hotfix urgent-patch
 
-	Examples:
-		dflow start feat login-form
-		dflow start release v1.0.0
-		dflow start hotfix urgent-patch
-
-	The new branch will be created using the appropriate prefix (e.g., feature/, release/, hotfix/)
-	and based on the corresponding base branch defined in your .dflow.yaml configuration.`,
+  The new branch will be created using the appropriate prefix (e.g., feature/, release/, hotfix/)
+  and based on the corresponding base branch defined in your .dflow.yaml configuration.`,
 
 	Args: cobra.MaximumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {

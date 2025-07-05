@@ -14,6 +14,28 @@ import (
 var InitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize your dflow branching configuration",
+	Long: `Initialize your dflow branching configuration and generate a .dflow.yaml file.
+
+  This interactive setup will guide you through the following steps:
+
+    - Prompt for the names of your main, develop, and UAT branches.
+    - Create a .dflow.yaml file with default prefixes:
+      - feature/  → for feature branches
+      - release/  → for release branches
+      - hotfix/   → for hotfix branches
+    - Set flow rules:
+      - Features start from UAT and merge to Develop
+      - Releases start from UAT
+      - Hotfixes start from Main
+    - Ensure the specified branches exist locally.
+    - Ask whether to push those base branches to origin.
+
+  The resulting .dflow.yaml is stored in the project root and used by all dflow commands.
+
+  Example:
+    dflow init
+
+  This command is meant to be run once per project when setting up the dflow branching model.`,
 	Run: func(cmd *cobra.Command, args []string) {
 
 		var mainBranch, developBranch, uatBranch string
