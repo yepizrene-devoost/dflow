@@ -56,10 +56,10 @@ func SaveConfig(cfg *Config) error {
 		return fmt.Errorf("error generating YAML: %v", err)
 	}
 
-	// Combina el banner y el YAML generado
+	// concat banner with generated yaml
 	finalContent := []byte(bannerToConfig + "\n" + string(yamlData))
 
-	// Escribe el contenido completo al archivo
+	// write all content in config initial file
 	if err := os.WriteFile(".dflow.yaml", finalContent, 0644); err != nil {
 		return fmt.Errorf("error writing .dflow.yaml: %v", err)
 	}
