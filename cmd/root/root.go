@@ -34,10 +34,11 @@ func Execute() {
 func init() {
 	rootCmd.AddCommand(commands.InitCmd)
 	rootCmd.AddCommand(commands.StartCmd)
+	rootCmd.AddCommand(commands.ConfigCmd)
 
-	// Personaliza la ayuda
+	// customize help
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		cmd.Root().SetHelpFunc(nil) // Evita loop
+		cmd.Root().SetHelpFunc(nil)
 		_ = cmd.Help()
 	})
 
