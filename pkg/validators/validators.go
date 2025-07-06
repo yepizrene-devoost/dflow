@@ -1,5 +1,5 @@
 // pkg/utils/validators.go (o similar)
-package utils
+package validators
 
 import (
 	"errors"
