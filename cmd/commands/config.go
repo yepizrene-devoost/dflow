@@ -21,8 +21,7 @@ var ConfigCmd = &cobra.Command{
   - Listing all project-level dflow git configs.
 
   Examples:
-    dflow config set-author <your name>
-    dflow config set-author --email=<your email>
+    dflow config set-author <your name> --email=<your email>
     dflow config get-author
     dflow config list
 
