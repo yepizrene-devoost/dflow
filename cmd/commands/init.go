@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/yepizrene-devoost/dflow/cmd/gitutils"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/validators"
 )
 
 var InitCmd = &cobra.Command{
@@ -36,7 +37,7 @@ var InitCmd = &cobra.Command{
     dflow init
 
   This command is meant to be run once per project when setting up the dflow branching model.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: validators.WithChecks(true, func(cmd *cobra.Command, args []string) error {
 
 		var mainBranch, developBranch, uatBranch string
 
@@ -46,7 +47,7 @@ var InitCmd = &cobra.Command{
 			os.Exit(1)
 		} else if err != nil {
 			fmt.Println("❌ Error:", err)
-			return
+			return nil
 		}
 
 		err = survey.AskOne(&survey.Input{Message: "Development branch name:", Default: "develop"}, &developBranch, survey.WithValidator(survey.Required))
@@ -55,7 +56,7 @@ var InitCmd = &cobra.Command{
 			os.Exit(1)
 		} else if err != nil {
 			fmt.Println("❌ Error:", err)
-			return
+			return nil
 		}
 
 		err = survey.AskOne(&survey.Input{Message: "UAT branch name:", Default: "uat"}, &uatBranch, survey.WithValidator(survey.Required))
@@ -64,7 +65,7 @@ var InitCmd = &cobra.Command{
 			os.Exit(1)
 		} else if err != nil {
 			fmt.Println("❌ Error:", err)
-			return
+			return nil
 		}
 
 		cfg := utils.Config{}
@@ -82,7 +83,7 @@ var InitCmd = &cobra.Command{
 
 		if err := utils.SaveConfig(&cfg); err != nil {
 			utils.Error(err.Error())
-			return
+			return nil
 		}
 		utils.Success("Created .dflow.yaml")
 
@@ -103,5 +104,6 @@ var InitCmd = &cobra.Command{
 		}
 
 		utils.Success("🎉 dflow is ready! Use `dflow start` to begin a new branch.")
-	},
+		return nil
+	}),
 }
