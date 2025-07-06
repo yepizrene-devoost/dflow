@@ -37,9 +37,16 @@ const bannerToConfig = `
 `
 
 func LoadConfig() (*Config, error) {
-	data, err := os.ReadFile(".dflow.yaml")
+	dir := os.Getenv("DFLOW_CWD")
+	if dir == "" {
+		dir, _ = os.Getwd()
+	}
+
+	path := dir + string(os.PathSeparator) + ".dflow.yaml"
+
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf(".dflow.yaml not found. Run `dflow init` first")
+		return nil, fmt.Errorf("failed to read .dflow.yaml: %w", err)
 	}
 
 	var cfg Config
@@ -56,11 +63,16 @@ func SaveConfig(cfg *Config) error {
 		return fmt.Errorf("error generating YAML: %v", err)
 	}
 
-	// concat banner with generated yaml
 	finalContent := []byte(bannerToConfig + "\n" + string(yamlData))
 
-	// write all content in config initial file
-	if err := os.WriteFile(".dflow.yaml", finalContent, 0644); err != nil {
+	dir := os.Getenv("DFLOW_CWD")
+	if dir == "" {
+		dir, _ = os.Getwd()
+	}
+
+	path := dir + string(os.PathSeparator) + ".dflow.yaml"
+
+	if err := os.WriteFile(path, finalContent, 0644); err != nil {
 		return fmt.Errorf("error writing .dflow.yaml: %v", err)
 	}
 

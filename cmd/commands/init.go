@@ -9,12 +9,35 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/yepizrene-devoost/dflow/cmd/gitutils"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/validators"
 )
 
 var InitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize your dflow branching configuration",
-	Run: func(cmd *cobra.Command, args []string) {
+	Long: `Initialize your dflow branching configuration and generate a .dflow.yaml file.
+
+  This interactive setup will guide you through the following steps:
+
+    - Prompt for the names of your main, develop, and UAT branches.
+    - Create a .dflow.yaml file with default prefixes:
+      - feature/  → for feature branches
+      - release/  → for release branches
+      - hotfix/   → for hotfix branches
+    - Set flow rules:
+      - Features start from UAT and merge to Develop
+      - Releases start from UAT
+      - Hotfixes start from Main
+    - Ensure the specified branches exist locally.
+    - Ask whether to push those base branches to origin.
+
+  The resulting .dflow.yaml is stored in the project root and used by all dflow commands.
+
+  Example:
+    dflow init
+
+  This command is meant to be run once per project when setting up the dflow branching model.`,
+	RunE: validators.WithChecks(true, func(cmd *cobra.Command, args []string) error {
 
 		var mainBranch, developBranch, uatBranch string
 
@@ -24,7 +47,7 @@ var InitCmd = &cobra.Command{
 			os.Exit(1)
 		} else if err != nil {
 			fmt.Println("❌ Error:", err)
-			return
+			return nil
 		}
 
 		err = survey.AskOne(&survey.Input{Message: "Development branch name:", Default: "develop"}, &developBranch, survey.WithValidator(survey.Required))
@@ -33,7 +56,7 @@ var InitCmd = &cobra.Command{
 			os.Exit(1)
 		} else if err != nil {
 			fmt.Println("❌ Error:", err)
-			return
+			return nil
 		}
 
 		err = survey.AskOne(&survey.Input{Message: "UAT branch name:", Default: "uat"}, &uatBranch, survey.WithValidator(survey.Required))
@@ -42,7 +65,7 @@ var InitCmd = &cobra.Command{
 			os.Exit(1)
 		} else if err != nil {
 			fmt.Println("❌ Error:", err)
-			return
+			return nil
 		}
 
 		cfg := utils.Config{}
@@ -60,7 +83,7 @@ var InitCmd = &cobra.Command{
 
 		if err := utils.SaveConfig(&cfg); err != nil {
 			utils.Error(err.Error())
-			return
+			return nil
 		}
 		utils.Success("Created .dflow.yaml")
 
@@ -81,5 +104,6 @@ var InitCmd = &cobra.Command{
 		}
 
 		utils.Success("🎉 dflow is ready! Use `dflow start` to begin a new branch.")
-	},
+		return nil
+	}),
 }
