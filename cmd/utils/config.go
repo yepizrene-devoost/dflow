@@ -23,6 +23,11 @@ type Config struct {
 		ReleaseBase  string `yaml:"release_base"`
 		HotfixBase   string `yaml:"hotfix_base"`
 	} `yaml:"flow"`
+
+	Workflow struct {
+		DefaultMergeMode string            `yaml:"default_merge_mode"`
+		BranchRules      map[string]string `yaml:"branch_rules"` // e.g., {"main": "manual", "develop": "auto"}
+	} `yaml:"workflow"`
 }
 
 const bannerToConfig = `
@@ -77,4 +82,11 @@ func SaveConfig(cfg *Config) error {
 	}
 
 	return nil
+}
+
+func GetMergeModeForBranch(cfg *Config, branch string) string {
+	if mode, ok := cfg.Workflow.BranchRules[branch]; ok {
+		return mode
+	}
+	return cfg.Workflow.DefaultMergeMode
 }
