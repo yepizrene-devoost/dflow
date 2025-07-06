@@ -3,34 +3,37 @@ package commands
 import (
 	"fmt"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
 	"github.com/yepizrene-devoost/dflow/cmd/gitutils"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/validators"
 )
 
 var StartCmd = &cobra.Command{
 	Use:   "start [type] [name]",
 	Short: "Create and switch to a new feature, release, or hotfix branch",
 	Long: `Start a new Git branch following the dflow branching model.
+	
+  Valid types:
+    - feat|feature : Starts a new feature branch from the configured 'feature_base'
+    - release      : Starts a new release branch from the configured 'release_base'
+    - hotfix       : Starts a new hotfix branch from the configured 'hotfix_base'
 
-	Valid types:
-		- feat|feature : Starts a new feature branch from the configured 'feature_base'
-		- release      : Starts a new release branch from the configured 'release_base'
-		- hotfix       : Starts a new hotfix branch from the configured 'hotfix_base'
+  Examples:
+    dflow start feat login-form
+    dflow start release v1.0.0
+    dflow start hotfix urgent-patch
 
-	Examples:
-		dflow start feat login-form
-		dflow start release v1.0.0
-		dflow start hotfix urgent-patch
-
-	The new branch will be created using the appropriate prefix (e.g., feature/, release/, hotfix/)
-	and based on the corresponding base branch defined in your .dflow.yaml configuration.`,
+  The new branch will be created using the appropriate prefix (e.g., feature/, release/, hotfix/)
+  and based on the corresponding base branch defined in your .dflow.yaml configuration.`,
 
 	Args: cobra.MaximumNArgs(2),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
+
 		if len(args) != 2 {
 			_ = cmd.Help()
-			return
+			return nil
 		}
 
 		branchType := args[0]
@@ -39,7 +42,7 @@ var StartCmd = &cobra.Command{
 		cfg, err := utils.LoadConfig()
 		if err != nil {
 			utils.Error(err.Error())
-			return
+			return nil
 		}
 
 		var prefix, base string
@@ -56,28 +59,44 @@ var StartCmd = &cobra.Command{
 			base = cfg.Flow.HotfixBase
 		default:
 			utils.Error("Unknown type. Use: feat, release, hotfix")
-			return
+			return nil
 		}
 
 		fullName := fmt.Sprintf("%s%s", prefix, branchName)
 
-		// Verificar y hacer checkout de la base
 		if err := gitutils.Checkout(base); err != nil {
 			utils.Error(fmt.Sprintf("Could not checkout base branch '%s'", base))
-			return
+			return nil
 		}
 
 		if err := gitutils.Pull(); err != nil {
 			utils.Error(fmt.Sprintf("Failed to pull latest changes from '%s'", base))
-			return
+			return nil
 		}
 
-		// Crear la nueva rama desde base
 		if err := gitutils.CheckoutNew(fullName); err != nil {
 			utils.Error(fmt.Sprintf("Failed to create branch '%s'", fullName))
-			return
+			return nil
 		}
 
 		utils.Success(fmt.Sprintf("Created and switched to branch '%s' from '%s'", fullName, base))
-	},
+
+		// Ask to push
+		var pushBranch bool
+		err = survey.AskOne(&survey.Confirm{
+			Message: fmt.Sprintf("Do you want to publish '%s' to origin?", fullName),
+			Default: true,
+		}, &pushBranch)
+		if err != nil {
+			fmt.Println("⚠️  Skipping push...")
+			return nil
+		}
+
+		if pushBranch {
+			gitutils.PushBranch(fullName)
+			utils.Success(fmt.Sprintf("Branch '%s' pushed to origin", fullName))
+		}
+
+		return nil
+	}),
 }
