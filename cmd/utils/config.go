@@ -39,7 +39,7 @@ const bannerToConfig = `
 func LoadConfig() (*Config, error) {
 	data, err := os.ReadFile(".dflow.yaml")
 	if err != nil {
-		return nil, fmt.Errorf(".dflow.yaml not found. Run `dflow init` first")
+		return nil, fmt.Errorf("failed to read .dflow.yaml: %w", err)
 	}
 
 	var cfg Config
