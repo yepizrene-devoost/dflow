@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/yepizrene-devoost/dflow/cmd/gitutils"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/validators"
 )
 
 var StartCmd = &cobra.Command{
@@ -28,10 +29,11 @@ var StartCmd = &cobra.Command{
   and based on the corresponding base branch defined in your .dflow.yaml configuration.`,
 
 	Args: cobra.MaximumNArgs(2),
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
+
 		if len(args) != 2 {
 			_ = cmd.Help()
-			return
+			return nil
 		}
 
 		branchType := args[0]
@@ -40,7 +42,7 @@ var StartCmd = &cobra.Command{
 		cfg, err := utils.LoadConfig()
 		if err != nil {
 			utils.Error(err.Error())
-			return
+			return nil
 		}
 
 		var prefix, base string
@@ -57,24 +59,24 @@ var StartCmd = &cobra.Command{
 			base = cfg.Flow.HotfixBase
 		default:
 			utils.Error("Unknown type. Use: feat, release, hotfix")
-			return
+			return nil
 		}
 
 		fullName := fmt.Sprintf("%s%s", prefix, branchName)
 
 		if err := gitutils.Checkout(base); err != nil {
 			utils.Error(fmt.Sprintf("Could not checkout base branch '%s'", base))
-			return
+			return nil
 		}
 
 		if err := gitutils.Pull(); err != nil {
 			utils.Error(fmt.Sprintf("Failed to pull latest changes from '%s'", base))
-			return
+			return nil
 		}
 
 		if err := gitutils.CheckoutNew(fullName); err != nil {
 			utils.Error(fmt.Sprintf("Failed to create branch '%s'", fullName))
-			return
+			return nil
 		}
 
 		utils.Success(fmt.Sprintf("Created and switched to branch '%s' from '%s'", fullName, base))
@@ -87,12 +89,14 @@ var StartCmd = &cobra.Command{
 		}, &pushBranch)
 		if err != nil {
 			fmt.Println("⚠️  Skipping push...")
-			return
+			return nil
 		}
 
 		if pushBranch {
 			gitutils.PushBranch(fullName)
 			utils.Success(fmt.Sprintf("Branch '%s' pushed to origin", fullName))
 		}
-	},
+
+		return nil
+	}),
 }
