@@ -4,16 +4,17 @@
 BINARY_NAME = dflow
 INSTALLER_NAME = dflow-installer
 BIN_DIR = bin
+VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "dev-local")
 
 # Default target
 .PHONY: all
 all: build
 
-# 👷 Build local
+# 👷 Build local con version inyectada vía ldflags
 .PHONY: build
 build:
-	@echo "🔨 Building $(BINARY_NAME)..."
-	go build -o $(BIN_DIR)/$(BINARY_NAME) .
+	@echo "🔨 Building $(BINARY_NAME) (version: $(VERSION))..."
+	go build -ldflags="-X main.version=$(VERSION)" -o $(BIN_DIR)/$(BINARY_NAME) .
 
 # 📦 Cross-platform build (for testing outside GoReleaser)
 .PHONY: build-all
@@ -28,6 +29,13 @@ build-all:
 release:
 	@echo "🚀 Running GoReleaser with .env"
 	@source .env && goreleaser release --clean
+
+# 📥 Install local build to $GOPATH/bin with version injected
+.PHONY: install
+install:
+	@INSTALL_PATH=$$(go env GOPATH)/bin; \
+	echo "📥 Installing $(BINARY_NAME) to $$INSTALL_PATH (version: $(VERSION))..."; \
+	go build -ldflags="-X main.version=$(VERSION)" -o $$INSTALL_PATH/$(BINARY_NAME) .
 
 # 🧪 Tests
 .PHONY: test
