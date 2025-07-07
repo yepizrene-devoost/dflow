@@ -32,17 +32,30 @@ Whether you're working solo or in a team, `dflow` helps you keep your Git histor
 
 Download the latest binary for your platform from the [Releases](https://github.com/yepizrene-devoost/dflow/releases) page.
 
-**Linux (x86_64):**
+### Linux (x86_64):
+
+Download:
 ```bash
 curl -L https://github.com/yepizrene-devoost/dflow/releases/latest/download/dflow-linux-amd64 -o /usr/local/bin/dflow
+```
+
+Set execution permissions:
+```bash
 chmod +x /usr/local/bin/dflow
 ```
 
-**macOS (Apple Silicon):**
+### macOS (Apple Silicon):
+
+Download:
 ```bash
 curl -L https://github.com/yepizrene-devoost/dflow/releases/latest/download/dflow-darwin-arm64 -o /usr/local/bin/dflow
+```
+
+Set execution permissions:
+```bash
 chmod +x /usr/local/bin/dflow
 ```
+
 
 > 💡 Rename the binary to `dflow` and ensure `/usr/local/bin` is in your `$PATH`.
 
