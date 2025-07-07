@@ -127,6 +127,9 @@ func init() {
 	ConfigCmd.AddCommand(listCmd)
 
 	ConfigCmd.Run = func(cmd *cobra.Command, args []string) {
-		cmd.Help()
+		if err := cmd.Help(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error showing help: %v\n", err)
+			os.Exit(1)
+		}
 	}
 }
