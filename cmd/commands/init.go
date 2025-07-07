@@ -61,7 +61,7 @@ var InitCmd = &cobra.Command{
 		// 🌟 merge modes explain
 		fmt.Println("\n🔧 Dflow supports two types of merge modes:")
 		fmt.Println("   - manual: you open Pull Requests and merge via your platform (e.g. GitHub, GitLab).")
-		fmt.Println("   - auto: dflow merges branches directly using Git commands (no PRs needed).\n")
+		fmt.Println("   - auto: dflow merges branches directly using Git commands (no PRs needed).")
 
 		var mergeModeOption string
 		err = survey.AskOne(&survey.Select{
