@@ -20,7 +20,10 @@ var rootCmd = &cobra.Command{
 
 	Run: func(cmd *cobra.Command, args []string) {
 		cmd.SetArgs([]string{"--help"})
-		cmd.Execute()
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintf(os.Stderr, "Command execution failed: %v\n", err)
+			os.Exit(1)
+		}
 	},
 }
 
