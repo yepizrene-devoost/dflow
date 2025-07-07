@@ -1,24 +1,60 @@
-# Makefile for building and releasing dflow
+# dflow Makefile
 
-BINARY_NAME=dflow
-DIST_DIR=dist
+# Variables
+BINARY_NAME = dflow
+INSTALLER_NAME = dflow-installer
+BIN_DIR = bin
 
-.PHONY: clean build release
+# Default target
+.PHONY: all
+all: build
 
-## clean: remove dist directory
+# 👷 Build local
+.PHONY: build
+build:
+	@echo "🔨 Building $(BINARY_NAME)..."
+	go build -o $(BIN_DIR)/$(BINARY_NAME) .
+
+# 📦 Cross-platform build (for testing outside GoReleaser)
+.PHONY: build-all
+build-all:
+	@echo "🧪 Building cross-platform binaries..."
+	GOOS=linux   GOARCH=amd64 go build -o $(BIN_DIR)/$(BINARY_NAME)-linux .
+	GOOS=darwin  GOARCH=amd64 go build -o $(BIN_DIR)/$(BINARY_NAME)-darwin .
+	GOOS=windows GOARCH=amd64 go build -o $(BIN_DIR)/$(BINARY_NAME).exe .
+
+# 🚀 Release with GoReleaser + .env token
+.PHONY: release
+release:
+	@echo "🚀 Running GoReleaser with .env"
+	@source .env && goreleaser release --clean
+
+# 🧪 Tests
+.PHONY: test
+test:
+	go test ./...
+
+# 🔎 Linter (requires golangci-lint)
+.PHONY: lint
+lint:
+	golangci-lint run
+
+# 🧰 Build the dflow installer CLI (optional)
+.PHONY: installer
+installer:
+	@echo "📦 Building installer CLI..."
+	go build -o $(BIN_DIR)/$(INSTALLER_NAME) ./installer
+
+# 📝 Generate changelog from last tag
+.PHONY: changelog
+changelog:
+	@echo "📝 Generating CHANGELOG.md..."
+	@echo "# Changelog\n" > CHANGELOG.md
+	@git log $$(git describe --tags --abbrev=0)..HEAD --pretty=format:"- %s" >> CHANGELOG.md
+	@echo "\n✅ Done. Check CHANGELOG.md"
+
+# 🧹 Clean compiled binaries
+.PHONY: clean
 clean:
-	rm -rf $(DIST_DIR)
-
-## build: build binaries for all target platforms
-build: clean
-	@mkdir -p $(DIST_DIR)
-	GOOS=linux   GOARCH=amd64   go build -o $(DIST_DIR)/$(BINARY_NAME)-linux-amd64
-	GOOS=darwin  GOARCH=arm64   go build -o $(DIST_DIR)/$(BINARY_NAME)-darwin-arm64
-	GOOS=darwin  GOARCH=amd64   go build -o $(DIST_DIR)/$(BINARY_NAME)-darwin-amd64
-	GOOS=windows GOARCH=amd64   go build -o $(DIST_DIR)/$(BINARY_NAME)-windows-amd64.exe
-
-## release: build binaries and show GitHub release command
-release: build
-	@echo "🎉 Binaries ready in ./dist"
-	@echo "To create GitHub release:"
-	@echo "  gh release create vX.Y.Z ./dist/* --title 'vX.Y.Z' --notes-file CHANGELOG.md"
+	@echo "🧹 Cleaning binaries..."
+	rm -rf $(BIN_DIR)
