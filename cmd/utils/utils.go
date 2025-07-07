@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-var version = "0.1.0"
+var version = "dev"
 
 const banner = `
         ██████╗ ███████╗██╗   ██╗ ██████╗  ██████╗ ███████╗████████╗
@@ -14,9 +14,13 @@ const banner = `
         ██████╔╝███████╗ ╚████╔╝ ╚██████╔╝╚██████╔╝███████║   ██║   
         ╚═════╝ ╚══════╝  ╚═══╝   ╚═════╝  ╚═════╝ ╚══════╝   ╚═╝   
 
-                dflow v%s - Git branching made simple
+                dflow %s - Git branching made simple
         
 `
+
+func SetVersion(v string) {
+	version = v
+}
 
 func PrintBanner() {
 	fmt.Printf(banner, version)
