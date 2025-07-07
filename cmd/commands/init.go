@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
@@ -143,10 +144,14 @@ var InitCmd = &cobra.Command{
 
 		// 🚀 Confirmar push de ramas
 		var pushConfirm bool
-		survey.AskOne(&survey.Confirm{
+
+		if err := survey.AskOne(&survey.Confirm{
 			Message: "Do you want to push the base branches to 'origin'?",
 			Default: true,
-		}, &pushConfirm)
+		}, &pushConfirm); err != nil {
+			fmt.Fprintf(os.Stderr, "Prompt failed: %v\n", err)
+			os.Exit(1)
+		}
 
 		if err != nil {
 			utils.Error(err.Error())
