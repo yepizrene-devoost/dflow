@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.0 - Initial release
+## v0.1.0
 
 ### ✨ Features
 - Added `dflow init` command:
@@ -37,6 +37,5 @@
 
 ---
 
-Category: **features**  
 Date: 2025-07-06  
 Author: Rene Yepiz **(rene@devoost.com)**
