@@ -14,11 +14,14 @@
 <p align="center"><b>dflow</b> – A Git branching CLI inspired by Git Flow with a modern and customizable workflow.</p>
 
 <p align="center">
-  <a href="https://www.gnu.org/licenses/gpl-3.0">
-    <img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3">
+  <a href="https://opensource.org/licenses/MIT">
+    <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT">
   </a>
   <a href="https://goreportcard.com/report/github.com/yepizrene-devoost/dflow">
     <img src="https://goreportcard.com/badge/github.com/yepizrene-devoost/dflow" alt="Go Report Card">
+  </a>
+  <a href="https://pkg.go.dev/github.com/yepizrene-devoost/dflow">
+    <img src="https://pkg.go.dev/badge/github.com/yepizrene-devoost/dflow.svg" alt="Go Reference">
   </a>
   <a href="https://github.com/yepizrene-devoost/dflow/actions/workflows/go.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/yepizrene-devoost/dflow/go.yml?branch=main&label=build:%20main" alt="Build: main">
@@ -26,13 +29,11 @@
   <a href="https://github.com/yepizrene-devoost/dflow/actions/workflows/go.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/yepizrene-devoost/dflow/go.yml?branch=develop&label=build:%20develop" alt="Build: develop">
   </a>
-  <a href="https://pkg.go.dev/github.com/yepizrene-devoost/dflow">
-    <img src="https://img.shields.io/github/go-mod/go-version/yepizrene-devoost/dflow" alt="Go Modules">
-  </a>
   <a href="https://github.com/yepizrene-devoost/dflow/releases">
     <img src="https://img.shields.io/github/v/release/yepizrene-devoost/dflow?sort=semver" alt="Latest Release">
   </a>
 </p>
+
 
 
 ---
