@@ -86,7 +86,7 @@ Requires [Go 1.21+](https://golang.org/doc/install):
 ```bash
 git clone https://github.com/yepizrene-devoost/dflow.git
 cd dflow
-go install ./cmd
+go install
 ```
 
 ---
