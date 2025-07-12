@@ -1,3 +1,14 @@
+// Package root defines the root command for the dflow CLI.
+//
+// This package initializes the top-level `dflow` command, sets up persistent behavior
+// (like displaying the banner), and attaches all subcommands such as `init`, `start`,
+// and `config`. It uses Cobra for command parsing.
+//
+// Example usage:
+//
+//	dflow init
+//	dflow start feat login-form
+//	dflow config set-author "Rene" --email=rene@devoost.com
 package root
 
 import (
