@@ -1,3 +1,19 @@
+// Package commands provides the CLI subcommands for dflow, enabling users to manage
+// Git branching workflows using a consistent, configurable model.
+//
+// The `init` command initializes a dflow configuration by guiding users through
+// an interactive setup to define their branching model.
+//
+// It prompts for main, develop, and UAT branch names, merge strategies (manual vs auto),
+// and exceptions per branch. It validates local branch existence, optionally pushes
+// them to origin, and writes a `.dflow.yaml` file to the root of the repository.
+//
+// Example usage:
+//
+//	dflow init
+//
+// This command should be run once per project to establish a consistent branching
+// workflow, which is then used by subsequent `dflow start` and `dflow finish` commands.
 package commands
 
 import (
