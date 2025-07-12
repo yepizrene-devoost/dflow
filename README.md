@@ -204,7 +204,7 @@ For now, `dflow` prints manual instructions depending on your workflow setup.
 
 ## 📄 License
 
-This project is licensed under the [GNU General Public License v3.0](LICENSE)  
+This project is licensed under the [MIT License](LICENSE)  
 © 2025 Rene Yepiz – rene@devoost.com
 
 ---
