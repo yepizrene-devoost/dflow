@@ -12,6 +12,11 @@
 
 <p align="center"><b>dflow</b> – A Git branching CLI inspired by Git Flow with a modern and customizable workflow.</p>
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Go Report Card](https://goreportcard.com/badge/github.com/yepizrene-devoost/dflow)](https://goreportcard.com/report/github.com/yepizrene-devoost/dflow)
+[![Build](https://img.shields.io/github/actions/workflow/status/yepizrene-devoost/dflow/ci.yml?branch=main)](https://github.com/yepizrene-devoost/dflow/actions)
+[![Go Version](https://img.shields.io/badge/go-%3E=1.20-blue)](https://golang.org)
+
 ---
 
 ## 🚀 About
