@@ -58,16 +58,33 @@ Download the latest binary for your platform from the [Releases page](https://gi
 
 #### Linux (x86_64)
 ```bash
+# download dflow distributable package
 curl -LO https://github.com/yepizrene-devoost/dflow/releases/latest/download/dflow_Linux_x86_64.tar.gz
-tar -xzf dflow_Linux_x86_64.tar.gz
-sudo mv dflow /usr/local/bin/
+
+# create temp dir and extract files into
+mkdir -p dflow_tmp && tar -xzf dflow_Linux_x86_64.tar.gz -C dflow_tmp
+
+# move dflow executable bin
+sudo mv dflow_tmp/dflow /usr/local/bin/
+
+# clean temp files
+rm -rf dflow_Linux_x86_64.tar.gz dflow_tmp
 ```
 
 #### macOS (Apple Silicon)
 ```bash
+# download dflow distributable package
 curl -LO https://github.com/yepizrene-devoost/dflow/releases/latest/download/dflow_Darwin_arm64.tar.gz
-tar -xzf dflow_Darwin_arm64.tar.gz
-sudo mv dflow /usr/local/bin/
+
+# create temp dir and extract files into
+mkdir -p dflow_tmp && tar -xzf dflow_Darwin_arm64.tar.gz -C dflow_tmp
+
+# move dflow executable bin
+sudo mv dflow_tmp/dflow /usr/local/bin/
+
+# clean temp files
+rm -rf dflow_Darwin_arm64.tar.gz dflow_tmp
+
 ```
 
 #### Windows (x86_64)
