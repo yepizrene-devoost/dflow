@@ -1,7 +1,24 @@
+// Package commands provides the CLI subcommands for dflow, enabling users to manage
+// Git branching workflows using a consistent, configurable model.
+//
+// The `init` command initializes a dflow configuration by guiding users through
+// an interactive setup to define their branching model.
+//
+// It prompts for main, develop, and UAT branch names, merge strategies (manual vs auto),
+// and exceptions per branch. It validates local branch existence, optionally pushes
+// them to origin, and writes a `.dflow.yaml` file to the root of the repository.
+//
+// Example usage:
+//
+//	dflow init
+//
+// This command should be run once per project to establish a consistent branching
+// workflow, which is then used by subsequent `dflow start` and `dflow finish` commands.
 package commands
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
@@ -143,10 +160,14 @@ var InitCmd = &cobra.Command{
 
 		// 🚀 Confirmar push de ramas
 		var pushConfirm bool
-		survey.AskOne(&survey.Confirm{
+
+		if err := survey.AskOne(&survey.Confirm{
 			Message: "Do you want to push the base branches to 'origin'?",
 			Default: true,
-		}, &pushConfirm)
+		}, &pushConfirm); err != nil {
+			fmt.Fprintf(os.Stderr, "Prompt failed: %v\n", err)
+			os.Exit(1)
+		}
 
 		if err != nil {
 			utils.Error(err.Error())

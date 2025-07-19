@@ -1,4 +1,4 @@
-version: 1
+version: 2
 
 project_name: dflow
 
@@ -21,6 +21,7 @@ builds:
       - arm64
     ldflags:
       - -s -w -X main.version={{.Version}}
+
 archives:
   - format: tar.gz
     name_template: >-
@@ -37,6 +38,11 @@ archives:
       - LICENSE
       - README.md
       - CHANGELOG.md
+      - public-key.asc
+
+signs:
+  - artifacts: all
+    args: ["--local-user", "yepizrene@gmail.com"]
 
 snapshot:
   name_template: "snapshot-{{ .ShortCommit }}"
@@ -47,3 +53,7 @@ changelog:
     exclude:
       - "^docs:"
       - "^test:"
+
+release:
+  extra_files:
+    - glob: public-key.asc

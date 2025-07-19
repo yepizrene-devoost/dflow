@@ -1,3 +1,7 @@
+// Package gitutils provides low-level Git utility functions used by dflow commands.
+//
+// These helpers wrap common Git operations such as checking out branches,
+// creating new ones, pushing to origin, and pulling updates.
 package gitutils
 
 import (
@@ -6,7 +10,8 @@ import (
 	"os/exec"
 )
 
-// CheckOrCreateBranch verifica si una rama existe localmente y la crea si no
+// CheckOrCreateBranch verifies whether the given branch exists locally.
+// If it doesn't, it creates the branch using `git branch <name>`.
 func CheckOrCreateBranch(branch string) {
 	cmd := exec.Command("git", "rev-parse", "--verify", branch)
 	if err := cmd.Run(); err != nil {
@@ -22,7 +27,7 @@ func CheckOrCreateBranch(branch string) {
 	}
 }
 
-// PushBranch publish branch to 'origin'
+// PushBranch pushes the specified branch to the remote `origin` with tracking enabled.
 func PushBranch(branch string) {
 	cmd := exec.Command("git", "push", "-u", "origin", branch)
 	if err := cmd.Run(); err != nil {
@@ -32,7 +37,7 @@ func PushBranch(branch string) {
 	}
 }
 
-// function to checkout to origin branch
+// Checkout switches the working tree to the specified branch using `git checkout`.
 func Checkout(branch string) error {
 	cmd := exec.Command("git", "checkout", branch)
 	cmd.Stdout = os.Stdout
@@ -40,7 +45,7 @@ func Checkout(branch string) error {
 	return cmd.Run()
 }
 
-// function to create new branch
+// CheckoutNew creates and switches to a new branch from the current HEAD.
 func CheckoutNew(branch string) error {
 	cmd := exec.Command("git", "checkout", "-b", branch)
 	cmd.Stdout = os.Stdout

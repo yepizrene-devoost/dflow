@@ -1,3 +1,18 @@
+// Package commands provides the CLI subcommands for dflow, enabling users to manage
+// Git branching workflows using a consistent, configurable model.
+//
+// This includes project-local configuration commands under `dflow config`,
+// allowing users to set and retrieve metadata such as author name and email
+// for use in changelogs and other automated processes.
+//
+// Example usage:
+//
+//	dflow config set-author "Rene Yepiz" --email rene@devoost.com
+//	dflow config get-author
+//	dflow config list
+//
+// These settings are saved in the local `.git/config` under `dflow.*` keys,
+// making them specific to each repository.
 package commands
 
 import (
@@ -127,6 +142,9 @@ func init() {
 	ConfigCmd.AddCommand(listCmd)
 
 	ConfigCmd.Run = func(cmd *cobra.Command, args []string) {
-		cmd.Help()
+		if err := cmd.Help(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error showing help: %v\n", err)
+			os.Exit(1)
+		}
 	}
 }

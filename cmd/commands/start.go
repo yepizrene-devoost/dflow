@@ -1,3 +1,22 @@
+// Package commands provides the CLI subcommands for dflow, enabling users to manage
+// Git branching workflows using a consistent, configurable model.
+//
+// The `start` command creates and checks out a new branch based on the type (feature,
+// release, or hotfix) defined in the `.dflow.yaml` configuration.
+//
+// It determines the correct base branch and prefix, creates the new branch locally,
+// pulls the latest changes from the base branch, and offers to push it to the remote.
+//
+// Valid types include:
+//   - feat|feature:  starts from `feature_base`
+//   - release:       starts from `release_base`
+//   - hotfix:        starts from `hotfix_base`
+//
+// Example usage:
+//
+//	dflow start feat login-form
+//	dflow start release v1.0.0
+//	dflow start hotfix urgent-patch
 package commands
 
 import (

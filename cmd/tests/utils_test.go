@@ -8,6 +8,9 @@ import (
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
 )
 
+// TestSaveAndLoadConfig verifies that the dflow configuration can be saved
+// to a .dflow.yaml file and loaded back correctly. It checks that the file
+// is created and that loaded values match the original configuration.
 func TestSaveAndLoadConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.Setenv("DFLOW_CWD", tmpDir)

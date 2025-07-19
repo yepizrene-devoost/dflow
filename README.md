@@ -1,23 +1,27 @@
 <p align="center">
   <pre>
-                             ██████╗ ███████╗██╗   ██╗ ██████╗  ██████╗ ███████╗████████╗
-                             ██╔══██╗██╔════╝██║   ██║██╔═══██╗██╔═══██╗██╔════╝╚══██╔══╝
-                             ██║  ██║█████╗  ██║   ██║██║   ██║██║   ██║███████╗   ██║   
-                             ██║  ██║██╔══╝  ╚██╗ ██╔╝██║   ██║██║   ██║╚════██║   ██║   
-                             ██████╔╝███████╗ ╚████╔╝ ╚██████╔╝╚██████╔╝███████║   ██║   
-                             ╚═════╝ ╚══════╝  ╚═══╝   ╚═════╝  ╚═════╝ ╚══════╝   ╚═╝   
-                                     dflow v0.1.0 – Git branching made simple
+                          ██████╗ ███████╗██╗      ██████╗ ██╗    ██╗
+                          ██╔══██╗██╔════╝██║     ██╔═══██╗██║    ██║
+                          ██║  ██║█████╗  ██║     ██║   ██║██║ █╗ ██║
+                          ██║  ██║██╔══╝  ██║     ██║   ██║██║███╗██║
+                          ██████╔╝██║     ███████╗╚██████╔╝╚███╔███╔╝
+                          ╚═════╝ ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝ 
+                                  Git branching made simple
+                                          v0.1.0
   </pre>
 </p>
 
 <p align="center"><b>dflow</b> – A Git branching CLI inspired by Git Flow with a modern and customizable workflow.</p>
 
 <p align="center">
-  <a href="https://www.gnu.org/licenses/gpl-3.0">
-    <img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3">
+  <a href="https://opensource.org/licenses/MIT">
+    <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT">
   </a>
   <a href="https://goreportcard.com/report/github.com/yepizrene-devoost/dflow">
     <img src="https://goreportcard.com/badge/github.com/yepizrene-devoost/dflow" alt="Go Report Card">
+  </a>
+  <a href="https://pkg.go.dev/github.com/yepizrene-devoost/dflow">
+    <img src="https://pkg.go.dev/badge/github.com/yepizrene-devoost/dflow.svg" alt="Go Reference">
   </a>
   <a href="https://github.com/yepizrene-devoost/dflow/actions/workflows/go.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/yepizrene-devoost/dflow/go.yml?branch=main&label=build:%20main" alt="Build: main">
@@ -25,13 +29,11 @@
   <a href="https://github.com/yepizrene-devoost/dflow/actions/workflows/go.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/yepizrene-devoost/dflow/go.yml?branch=develop&label=build:%20develop" alt="Build: develop">
   </a>
-  <a href="https://golang.org">
-    <img src="https://img.shields.io/badge/go-%3E=1.20-blue" alt="Go Version">
-  </a>
   <a href="https://github.com/yepizrene-devoost/dflow/releases">
     <img src="https://img.shields.io/github/v/release/yepizrene-devoost/dflow?sort=semver" alt="Latest Release">
   </a>
 </p>
+
 
 
 ---
@@ -56,16 +58,33 @@ Download the latest binary for your platform from the [Releases page](https://gi
 
 #### Linux (x86_64)
 ```bash
+# download dflow distributable package
 curl -LO https://github.com/yepizrene-devoost/dflow/releases/latest/download/dflow_Linux_x86_64.tar.gz
-tar -xzf dflow_Linux_x86_64.tar.gz
-sudo mv dflow /usr/local/bin/
+
+# create temp dir and extract files into
+mkdir -p dflow_tmp && tar -xzf dflow_Linux_x86_64.tar.gz -C dflow_tmp
+
+# move dflow executable bin
+sudo mv dflow_tmp/dflow /usr/local/bin/
+
+# clean temp files
+rm -rf dflow_Linux_x86_64.tar.gz dflow_tmp
 ```
 
 #### macOS (Apple Silicon)
 ```bash
+# download dflow distributable package
 curl -LO https://github.com/yepizrene-devoost/dflow/releases/latest/download/dflow_Darwin_arm64.tar.gz
-tar -xzf dflow_Darwin_arm64.tar.gz
-sudo mv dflow /usr/local/bin/
+
+# create temp dir and extract files into
+mkdir -p dflow_tmp && tar -xzf dflow_Darwin_arm64.tar.gz -C dflow_tmp
+
+# move dflow executable bin
+sudo mv dflow_tmp/dflow /usr/local/bin/
+
+# clean temp files
+rm -rf dflow_Darwin_arm64.tar.gz dflow_tmp
+
 ```
 
 #### Windows (x86_64)
@@ -77,6 +96,42 @@ sudo mv dflow /usr/local/bin/
 
 ---
 
+### 🔐 Verifying GPG Signatures (Optional but Recommended)
+
+All official dflow binaries are **GPG-signed** by the author. To ensure authenticity:
+
+#### 1. Import public key from keyserver
+
+```bash
+gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys E42F839B
+```
+
+#### 2. Or import from the provided file
+
+```bash
+gpg --import public-key.asc
+```
+
+The `public-key.asc` file is included:
+- Inside every `.tar.gz` or `.zip` archive
+- As a standalone asset in the [Releases](https://github.com/yepizrene-devoost/dflow/releases)
+
+#### 3. Verify the checksum file
+
+```bash
+gpg --verify checksums.txt.sig checksums.txt
+```
+
+#### 4. Verify a specific binary or archive
+
+```bash
+gpg --verify dflow_Linux_x86_64.tar.gz.sig dflow_Linux_x86_64.tar.gz
+```
+
+> ✅ If valid, GPG will confirm a good signature from `Rene Yepiz <yepizrene@gmail.com>`
+
+---
+
 ### 🛠 Option 2: Build from Source
 
 Requires [Go 1.21+](https://golang.org/doc/install):
@@ -84,9 +139,8 @@ Requires [Go 1.21+](https://golang.org/doc/install):
 ```bash
 git clone https://github.com/yepizrene-devoost/dflow.git
 cd dflow
-go install ./cmd
+go install
 ```
-
 ---
 
 ## 🛠️ Commands
@@ -127,7 +181,7 @@ dflow start hotfix urgent-patch
 Manage user-level configuration.
 
 ```bash
-dflow config author "Rene Yepiz" --email rene@devoost.com
+dflow config author "Author Name" --email authoremail@domain.com
 ```
 
 - Stores global author info used in changelogs
@@ -140,6 +194,16 @@ dflow config author "Rene Yepiz" --email rene@devoost.com
 `dflow` uses a `.dflow.yaml` file stored at the root of your repository. It is auto-generated by `dflow init` and looks like this:
 
 ```yaml
+#
+#               ██████╗ ███████╗██╗      ██████╗ ██╗    ██╗
+#               ██╔══██╗██╔════╝██║     ██╔═══██╗██║    ██║
+#               ██║  ██║█████╗  ██║     ██║   ██║██║ █╗ ██║
+#               ██║  ██║██╔══╝  ██║     ██║   ██║██║███╗██║
+#               ██████╔╝██║     ███████╗╚██████╔╝╚███╔███╔╝
+#               ╚═════╝ ╚═╝     ╚══════╝ ╚═════╝  ╚══╝╚══╝ 
+
+#            dflow config file - autogenerated by 'dflow init'
+
 branches:
   main: main
   develop: develop
@@ -203,8 +267,8 @@ For now, `dflow` prints manual instructions depending on your workflow setup.
 
 ## 📄 License
 
-This project is licensed under the [GNU General Public License v3.0](LICENSE)  
-© 2025 Rene Yepiz – rene@devoost.com
+This project is licensed under the [MIT License](LICENSE)  
+© 2025 Rene Yepiz – yepizrene@gmail.com
 
 ---
 
