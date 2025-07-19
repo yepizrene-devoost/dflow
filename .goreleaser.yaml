@@ -42,7 +42,8 @@ archives:
 
 signs:
   - artifacts: all
-    args: ["--local-user", "yepizrene@gmail.com"]
+    cmd: gpg
+    args: ["--detach-sign", "--armor", "--local-user", "yepizrene@gmail.com"]
 
 snapshot:
   name_template: "snapshot-{{ .ShortCommit }}"
