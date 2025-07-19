@@ -96,42 +96,6 @@ rm -rf dflow_Darwin_arm64.tar.gz dflow_tmp
 
 ---
 
-### 🔐 Verifying GPG Signatures (Optional but Recommended)
-
-All official dflow binaries are **GPG-signed** by the author. To ensure authenticity:
-
-#### 1. Import public key from keyserver
-
-```bash
-gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys E42F839B
-```
-
-#### 2. Or import from the provided file
-
-```bash
-gpg --import public-key.asc
-```
-
-The `public-key.asc` file is included:
-- Inside every `.tar.gz` or `.zip` archive
-- As a standalone asset in the [Releases](https://github.com/yepizrene-devoost/dflow/releases)
-
-#### 3. Verify the checksum file
-
-```bash
-gpg --verify checksums.txt.sig checksums.txt
-```
-
-#### 4. Verify a specific binary or archive
-
-```bash
-gpg --verify dflow_Linux_x86_64.tar.gz.sig dflow_Linux_x86_64.tar.gz
-```
-
-> ✅ If valid, GPG will confirm a good signature from `Rene Yepiz <yepizrene@gmail.com>`
-
----
-
 ### 🛠 Option 2: Build from Source
 
 Requires [Go 1.21+](https://golang.org/doc/install):
