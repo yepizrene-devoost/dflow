@@ -36,16 +36,6 @@ archives:
       - LICENSE
       - README.md
       - CHANGELOG.md
-      - public-key.asc
-
-signs:
-  - artifacts: all
-    cmd: gpg
-    args:
-      - --detach-sign
-      - --armor
-      - --local-user
-      - yepizrene@gmail.com
 
 snapshot:
   name_template: "snapshot-{{ .ShortCommit }}"
@@ -56,7 +46,3 @@ changelog:
     exclude:
       - "^docs:"
       - "^test:"
-
-release:
-  extra_files:
-    - glob: public-key.asc
