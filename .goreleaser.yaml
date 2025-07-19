@@ -1,5 +1,3 @@
-version: 1
-
 project_name: dflow
 
 before:
@@ -62,4 +60,3 @@ changelog:
 release:
   extra_files:
     - glob: public-key.asc
-  disable: signature
