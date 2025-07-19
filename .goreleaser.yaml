@@ -41,7 +41,7 @@ archives:
       - public-key.asc
 
 signs:
-  - artifacts: all
+  - artifacts: archive
     cmd: gpg
     args: ["--detach-sign", "--armor", "--local-user", "yepizrene@gmail.com"]
 
