@@ -19,5 +19,10 @@
 - Added structured GoDoc comments across all major packages (`cmd`, `utils`, `validators`, etc.).
 - Improved CLI help output and interrupt handling.
 
+## 🔮 Future Plans
+- Add `dflow finish` to complete branches and perform merges automatically.
+- Automate changelog generation from Git history.
+- Add tests for core Git integrations.
+- Improve `config` options to support defaults or shared templates.
 ---
 
