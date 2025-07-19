@@ -39,7 +39,7 @@ archives:
       - public-key.asc
 
 signs:
-  - artifacts: archive
+  - artifacts: all
     cmd: gpg
     args:
       - --detach-sign
