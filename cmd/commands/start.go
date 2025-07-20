@@ -84,21 +84,21 @@ var StartCmd = &cobra.Command{
 		fullName := fmt.Sprintf("%s%s", prefix, branchName)
 
 		if err := gitutils.Checkout(base); err != nil {
-			utils.Error(fmt.Sprintf("Could not checkout base branch '%s'", base))
+			utils.Error("Could not checkout base branch '%s'", base)
 			return nil
 		}
 
 		if err := gitutils.Pull(); err != nil {
-			utils.Error(fmt.Sprintf("Failed to pull latest changes from '%s'", base))
+			utils.Error("Failed to pull latest changes from '%s'", base)
 			return nil
 		}
 
 		if err := gitutils.CheckoutNew(fullName); err != nil {
-			utils.Error(fmt.Sprintf("Failed to create branch '%s'", fullName))
+			utils.Error("Failed to create branch '%s'", fullName)
 			return nil
 		}
 
-		utils.Success(fmt.Sprintf("Created and switched to branch '%s' from '%s'", fullName, base))
+		utils.Success("Created and switched to branch '%s' from '%s'", fullName, base)
 
 		// Ask to push
 		var pushBranch bool
@@ -113,7 +113,7 @@ var StartCmd = &cobra.Command{
 
 		if pushBranch {
 			gitutils.PushBranch(fullName)
-			utils.Success(fmt.Sprintf("Branch '%s' pushed to origin", fullName))
+			utils.Success("Branch '%s' pushed to origin", fullName)
 		}
 
 		return nil
