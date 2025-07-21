@@ -43,5 +43,6 @@ func (s *Spinner) Stop(message string, icon ...string) {
 		finalIcon = icon[0]
 	}
 
-	fmt.Printf("\r%-3s %s\n", finalIcon, message)
+	clear := "\r\033[K"
+	fmt.Printf("%s%-3s %s\n", clear, finalIcon, message)
 }

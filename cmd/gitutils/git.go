@@ -117,9 +117,13 @@ func Delete(branch string) error {
 			spinner.Stop("Failed to delete remote branch.")
 			return fmt.Errorf("❌ failed to delete remote branch: %s", stderr.String())
 		}
+	} else {
+		spinner.Stop(fmt.Sprintf("Branch '%s' deleted locally.", branch), "🗑️")
+		utils.Info("Remote branch '%s' does not exist. Skipping remote deletion.", branch)
+		return nil
 	}
 
-	spinner.Stop(fmt.Sprintf("Branch '%s' deleted locally and remotely (if existed).", branch), "🗑️")
+	spinner.Stop(fmt.Sprintf("Branch '%s' deleted locally and remotely.", branch), "🗑️")
 	return nil
 }
 
