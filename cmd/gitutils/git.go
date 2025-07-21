@@ -113,7 +113,9 @@ func Delete(branch string) error {
 	return nil
 }
 
-// RemoteBranchExists checks if a branch exists on the remote.
+// RemoteBranchExists checks if a branch exists on the remote `origin`.
+//
+// It runs `git ls-remote --heads origin <branch>` and returns true if the branch exists.
 func RemoteBranchExists(branch string) bool {
 	cmd := exec.Command("git", "ls-remote", "--heads", "origin", branch)
 	output, err := cmd.Output()
@@ -121,6 +123,8 @@ func RemoteBranchExists(branch string) bool {
 }
 
 // GetLocalBranches returns a list of local Git branch names.
+//
+// It runs `git branch --format=%(refname:short)` and parses the output line by line.
 func GetLocalBranches() []string {
 	cmd := exec.Command("git", "branch", "--format=%(refname:short)")
 	out, err := cmd.Output()
