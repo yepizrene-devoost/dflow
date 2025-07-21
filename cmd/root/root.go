@@ -3,12 +3,6 @@
 // This package initializes the top-level `dflow` command, sets up persistent behavior
 // (like displaying the banner), and attaches all subcommands such as `init`, `start`,
 // and `config`. It uses Cobra for command parsing.
-//
-// Example usage:
-//
-//	dflow init
-//	dflow start feat login-form
-//	dflow config set-author "Rene" --email=rene@devoost.com
 package root
 
 import (
@@ -21,13 +15,17 @@ import (
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
 )
 
-var rootCmd = &cobra.Command{
+// RootCmd is the base command for the dflow CLI.
+//
+// It defines global behavior such as the banner, help fallback, and command registration
+// for all subcommands like `start`, `init`, `config`, and `delete`.
+var RootCmd = &cobra.Command{
 	Use:   "dflow",
 	Short: "dflow is a Git branching flow manager for Devoost",
 	Long:  "A CLI tool to manage Git feature/release/hotfix flows inspired by Git Flow",
 
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		if strings.HasPrefix(os.Args[1], "__complete") || os.Args[1] == "completion" {
+		if len(os.Args) > 1 && (strings.HasPrefix(os.Args[1], "__complete") || os.Args[1] == "completion") {
 			return
 		}
 		utils.PrintBanner()
@@ -42,21 +40,25 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+// Execute runs the root command for the dflow CLI.
+//
+// It should be called from the `main` function in main.go to start the CLI.
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
+	if err := RootCmd.Execute(); err != nil {
 		// fmt.Println(err)
 		os.Exit(1)
 	}
 }
 
 func init() {
-	rootCmd.AddCommand(commands.InitCmd)
-	rootCmd.AddCommand(commands.StartCmd)
-	rootCmd.AddCommand(commands.ConfigCmd)
-	rootCmd.AddCommand(commands.DeleteCmd)
+	RootCmd.AddCommand(CompletionCmd)
+	RootCmd.AddCommand(commands.InitCmd)
+	RootCmd.AddCommand(commands.StartCmd)
+	RootCmd.AddCommand(commands.ConfigCmd)
+	RootCmd.AddCommand(commands.DeleteCmd)
 
 	// customize help
-	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+	RootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
 		cmd.Root().SetHelpFunc(nil)
 		_ = cmd.Help()
 	})
