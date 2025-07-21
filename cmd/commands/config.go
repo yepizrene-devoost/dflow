@@ -4,15 +4,6 @@
 // This includes project-local configuration commands under `dflow config`,
 // allowing users to set and retrieve metadata such as author name and email
 // for use in changelogs and other automated processes.
-//
-// Example usage:
-//
-//	dflow config set-author "Author Name" --email youremail@mail.com
-//	dflow config get-author
-//	dflow config list
-//
-// These settings are saved in the local `.git/config` under `dflow.*` keys,
-// making them specific to each repository.
 package commands
 
 import (
@@ -27,6 +18,21 @@ import (
 	"github.com/yepizrene-devoost/dflow/pkg/validators"
 )
 
+// ConfigCmd is the parent Cobra command for managing project-specific dflow configuration.
+//
+// It provides subcommands to set, retrieve, and list Git config values related to dflow usage,
+// such as the changelog author name and email. These values are stored locally within each Git repository.
+//
+// Available subcommands:
+//   - set-author: Saves author and email under local Git config.
+//   - get-author: Displays currently set author/email.
+//   - list: Lists all dflow config entries.
+//
+// Example usage:
+//
+//	dflow config set-author "Jane Doe" --email=dev@example.com
+//	dflow config get-author
+//	dflow config list
 var ConfigCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage dflow configuration for this project",
@@ -43,6 +49,10 @@ var ConfigCmd = &cobra.Command{
   These settings are stored using the local .git config and are specific to each project.`,
 }
 
+// setAuthorCmd stores the author's name and email in the local Git configuration.
+//
+// The name can be passed as an argument or entered interactively. The email can be set with the
+// `--email` flag or will be prompted. These values are stored under `dflow.author` and `dflow.email`.
 var setAuthorCmd = &cobra.Command{
 	Use:   "set-author [name]",
 	Short: "Set project-local author name and email for dflow",
@@ -96,6 +106,10 @@ var setAuthorCmd = &cobra.Command{
 	}),
 }
 
+// getAuthorCmd retrieves and prints the author and email set by `set-author`.
+//
+// It looks for `dflow.author` and `dflow.email` in the local Git configuration and prints them.
+// If not set, it shows a warning suggesting `dflow config set-author`.
 var getAuthorCmd = &cobra.Command{
 	Use:   "get-author",
 	Short: "Show project-local dflow author and email",
@@ -116,6 +130,10 @@ var getAuthorCmd = &cobra.Command{
 	}),
 }
 
+// listCmd shows all dflow-related keys set in the local Git configuration.
+//
+// It executes `git config --get-regexp ^dflow\.` and prints the results.
+// If no dflow config is found, it warns the user.
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all dflow configuration values for this project",

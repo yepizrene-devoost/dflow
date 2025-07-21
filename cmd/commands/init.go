@@ -1,19 +1,9 @@
 // Package commands provides the CLI subcommands for dflow, enabling users to manage
 // Git branching workflows using a consistent, configurable model.
 //
-// The `init` command initializes a dflow configuration by guiding users through
-// an interactive setup to define their branching model.
-//
-// It prompts for main, develop, and UAT branch names, merge strategies (manual vs auto),
-// and exceptions per branch. It validates local branch existence, optionally pushes
-// them to origin, and writes a `.dflow.yaml` file to the root of the repository.
-//
-// Example usage:
-//
-//	dflow init
-//
-// This command should be run once per project to establish a consistent branching
-// workflow, which is then used by subsequent `dflow start` and `dflow finish` commands.
+// This includes project-local configuration commands under `dflow config`,
+// allowing users to set and retrieve metadata such as author name and email
+// for use in changelogs and other automated processes.
 package commands
 
 import (
@@ -27,6 +17,28 @@ import (
 	"github.com/yepizrene-devoost/dflow/pkg/validators"
 )
 
+// InitCmd initializes the dflow configuration for the current Git project.
+//
+// This command is intended to be run once per project and will guide the user through
+// an interactive setup process to generate a `.dflow.yaml` file with the following:
+//
+//   - Names for the main, develop, and UAT branches.
+//   - Default merge behavior (manual via Pull Requests or automatic).
+//   - Optional exceptions for specific branches to use a different merge mode.
+//   - Prefixes for feature, release, and hotfix branches.
+//   - Flow rules for each type of branch (feature, release, hotfix).
+//
+// It also ensures the specified base branches exist locally, offering to create them
+// if missing, and provides an option to push them to the remote origin.
+//
+// The `.dflow.yaml` file is stored at the root of the repository and is used by all
+// subsequent dflow commands (`start`, `config`, `delete`, etc).
+//
+// Example:
+//
+//	dflow init
+//
+// This command is interactive and requires a terminal.
 var InitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize your dflow branching configuration",

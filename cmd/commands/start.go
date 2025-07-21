@@ -1,22 +1,9 @@
 // Package commands provides the CLI subcommands for dflow, enabling users to manage
 // Git branching workflows using a consistent, configurable model.
 //
-// The `start` command creates and checks out a new branch based on the type (feature,
-// release, or hotfix) defined in the `.dflow.yaml` configuration.
-//
-// It determines the correct base branch and prefix, creates the new branch locally,
-// pulls the latest changes from the base branch, and offers to push it to the remote.
-//
-// Valid types include:
-//   - feat|feature:  starts from `feature_base`
-//   - release:       starts from `release_base`
-//   - hotfix:        starts from `hotfix_base`
-//
-// Example usage:
-//
-//	dflow start feat login-form
-//	dflow start release v1.0.0
-//	dflow start hotfix urgent-patch
+// This includes project-local configuration commands under `dflow config`,
+// allowing users to set and retrieve metadata such as author name and email
+// for use in changelogs and other automated processes.
 package commands
 
 import (
@@ -29,6 +16,30 @@ import (
 	"github.com/yepizrene-devoost/dflow/pkg/validators"
 )
 
+// StartCmd creates and switches to a new Git branch based on the dflow branching model.
+//
+// Supported branch types:
+//
+//   - feat|feature : Creates a feature branch from `flow.feature_base`
+//   - release      : Creates a release branch from `flow.release_base`
+//   - hotfix       : Creates a hotfix branch from `flow.hotfix_base`
+//
+// Branches are automatically prefixed using values from `.dflow.yaml`
+// under `branches.features`, `branches.releases`, or `branches.hotfixes`.
+//
+// This command performs the following steps:
+//  1. Checks out the appropriate base branch
+//  2. Pulls the latest changes from origin
+//  3. Creates and checks out the new branch
+//  4. Prompts the user to push the new branch to origin
+//
+// Example usage:
+//
+//	dflow start feat login-form
+//	dflow start release v1.0.0
+//	dflow start hotfix urgent-patch
+//
+// If arguments are missing, help text is shown instead.
 var StartCmd = &cobra.Command{
 	Use:   "start [type] [name]",
 	Short: "Create and switch to a new feature, release, or hotfix branch",
