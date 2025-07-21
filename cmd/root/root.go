@@ -49,6 +49,7 @@ func init() {
 	rootCmd.AddCommand(commands.InitCmd)
 	rootCmd.AddCommand(commands.StartCmd)
 	rootCmd.AddCommand(commands.ConfigCmd)
+	rootCmd.AddCommand(commands.DeleteCmd)
 
 	// customize help
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
