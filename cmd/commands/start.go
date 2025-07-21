@@ -127,7 +127,6 @@ var StartCmd = &cobra.Command{
 				utils.Error("Failed to push branch '%s': %v", fullName, err)
 				return err
 			}
-			utils.Success("Branch '%s' pushed to origin", fullName)
 		}
 
 		return nil

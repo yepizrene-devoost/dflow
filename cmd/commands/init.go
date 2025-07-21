@@ -179,7 +179,7 @@ var InitCmd = &cobra.Command{
 			return err
 		}
 
-		// 🚀 Confirmar push de ramas
+		// 🚀 confirm push of branches
 		var pushConfirm bool
 
 		if err := survey.AskOne(&survey.Confirm{
@@ -210,7 +210,7 @@ var InitCmd = &cobra.Command{
 			}
 		}
 
-		utils.Success("🎉 dflow is ready! Use `dflow start` to begin a new branch.")
+		utils.Success("dflow is ready! Use `dflow start` to begin a new branch.", "🎉")
 		return nil
 	}),
 }
