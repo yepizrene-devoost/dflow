@@ -7,7 +7,7 @@
 //
 // Example usage:
 //
-//	dflow config set-author "Rene Yepiz" --email rene@devoost.com
+//	dflow config set-author "Author Name" --email youremail@mail.com
 //	dflow config get-author
 //	dflow config list
 //
