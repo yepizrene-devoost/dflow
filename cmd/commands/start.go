@@ -122,3 +122,12 @@ var StartCmd = &cobra.Command{
 		return nil
 	}),
 }
+
+func init() {
+	StartCmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) == 0 {
+			return []string{"feat", "feature", "release", "hotfix"}, cobra.ShellCompDirectiveNoFileComp
+		}
+		return nil, cobra.ShellCompDirectiveDefault
+	}
+}
