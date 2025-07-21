@@ -1,5 +1,7 @@
 // Package validators provides pre-execution checks for dflow commands.
-// It ensures the CLI runs in valid Git repositories and verifies that dflow is properly initialized.
+//
+// These checks ensure that commands are executed within a Git repository
+// and that the project has been initialized with a .dflow.yaml file.
 package validators
 
 import (
@@ -11,7 +13,8 @@ import (
 )
 
 // EnsureGitRepo returns an error if the current directory is not a Git repository.
-// It checks for the presence of a .git folder.
+//
+// It checks for the existence of a `.git` folder in the current working directory.
 func EnsureGitRepo() error {
 	if _, err := os.Stat(".git"); os.IsNotExist(err) {
 		return errors.New("this is not a Git repository")
@@ -19,8 +22,9 @@ func EnsureGitRepo() error {
 	return nil
 }
 
-// EnsureDflowInitialized returns an error if the .dflow.yaml file is not found.
-// This ensures that `dflow init` has been run in the current project.
+// EnsureDflowInitialized returns an error if `.dflow.yaml` is not found in the current directory.
+//
+// This check ensures that the user has run `dflow init` before using other commands.
 func EnsureDflowInitialized() error {
 	if _, err := os.Stat(".dflow.yaml"); os.IsNotExist(err) {
 		return errors.New("dflow is not initialized in this repository. Run `dflow init` first")
@@ -28,12 +32,16 @@ func EnsureDflowInitialized() error {
 	return nil
 }
 
-// WithChecks wraps a Cobra command handler with pre-validation checks.
-// It ensures the command is run inside a Git repo and optionally verifies
-// that dflow has been initialized (i.e., .dflow.yaml exists).
+// WithChecks wraps a Cobra command handler function (`RunE`) with repository and config validations.
 //
-// Use skipDflowCheck = true for commands like `dflow init` that should run
-// before initialization.
+// If `skipDflowCheck` is false, it verifies that `.dflow.yaml` exists.
+//
+// Typical usage:
+//
+//	cmd.RunE = validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
+//		// command logic here...
+//		return nil
+//	})
 func WithChecks(skipDflowCheck bool, fn func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		if err := EnsureGitRepo(); err != nil {
