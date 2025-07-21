@@ -5,6 +5,7 @@
 package gitutils
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,32 +17,35 @@ import (
 //
 // If the branch does not exist, it creates it using `git branch <branch>`.
 // This operation does not switch to the branch; it only ensures its presence.
-func CheckOrCreateBranch(branch string) {
+func CheckOrCreateBranch(branch string) error {
 	cmd := exec.Command("git", "rev-parse", "--verify", branch)
 	if err := cmd.Run(); err != nil {
 		fmt.Printf("ℹ️  Branch '%s' does not exist. Creating...\n", branch)
 		create := exec.Command("git", "branch", branch)
 		if err := create.Run(); err != nil {
-			fmt.Printf("❌ Failed to create branch '%s': %v\n", branch, err)
-			return
+			return fmt.Errorf("❌ failed to create branch '%s': %w", branch, err)
 		}
 		fmt.Printf("✅ Created branch '%s'\n", branch)
 	} else {
 		fmt.Printf("✔ Branch '%s' exists\n", branch)
 	}
+
+	return nil
 }
 
 // PushBranch pushes the specified branch to the remote `origin` and sets upstream tracking.
 //
 // This wraps the command `git push -u origin <branch>`.
 // It logs success or failure to the console but does not return an error.
-func PushBranch(branch string) {
+func PushBranch(branch string) error {
 	cmd := exec.Command("git", "push", "-u", "origin", branch)
 	if err := cmd.Run(); err != nil {
-		fmt.Printf("❌ Failed to push branch '%s': %v\n", branch, err)
+		return fmt.Errorf("❌ failed to push branch '%s': %w", branch, err)
 	} else {
 		fmt.Printf("🚀 Pushed branch '%s' to remote\n", branch)
 	}
+
+	return nil
 }
 
 // Checkout switches the working directory to the given branch using `git checkout <branch>`.
@@ -83,22 +87,35 @@ func Pull() error {
 // Returns an error if either operation fails.
 func Delete(branch string) error {
 	// delete local branch
+	var stderr bytes.Buffer
 	cmd := exec.Command("git", "branch", "-D", branch)
+	cmd.Stderr = &stderr
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("❌ failed to delete local branch: %w", err)
+		return fmt.Errorf("❌ failed to delete local branch '%s': %s", branch, stderr.String())
 	}
 
-	//delete remote branch
-	cmd = exec.Command("git", "push", "origin", "--delete", branch)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("❌ failed to delete remote branch: %w", err)
+	// Check if remote branch exists before attempting to delete
+	if remoteBranchExists(branch) {
+		cmd = exec.Command("git", "push", "origin", "--delete", branch)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("❌ failed to delete remote branch: %w", err)
+		}
+		fmt.Printf("🌐 Remote branch '%s' deleted.\n", branch)
+	} else {
+		utils.Info("Remote branch '%s' does not exist. Skipping remote deletion.", branch)
 	}
 
-	utils.Success("Branch '%s' deleted locally and remotely. ", branch)
+	utils.Success("Branch '%s' deleted locally and remotely (if existed).", branch)
 
 	return nil
+}
+
+// RemoteBranchExists checks if a branch exists on the remote.
+func remoteBranchExists(branch string) bool {
+	cmd := exec.Command("git", "ls-remote", "--heads", "origin", branch)
+	output, err := cmd.Output()
+	return err == nil && len(output) > 0
 }
