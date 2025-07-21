@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/yepizrene-devoost/dflow/cmd/utils"
 )
 
 // CompletionCmd defines the parent command for generating and installing shell
@@ -151,7 +152,16 @@ var CompletionInstallCmd = &cobra.Command{
 		}
 
 		fmt.Printf("✅ Autocompletion installed for %s at %s\n", shell, path)
-		fmt.Println("ℹ️  Restart your terminal or source the file to activate it.")
+
+		if shell == "zsh" {
+			utils.Info("To enable autocompletion, add the following to your ~/.zshrc if not already present:\n")
+			fmt.Println(`    fpath=("$HOME/.zsh/completions" $fpath)
+    autoload -Uz compinit
+    compinit`)
+			fmt.Println("\nThen restart your terminal or run: source ~/.zshrc")
+		} else {
+			utils.Info("Restart your terminal or source the file to activate it.")
+		}
 		return nil
 	},
 }
