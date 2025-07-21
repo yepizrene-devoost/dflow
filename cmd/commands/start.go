@@ -112,7 +112,10 @@ var StartCmd = &cobra.Command{
 		}
 
 		if pushBranch {
-			gitutils.PushBranch(fullName)
+			if err := gitutils.PushBranch(fullName); err != nil {
+				utils.Error("Failed to push branch '%s': %v", fullName, err)
+				return err
+			}
 			utils.Success("Branch '%s' pushed to origin", fullName)
 		}
 

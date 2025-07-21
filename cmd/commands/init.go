@@ -154,9 +154,18 @@ var InitCmd = &cobra.Command{
 		fmt.Println()
 
 		// 🌱 verify if base branches exists
-		gitutils.CheckOrCreateBranch(mainBranch)
-		gitutils.CheckOrCreateBranch(developBranch)
-		gitutils.CheckOrCreateBranch(uatBranch)
+		if err := gitutils.CheckOrCreateBranch(mainBranch); err != nil {
+			utils.Error(err.Error())
+			return err
+		}
+		if err := gitutils.CheckOrCreateBranch(developBranch); err != nil {
+			utils.Error(err.Error())
+			return err
+		}
+		if err := gitutils.CheckOrCreateBranch(uatBranch); err != nil {
+			utils.Error(err.Error())
+			return err
+		}
 
 		// 🚀 Confirmar push de ramas
 		var pushConfirm bool
@@ -175,9 +184,18 @@ var InitCmd = &cobra.Command{
 		}
 
 		if pushConfirm {
-			gitutils.PushBranch(mainBranch)
-			gitutils.PushBranch(developBranch)
-			gitutils.PushBranch(uatBranch)
+			if err := gitutils.PushBranch(mainBranch); err != nil {
+				utils.Error("Failed to push '%s': %v", mainBranch, err)
+				return err
+			}
+			if err := gitutils.PushBranch(developBranch); err != nil {
+				utils.Error("Failed to push '%s': %v", developBranch, err)
+				return err
+			}
+			if err := gitutils.PushBranch(uatBranch); err != nil {
+				utils.Error("Failed to push '%s': %v", uatBranch, err)
+				return err
+			}
 		}
 
 		utils.Success("🎉 dflow is ready! Use `dflow start` to begin a new branch.")
