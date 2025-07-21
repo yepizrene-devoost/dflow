@@ -38,12 +38,14 @@ func CheckOrCreateBranch(branch string) error {
 // This wraps the command `git push -u origin <branch>`.
 // It logs success or failure to the console but does not return an error.
 func PushBranch(branch string) error {
+	spinner := utils.NewSpinner(fmt.Sprintf("Pushing branch '%s' to origin...", branch))
+	spinner.Start()
+
 	cmd := exec.Command("git", "push", "-u", "origin", branch)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("❌ failed to push branch '%s': %w", branch, err)
-	} else {
-		fmt.Printf("🚀 Pushed branch '%s' to remote\n", branch)
 	}
+	spinner.Stop(fmt.Sprintf("Pushed branch '%s' to remote\n", branch), "🚀")
 
 	return nil
 }
@@ -72,10 +74,19 @@ func CheckoutNew(branch string) error {
 //
 // It executes `git pull` and returns an error if the command fails.
 func Pull() error {
+	spinner := utils.NewSpinner("Pulling latest changes from origin...")
+	spinner.Start()
+
 	cmd := exec.Command("git", "pull")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	if err := cmd.Run(); err != nil {
+		spinner.Stop("Failed to pull latest changes.")
+		return err
+	}
+
+	spinner.Stop("Repository updated.")
+	return nil
 }
 
 // Delete removes the given Git branch both locally and remotely.
@@ -86,30 +97,29 @@ func Pull() error {
 // If both operations succeed, it logs a success message via utils.Success.
 // Returns an error if either operation fails.
 func Delete(branch string) error {
-	// delete local branch
+	spinner := utils.NewSpinner(fmt.Sprintf("Deleting branch '%s' locally and remotely...", branch))
+	spinner.Start()
+
 	var stderr bytes.Buffer
 	cmd := exec.Command("git", "branch", "-D", branch)
 	cmd.Stderr = &stderr
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = nil
 	if err := cmd.Run(); err != nil {
+		spinner.Stop("Failed to delete local branch.")
 		return fmt.Errorf("❌ failed to delete local branch '%s': %s", branch, stderr.String())
 	}
 
-	// Check if remote branch exists before attempting to delete
 	if RemoteBranchExists(branch) {
 		cmd = exec.Command("git", "push", "origin", "--delete", branch)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		cmd.Stdout = nil
+		cmd.Stderr = &stderr
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("❌ failed to delete remote branch: %w", err)
+			spinner.Stop("Failed to delete remote branch.")
+			return fmt.Errorf("❌ failed to delete remote branch: %s", stderr.String())
 		}
-		fmt.Printf("🌐 Remote branch '%s' deleted.\n", branch)
-	} else {
-		utils.Info("Remote branch '%s' does not exist. Skipping remote deletion.", branch)
 	}
 
-	utils.Success("Branch '%s' deleted locally and remotely (if existed).", branch)
-
+	spinner.Stop(fmt.Sprintf("Branch '%s' deleted locally and remotely (if existed).", branch), "🗑️")
 	return nil
 }
 
