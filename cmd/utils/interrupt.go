@@ -6,8 +6,11 @@ import (
 	"syscall"
 )
 
-// HandleInterrupt sets up a listener for OS interrupt signals (e.g. Ctrl+C or SIGTERM)
-// and gracefully exits the program with a message when triggered.
+// HandleInterrupt installs a signal handler for OS interrupts (e.g. Ctrl+C or SIGTERM).
+//
+// When triggered, it prints a cancellation message and terminates the program
+// with exit code 1. This is intended to provide graceful shutdown behavior
+// during interactive command-line execution.
 func HandleInterrupt() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)

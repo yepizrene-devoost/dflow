@@ -1,6 +1,11 @@
-// Package utils provides helper functions and configuration handling
-// for the dflow CLI. It includes utilities for reading and writing the
-// .dflow.yaml file and interpreting workflow settings.
+// Package utils provides shared utility functions used throughout the dflow CLI.
+//
+// It includes helpers for:
+//
+//   - Reading and writing the .dflow.yaml configuration file
+//   - Determining merge behavior based on branch rules
+//   - Console output formatting (e.g., colors, emojis, status messages)
+//   - Signal handling for graceful termination (e.g., Ctrl+C)
 package utils
 
 import (
@@ -10,6 +15,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Config represents the dflow configuration structure,
+// typically stored in a .dflow.yaml file at the project root.
+//
+// It includes branching information, flow rules, and merge behavior.
 type Config struct {
 	Branches struct {
 		Main     string `yaml:"main"`
@@ -69,9 +78,11 @@ func LoadConfig() (*Config, error) {
 	return &cfg, nil
 }
 
-// SaveConfig writes the given Config struct as a .dflow.yaml file
-// to the current working directory (or DFLOW_CWD if set). It includes
-// a banner header used for identification.
+// SaveConfig writes the given Config struct to a .dflow.yaml file
+// in the current working directory (or DFLOW_CWD if set).
+//
+// The file will be overwritten if it already exists.
+// A banner header is included for identification.
 func SaveConfig(cfg *Config) error {
 	yamlData, err := yaml.Marshal(cfg)
 	if err != nil {
@@ -96,7 +107,9 @@ func SaveConfig(cfg *Config) error {
 
 // GetMergeModeForBranch returns the merge mode ("auto" or "manual")
 // for the given branch, based on the .dflow.yaml configuration.
-// If no specific rule is defined, it returns the default mode.
+//
+// This is used by dflow to decide whether to create a Pull Request or
+// merge directly from the CLI, depending on branch-specific rules.
 func GetMergeModeForBranch(cfg *Config, branch string) string {
 	if mode, ok := cfg.Workflow.BranchRules[branch]; ok {
 		return mode
