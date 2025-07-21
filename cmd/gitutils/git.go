@@ -96,7 +96,7 @@ func Delete(branch string) error {
 	}
 
 	// Check if remote branch exists before attempting to delete
-	if remoteBranchExists(branch) {
+	if RemoteBranchExists(branch) {
 		cmd = exec.Command("git", "push", "origin", "--delete", branch)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -114,8 +114,28 @@ func Delete(branch string) error {
 }
 
 // RemoteBranchExists checks if a branch exists on the remote.
-func remoteBranchExists(branch string) bool {
+func RemoteBranchExists(branch string) bool {
 	cmd := exec.Command("git", "ls-remote", "--heads", "origin", branch)
 	output, err := cmd.Output()
 	return err == nil && len(output) > 0
+}
+
+// GetLocalBranches returns a list of local Git branch names.
+func GetLocalBranches() []string {
+	cmd := exec.Command("git", "branch", "--format=%(refname:short)")
+	out, err := cmd.Output()
+	if err != nil {
+		return []string{}
+	}
+
+	lines := bytes.Split(out, []byte("\n"))
+	var branches []string
+	for _, line := range lines {
+		trimmed := bytes.TrimSpace(line)
+		if len(trimmed) > 0 {
+			branches = append(branches, string(trimmed))
+		}
+	}
+
+	return branches
 }

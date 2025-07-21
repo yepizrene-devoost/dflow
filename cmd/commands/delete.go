@@ -22,3 +22,10 @@ var DeleteCmd = &cobra.Command{
 		return gitutils.Delete(branch)
 	},
 }
+
+func init() {
+	DeleteCmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		branches := gitutils.GetLocalBranches()
+		return branches, cobra.ShellCompDirectiveNoFileComp
+	}
+}
