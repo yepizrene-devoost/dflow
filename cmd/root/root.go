@@ -14,6 +14,7 @@ package root
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/yepizrene-devoost/dflow/cmd/commands"
@@ -26,6 +27,9 @@ var rootCmd = &cobra.Command{
 	Long:  "A CLI tool to manage Git feature/release/hotfix flows inspired by Git Flow",
 
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		if strings.HasPrefix(os.Args[1], "__complete") || os.Args[1] == "completion" {
+			return
+		}
 		utils.PrintBanner()
 	},
 
