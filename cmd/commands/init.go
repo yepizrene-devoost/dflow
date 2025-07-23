@@ -52,10 +52,11 @@ var InitCmd = &cobra.Command{
       - feature/  → for feature branches
       - release/  → for release branches
       - hotfix/   → for hotfix branches
-			- bugfix/   → for bugfix branches
+      - bugfix/   → for bugfix branches
     - Set flow rules:
       - Features start from UAT and merge to Develop
       - Releases start from UAT
+      - Bugfixes start from UAT
       - Hotfixes start from Main
     - Ensure the specified branches exist locally.
     - Ask whether to push those base branches to origin.

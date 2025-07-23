@@ -178,10 +178,10 @@ func detectShell() string {
 }
 
 func init() {
-	// Agregas tu subcomando personalizado
+	//added custom subcommand to install completion
 	CompletionCmd.AddCommand(CompletionInstallCmd)
 
-	// Agregas el comando built-in de cobra (bash/zsh/fish/powershell)
+	//added built-in commands of cobra (bash/zsh/fish/powershell)
 	CompletionCmd.AddCommand(GenBashCmd)
 	CompletionCmd.AddCommand(GenZshCmd)
 	CompletionCmd.AddCommand(GenFishCmd)
