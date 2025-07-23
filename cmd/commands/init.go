@@ -25,8 +25,8 @@ import (
 //   - Names for the main, develop, and UAT branches.
 //   - Default merge behavior (manual via Pull Requests or automatic).
 //   - Optional exceptions for specific branches to use a different merge mode.
-//   - Prefixes for feature, release, and hotfix branches.
-//   - Flow rules for each type of branch (feature, release, hotfix).
+//   - Prefixes for feature, release, bugfix and hotfix branches.
+//   - Flow rules for each type of branch (feature, release, bugfix, hotfix).
 //
 // It also ensures the specified base branches exist locally, offering to create them
 // if missing, and provides an option to push them to the remote origin.
@@ -52,6 +52,7 @@ var InitCmd = &cobra.Command{
       - feature/  → for feature branches
       - release/  → for release branches
       - hotfix/   → for hotfix branches
+			- bugfix/   → for bugfix branches
     - Set flow rules:
       - Features start from UAT and merge to Develop
       - Releases start from UAT
@@ -122,11 +123,13 @@ var InitCmd = &cobra.Command{
 		cfg.Branches.Features = "feature/"
 		cfg.Branches.Releases = "release/"
 		cfg.Branches.Hotfixes = "hotfix/"
+		cfg.Branches.Bugfixes = "bugfix/"
 
 		cfg.Flow.FeatureBase = uatBranch
 		cfg.Flow.FeatureMerge = developBranch
 		cfg.Flow.ReleaseBase = uatBranch
 		cfg.Flow.HotfixBase = mainBranch
+		cfg.Flow.BugfixBase = uatBranch
 
 		cfg.Workflow.DefaultMergeMode = defaultMode
 		cfg.Workflow.BranchRules = make(map[string]string)
