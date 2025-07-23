@@ -6,6 +6,32 @@
 
 ---
 
+## 📦 v0.1.2 – Bugfix Flow, Shell Completion & Interactive Commands
+
+**Tag:** [`v0.1.2`](https://github.com/yepizrene-devoost/dflow/releases/tag/v0.1.2)  
+**Date:** 2025-07-22
+
+### ⚙️ Added
+- Support for `bug` / `bugfix` branches.
+- New `dflow delete` command with local and remote deletion + confirmation.
+- Shell autocompletion support (`bash`, `zsh`, `fish`, `powershell`).
+- `dflow completion install` helper for persistent setup.
+- Spinner utility for Git operations.
+- Emoji-based output helpers for consistent CLI messages.
+
+### 📝 Changed
+- `.dflow.yaml` now uses 4-space indentation and includes bugfix rules.
+- `dflow init` checks for base branches and can push them.
+- `dflow start` improved with new types and user feedback.
+- Logs and outputs now use formatted emoji messages.
+
+### 🧪 Internal
+- Refactored `gitutils` for modularity and better error handling.
+- Native autocompletion support via Cobra.
+- Expanded GoDoc coverage and signal interruption handling.
+
+---
+
 ## 📦 v0.1.1 – Documentation, GPG Signing & Metadata Enhancements
 
 **Tag:** [`v0.1.1`](https://github.com/yepizrene-devoost/dflow/releases/tag/v0.1.1)  
