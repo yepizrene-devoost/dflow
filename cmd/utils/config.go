@@ -27,6 +27,7 @@ type Config struct {
 		Features string `yaml:"features"`
 		Releases string `yaml:"releases"`
 		Hotfixes string `yaml:"hotfixes"`
+		Bugfixes string `yaml:"bugfixes"`
 	} `yaml:"branches"`
 
 	Flow struct {
@@ -34,6 +35,7 @@ type Config struct {
 		FeatureMerge string `yaml:"feature_merge"`
 		ReleaseBase  string `yaml:"release_base"`
 		HotfixBase   string `yaml:"hotfix_base"`
+		BugfixBase   string `yaml:"bugfix_base"`
 	} `yaml:"flow"`
 
 	Workflow struct {
