@@ -88,7 +88,7 @@ var StartCmd = &cobra.Command{
 		case "release":
 			prefix = cfg.Branches.Releases
 			base = cfg.Flow.ReleaseBase
-		case "fix", "hot", "hotfix":
+		case "hot", "hotfix":
 			prefix = cfg.Branches.Hotfixes
 			base = cfg.Flow.HotfixBase
 		case "bug", "bugfix":
@@ -143,8 +143,16 @@ var StartCmd = &cobra.Command{
 func init() {
 	StartCmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
-			return []string{"bug", "bugfix", "feat", "feature", "fix", "hot", "hotfix", "release"}, cobra.ShellCompDirectiveNoFileComp
+			return []string{
+				"feat\tAlias for 'feat'",
+				"feature\tStart a new feature branch",
+				"release\tStart a new release branch",
+				"hot\tAlias for 'hotfix'",
+				"hotfix\tStart a new hotfix branch",
+				"bug\tStart a new bugfix branch",
+				"bugfix\tAlias for 'bug'",
+			}, cobra.ShellCompDirectiveNoFileComp
 		}
-		return nil, cobra.ShellCompDirectiveDefault
+		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 }
