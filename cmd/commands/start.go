@@ -159,13 +159,13 @@ func init() {
 	StartCmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
 			return []string{
-				"feat\tAlias for 'feat'",
+				"feat\tAlias for 'feature'",
 				"feature\tStart a new feature branch",
 				"release\tStart a new release branch",
 				"hot\tAlias for 'hotfix'",
 				"hotfix\tStart a new hotfix branch",
-				"bug\tStart a new bugfix branch",
-				"bugfix\tAlias for 'bug'",
+				"bugfix\tStart a new bugfix branch",
+				"bug\tAlias for 'bugfix'",
 			}, cobra.ShellCompDirectiveNoFileComp
 		}
 		return nil, cobra.ShellCompDirectiveNoFileComp
