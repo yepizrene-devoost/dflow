@@ -8,6 +8,7 @@ package commands
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
@@ -61,17 +62,26 @@ var StartCmd = &cobra.Command{
 
   The new branch will be created using the appropriate prefix (e.g., feature/, release/, hotfix/, bugfix/)
   and based on the corresponding base branch defined in your .dflow.yaml configuration.`,
+	DisableFlagParsing: true,
 
-	Args: cobra.MaximumNArgs(2),
+	Args: cobra.MinimumNArgs(2),
 	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
 
-		if len(args) != 2 {
+		if len(args) < 2 {
 			_ = cmd.Help()
 			return nil
 		}
 
 		branchType := args[0]
-		branchName := args[1]
+
+		//normalize name of branch, change "word with word" or multiple void spaaces to "word-with-word"
+		branchNameParts := strings.Fields(strings.Join(args[1:], " "))
+		branchName := strings.Join(branchNameParts, "-")
+
+		if strings.HasPrefix(branchName, "-") {
+			utils.Warn("Branch name appears to start with '-'.")
+			utils.Info("If your branch name starts with '-', wrap it in quotes or use '--' to avoid flag parsing issues.")
+		}
 
 		cfg, err := utils.LoadConfig()
 		if err != nil {
@@ -100,6 +110,11 @@ var StartCmd = &cobra.Command{
 		}
 
 		fullName := fmt.Sprintf("%s%s", prefix, branchName)
+
+		if valid, reason := validators.IsValidGitBranchName(fullName); !valid {
+			utils.Error("Invalid branch name '%s': %s", fullName, reason)
+			return nil
+		}
 
 		if err := gitutils.Checkout(base); err != nil {
 			utils.Error("Could not checkout base branch '%s'", base)
