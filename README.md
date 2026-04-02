@@ -180,16 +180,37 @@ branches:
     bugfixes: bugfix/
 
 flow:
-    feature_base: uat
-    feature_merge: develop
-    release_base: uat
-    hotfix_base: main
-    bugfix_base: uat
+    feature:
+        base: develop
+        finish_targets:
+            - develop
+    release:
+        base: develop
+        finish_targets:
+            - uat
+            - main
+            - develop
+    hotfix:
+        base: main
+        finish_targets:
+            - main
+            - develop
+            - uat
+    bugfix:
+        base: uat
+        finish_targets:
+            - uat
+            - develop
 
 workflow:
     default_merge_mode: auto
     branch_rules:
-        main: manual
+        main:
+            merge_mode: manual
+        develop:
+            merge_mode: auto
+        uat:
+            merge_mode: auto
 ```
 
 ---

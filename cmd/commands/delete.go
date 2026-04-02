@@ -29,7 +29,14 @@ import (
 // Autocompletion suggests local branches when available.
 var DeleteCmd = &cobra.Command{
 	Use:   "delete <branch>",
-	Short: "Delete branch created previously",
+	Short: "Delete a local branch and its remote counterpart",
+	Long: `Delete a branch created with dflow from your local repository and, if it
+exists, from the 'origin' remote as well.
+
+The command asks for confirmation before deleting anything and skips the remote
+step automatically when the branch does not exist on origin.`,
+	Example: `  dflow delete feature/login-form
+  dflow delete bugfix/payment-timeout`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		branch := args[0]

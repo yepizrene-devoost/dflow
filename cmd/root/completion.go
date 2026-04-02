@@ -55,6 +55,8 @@ For persistent installation, see 'dflow completion install'.`,
 var GenBashCmd = &cobra.Command{
 	Use:   "bash",
 	Short: "Generate bash completion script",
+	Example: `  source <(dflow completion bash)
+  dflow completion bash > ~/.bash_completion`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return RootCmd.GenBashCompletion(os.Stdout)
 	},
@@ -67,6 +69,8 @@ var GenBashCmd = &cobra.Command{
 var GenZshCmd = &cobra.Command{
 	Use:   "zsh",
 	Short: "Generate zsh completion script",
+	Example: `  source <(dflow completion zsh)
+  dflow completion zsh > ~/.zsh/completions/_dflow`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return RootCmd.GenZshCompletion(os.Stdout)
 	},
@@ -79,6 +83,7 @@ var GenZshCmd = &cobra.Command{
 var GenFishCmd = &cobra.Command{
 	Use:   "fish",
 	Short: "Generate fish completion script",
+	Example: `  dflow completion fish | source`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return RootCmd.GenFishCompletion(os.Stdout, true)
 	},
@@ -91,6 +96,7 @@ var GenFishCmd = &cobra.Command{
 var GenPowerShellCmd = &cobra.Command{
 	Use:   "powershell",
 	Short: "Generate powershell completion script",
+	Example: `  dflow completion powershell | Out-String | Invoke-Expression`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return RootCmd.GenPowerShellCompletion(os.Stdout)
 	},
@@ -104,6 +110,9 @@ var GenPowerShellCmd = &cobra.Command{
 var CompletionInstallCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Install shell autocompletion for your current shell",
+	Long: `Detect your current shell and install dflow autocompletion using the
+appropriate completion script for that shell.`,
+	Example: `  dflow completion install`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		shell := detectShell()
 		if shell == "" {

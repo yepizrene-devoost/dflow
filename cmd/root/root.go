@@ -21,11 +21,19 @@ import (
 // for all subcommands like `start`, `init`, `config`, and `delete`.
 var RootCmd = &cobra.Command{
 	Use:   "dflow",
-	Short: "dflow is a Git branching flow manager for Devoost",
-	Long:  "A CLI tool to manage Git feature/release/hotfix flows inspired by Git Flow",
+	Short: "Manage Git branches with Devoost's adjusted flow",
+	Long: `dflow is a Git branching CLI tailored to Devoost's workflow.
+
+It helps teams initialize repository branch rules, start work branches with
+consistent prefixes, manage project-local metadata, and automate repetitive
+branching tasks on top of an adjusted Git Flow model.`,
+	Example: `  dflow init
+  dflow start feat login-form
+  dflow start bug checkout-on-uat
+  dflow config set-author "Jane Doe" --email=jane@example.com`,
 
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		if len(os.Args) > 1 && (strings.HasPrefix(os.Args[1], "__complete") || os.Args[1] == "completion") {
+		if shouldSkipBanner(os.Args[1:]) {
 			return
 		}
 		utils.PrintBanner()
@@ -63,4 +71,13 @@ func init() {
 		_ = cmd.Help()
 	})
 
+}
+
+func shouldSkipBanner(args []string) bool {
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "__complete") || arg == "completion" || arg == "--help" || arg == "-h" || arg == "help" {
+			return true
+		}
+	}
+	return false
 }

@@ -47,6 +47,9 @@ var ConfigCmd = &cobra.Command{
     dflow config list
 
   These settings are stored using the local .git config and are specific to each project.`,
+	Example: `  dflow config set-author "Jane Doe" --email=jane@example.com
+  dflow config get-author
+  dflow config list`,
 }
 
 // setAuthorCmd stores the author's name and email in the local Git configuration.
@@ -56,6 +59,13 @@ var ConfigCmd = &cobra.Command{
 var setAuthorCmd = &cobra.Command{
 	Use:   "set-author [name]",
 	Short: "Set project-local author name and email for dflow",
+	Long: `Set the author name and email used by dflow for project-local metadata.
+
+The author name can be passed as an argument or entered interactively.
+The email can be passed with --email or entered interactively when omitted.`,
+	Example: `  dflow config set-author "Jane Doe" --email=jane@example.com
+  dflow config set-author "Jane Doe"
+  dflow config set-author`,
 	Args:  cobra.MaximumNArgs(1),
 	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
 		var name string
@@ -113,6 +123,9 @@ var setAuthorCmd = &cobra.Command{
 var getAuthorCmd = &cobra.Command{
 	Use:   "get-author",
 	Short: "Show project-local dflow author and email",
+	Long: `Show the author name and email currently stored in the local Git
+configuration for this repository.`,
+	Example: `  dflow config get-author`,
 	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
 		author, err1 := exec.Command("git", "config", "--get", "dflow.author").Output()
 		email, err2 := exec.Command("git", "config", "--get", "dflow.email").Output()
@@ -137,6 +150,9 @@ var getAuthorCmd = &cobra.Command{
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all dflow configuration values for this project",
+	Long: `List all project-local Git configuration entries stored under the dflow
+namespace for the current repository.`,
+	Example: `  dflow config list`,
 	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
 		output, err := exec.Command("git", "config", "--get-regexp", "^dflow\\.").Output()
 
@@ -153,7 +169,7 @@ var listCmd = &cobra.Command{
 }
 
 func init() {
-	setAuthorCmd.Flags().String("email", "", "Email for changelogs (required)")
+	setAuthorCmd.Flags().String("email", "", "Email for changelogs; if omitted, dflow will prompt for it")
 
 	ConfigCmd.AddCommand(setAuthorCmd)
 	ConfigCmd.AddCommand(getAuthorCmd)

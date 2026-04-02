@@ -21,10 +21,10 @@ import (
 //
 // Supported branch types:
 //
-//   - feat|feature : Creates a feature branch from `flow.feature_base`
-//   - release      : Creates a release branch from `flow.release_base`
-//   - fix|hot|hotfix       : Creates a hotfix branch from `flow.hotfix_base`
-//   - bug|bugfix       : Creates a bugfix branch from `flow.bugfix_base`
+//   - feat|feature  : Creates a feature branch from the configured feature base
+//   - release       : Creates a release branch from the configured release base
+//   - fix|hot|hotfix: Creates a hotfix branch from the configured hotfix base
+//   - bug|bugfix    : Creates a bugfix branch from the configured bugfix base
 //
 // Branches are automatically prefixed using values from `.dflow.yaml`
 // under `branches.features`, `branches.releases`, or `branches.hotfixes`.
@@ -45,14 +45,14 @@ import (
 // If arguments are missing, help text is shown instead.
 var StartCmd = &cobra.Command{
 	Use:   "start [type] [name]",
-	Short: "Create and switch to a new feature, release, or hotfix branch",
+	Short: "Create and switch to a new feature, release, hotfix, or bugfix branch",
 	Long: `Start a new Git branch following the dflow branching model.
 	
   Valid types:
-    - feat|feature	: Starts a new feature branch from the configured 'feature_base'
-    - release	: Starts a new release branch from the configured 'release_base'
-    - fix|hot|hotfix	: Starts a new hotfix branch from the configured 'hotfix_base'
-    - bug|bugfix	: Starts a new bugfix branch from the configured 'bugfix_base'
+    - feat|feature	: Starts a new feature branch from the configured feature base branch
+    - release	: Starts a new release branch from the configured release base branch
+    - fix|hot|hotfix	: Starts a new hotfix branch from the configured hotfix base branch
+    - bug|bugfix	: Starts a new bugfix branch from the configured bugfix base branch
 
   Examples:
     dflow start feat login-form
@@ -64,7 +64,7 @@ var StartCmd = &cobra.Command{
   and based on the corresponding base branch defined in your .dflow.yaml configuration.`,
 	DisableFlagParsing: true,
 
-	Args: cobra.MinimumNArgs(2),
+	Args: cobra.ArbitraryArgs,
 	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
 
 		if len(args) < 2 {
@@ -94,18 +94,18 @@ var StartCmd = &cobra.Command{
 		switch branchType {
 		case "feat", "feature":
 			prefix = cfg.Branches.Features
-			base = cfg.Flow.FeatureBase
+			base = cfg.Flow.Feature.Base
 		case "release":
 			prefix = cfg.Branches.Releases
-			base = cfg.Flow.ReleaseBase
+			base = cfg.Flow.Release.Base
 		case "hot", "hotfix":
 			prefix = cfg.Branches.Hotfixes
-			base = cfg.Flow.HotfixBase
+			base = cfg.Flow.Hotfix.Base
 		case "bug", "bugfix":
 			prefix = cfg.Branches.Bugfixes
-			base = cfg.Flow.BugfixBase
+			base = cfg.Flow.Bugfix.Base
 		default:
-			utils.Error("Unknown type. Use: feat, release, hotfix")
+			utils.Error("Unknown type. Use: feat, release, hotfix, bugfix")
 			return nil
 		}
 

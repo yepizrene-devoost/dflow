@@ -9,6 +9,7 @@ package commands
 import (
 	"fmt"
 	"os"
+	"slices"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
@@ -54,10 +55,10 @@ var InitCmd = &cobra.Command{
       - hotfix/   → for hotfix branches
       - bugfix/   → for bugfix branches
     - Set flow rules:
-      - Features start from UAT and merge to Develop
-      - Releases start from UAT
-      - Bugfixes start from UAT
-      - Hotfixes start from Main
+      - Features start from Develop and merge back into Develop
+      - Releases start from Develop and can be promoted to UAT, Main, and Develop
+      - Bugfixes start from UAT and sync back to UAT and Develop
+      - Hotfixes start from Main and sync back to Main, Develop, and UAT
     - Ensure the specified branches exist locally.
     - Ask whether to push those base branches to origin.
 
@@ -67,6 +68,7 @@ var InitCmd = &cobra.Command{
     dflow init
 
   This command is meant to be run once per project when setting up the dflow branching model.`,
+	Example: `  dflow init`,
 	RunE: validators.WithChecks(true, func(cmd *cobra.Command, args []string) error {
 
 		var mainBranch, developBranch, uatBranch string
@@ -126,18 +128,21 @@ var InitCmd = &cobra.Command{
 		cfg.Branches.Hotfixes = "hotfix/"
 		cfg.Branches.Bugfixes = "bugfix/"
 
-		cfg.Flow.FeatureBase = uatBranch
-		cfg.Flow.FeatureMerge = developBranch
-		cfg.Flow.ReleaseBase = uatBranch
-		cfg.Flow.HotfixBase = mainBranch
-		cfg.Flow.BugfixBase = uatBranch
+		cfg.Flow.Feature.Base = developBranch
+		cfg.Flow.Feature.FinishTargets = []string{developBranch}
+		cfg.Flow.Release.Base = developBranch
+		cfg.Flow.Release.FinishTargets = uniqueBranchNames(uatBranch, mainBranch, developBranch)
+		cfg.Flow.Hotfix.Base = mainBranch
+		cfg.Flow.Hotfix.FinishTargets = uniqueBranchNames(mainBranch, developBranch, uatBranch)
+		cfg.Flow.Bugfix.Base = uatBranch
+		cfg.Flow.Bugfix.FinishTargets = uniqueBranchNames(uatBranch, developBranch)
 
 		cfg.Workflow.DefaultMergeMode = defaultMode
-		cfg.Workflow.BranchRules = make(map[string]string)
+		cfg.Workflow.BranchRules = make(map[string]utils.WorkflowBranchRule)
 
 		// 🎯 ask exceptions at the default mode
 		var exceptionBranches []string
-		allBranches := []string{mainBranch, developBranch, uatBranch}
+		allBranches := uniqueBranchNames(mainBranch, developBranch, uatBranch)
 
 		err = survey.AskOne(&survey.MultiSelect{
 			Message: fmt.Sprintf("Which branches should behave differently from the default '%s' mode?", defaultMode),
@@ -149,8 +154,12 @@ var InitCmd = &cobra.Command{
 			return nil
 		}
 
+		for _, branch := range allBranches {
+			cfg.Workflow.BranchRules[branch] = utils.WorkflowBranchRule{MergeMode: defaultMode}
+		}
+
 		for _, branch := range exceptionBranches {
-			cfg.Workflow.BranchRules[branch] = inverseMode
+			cfg.Workflow.BranchRules[branch] = utils.WorkflowBranchRule{MergeMode: inverseMode}
 		}
 
 		if err := utils.SaveConfig(&cfg); err != nil {
@@ -162,10 +171,8 @@ var InitCmd = &cobra.Command{
 		// 📋 print summary
 		fmt.Println("\n✅ Merge behavior summary:")
 		fmt.Printf("   Default mode: %s\n", defaultMode)
-		if len(exceptionBranches) > 0 {
-			fmt.Printf("   Exceptions (%s): %v\n", inverseMode, exceptionBranches)
-		} else {
-			fmt.Println("   No branch exceptions defined.")
+		for _, branch := range allBranches {
+			fmt.Printf("   - %s: %s\n", branch, utils.GetMergeModeForBranch(&cfg, branch))
 		}
 		fmt.Println()
 
@@ -217,4 +224,15 @@ var InitCmd = &cobra.Command{
 		utils.Success("dflow is ready! Use `dflow start` to begin a new branch.", "🎉")
 		return nil
 	}),
+}
+
+func uniqueBranchNames(branches ...string) []string {
+	var unique []string
+	for _, branch := range branches {
+		if branch == "" || slices.Contains(unique, branch) {
+			continue
+		}
+		unique = append(unique, branch)
+	}
+	return unique
 }
