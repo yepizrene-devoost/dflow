@@ -13,6 +13,14 @@ func TestCurrentBranchAndWorkingTreeState(t *testing.T) {
 	repoDir := initTempGitRepo(t)
 
 	withWorkingDir(t, repoDir, func() {
+		if !gitutils.BranchExists("main") {
+			t.Fatalf("expected main branch to exist")
+		}
+
+		if gitutils.BranchExists("missing") {
+			t.Fatalf("did not expect missing branch to exist")
+		}
+
 		branch, err := gitutils.CurrentBranch()
 		if err != nil {
 			t.Fatalf("CurrentBranch returned error: %v", err)
@@ -48,6 +56,31 @@ func TestCurrentBranchAndWorkingTreeState(t *testing.T) {
 	})
 }
 
+func TestCheckoutExistingBranch(t *testing.T) {
+	repoDir := initTempGitRepo(t)
+
+	withWorkingDir(t, repoDir, func() {
+		runGit(t, repoDir, "checkout", "-b", "feature/demo")
+		runGit(t, repoDir, "checkout", "main")
+
+		if err := gitutils.CheckoutExistingBranch("feature/demo"); err != nil {
+			t.Fatalf("CheckoutExistingBranch returned error: %v", err)
+		}
+
+		branch, err := gitutils.CurrentBranch()
+		if err != nil {
+			t.Fatalf("CurrentBranch returned error: %v", err)
+		}
+		if branch != "feature/demo" {
+			t.Fatalf("expected current branch 'feature/demo', got %q", branch)
+		}
+
+		if err := gitutils.CheckoutExistingBranch("missing"); err == nil {
+			t.Fatalf("expected CheckoutExistingBranch to fail for missing branch")
+		}
+	})
+}
+
 func TestMergeInProgressAndAbortMerge(t *testing.T) {
 	repoDir := initTempGitRepo(t)
 
@@ -78,6 +111,32 @@ func TestMergeInProgressAndAbortMerge(t *testing.T) {
 	})
 }
 
+func TestFetchOriginPullBranchAndHasUpstream(t *testing.T) {
+	repoDir := initTempGitRepo(t)
+	remoteDir := initBareGitRepo(t)
+
+	runGit(t, repoDir, "remote", "add", "origin", remoteDir)
+	runGit(t, repoDir, "push", "-u", "origin", "main")
+
+	withWorkingDir(t, repoDir, func() {
+		if !gitutils.HasUpstream("main") {
+			t.Fatalf("expected main to have an upstream after push -u")
+		}
+
+		if err := gitutils.FetchOrigin(); err != nil {
+			t.Fatalf("FetchOrigin returned error: %v", err)
+		}
+
+		if err := gitutils.PullBranch("main"); err != nil {
+			t.Fatalf("PullBranch returned error: %v", err)
+		}
+
+		if err := gitutils.PullBranch("missing"); err == nil {
+			t.Fatalf("expected PullBranch to fail for missing branch")
+		}
+	})
+}
+
 func initTempGitRepo(t *testing.T) string {
 	t.Helper()
 
@@ -87,6 +146,14 @@ func initTempGitRepo(t *testing.T) string {
 	runGit(t, repoDir, "config", "user.email", "test@example.com")
 	runGit(t, repoDir, "config", "commit.gpgsign", "false")
 	writeFileAndCommit(t, repoDir, ".gitkeep", "seed\n", "seed repository")
+	return repoDir
+}
+
+func initBareGitRepo(t *testing.T) string {
+	t.Helper()
+
+	repoDir := t.TempDir()
+	runGit(t, repoDir, "init", "--bare")
 	return repoDir
 }
 

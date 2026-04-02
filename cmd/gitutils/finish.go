@@ -21,6 +21,25 @@ func CurrentBranch() (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
+// BranchExists reports whether the given local branch exists.
+func BranchExists(branch string) bool {
+	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	return cmd.Run() == nil
+}
+
+// CheckoutExistingBranch switches to an existing local branch.
+func CheckoutExistingBranch(branch string) error {
+	if !BranchExists(branch) {
+		return fmt.Errorf("branch %q does not exist locally", branch)
+	}
+
+	if err := Checkout(branch); err != nil {
+		return fmt.Errorf("failed to checkout branch %q: %w", branch, err)
+	}
+
+	return nil
+}
+
 // IsWorkingTreeClean reports whether the repository has no staged, unstaged,
 // or untracked changes.
 func IsWorkingTreeClean() (bool, error) {
@@ -70,6 +89,45 @@ func AbortMerge() error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to abort merge: %w", err)
 	}
+	return nil
+}
+
+// FetchOrigin fetches updates from the remote 'origin' when available.
+func FetchOrigin() error {
+	if !HasOriginRemote() {
+		utils.Info("📁   Remote 'origin' not found. Skipping fetch.")
+		return nil
+	}
+
+	spinner := utils.NewSpinner("Fetching updates from origin...")
+	spinner.Start()
+
+	cmd := exec.Command("git", "fetch", "origin", "--prune")
+	if err := cmd.Run(); err != nil {
+		spinner.Stop("Failed to fetch updates from origin.")
+		return fmt.Errorf("failed to fetch origin: %w", err)
+	}
+
+	spinner.Stop("Fetched updates from origin.")
+	return nil
+}
+
+// HasUpstream reports whether the given local branch has an upstream configured.
+func HasUpstream(branch string) bool {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", branch+"@{upstream}")
+	return cmd.Run() == nil
+}
+
+// PullBranch checks out the given branch and updates it from origin when possible.
+func PullBranch(branch string) error {
+	if err := CheckoutExistingBranch(branch); err != nil {
+		return err
+	}
+
+	if err := Pull(); err != nil {
+		return fmt.Errorf("failed to update branch %q: %w", branch, err)
+	}
+
 	return nil
 }
 
