@@ -30,7 +30,8 @@ branching tasks on top of an adjusted Git Flow model.`,
 	Example: `  dflow init
   dflow start feat login-form
   dflow start bug checkout-on-uat
-  dflow config set-author "Jane Doe" --email=jane@example.com`,
+  dflow config set-author "Jane Doe" --email=jane@example.com
+  dflow version`,
 
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		if shouldSkipBanner(os.Args[1:]) {
@@ -40,6 +41,10 @@ branching tasks on top of an adjusted Git Flow model.`,
 	},
 
 	Run: func(cmd *cobra.Command, args []string) {
+		if showVersion {
+			fmt.Fprintf(cmd.OutOrStdout(), "dflow %s\n", utils.GetVersion())
+			return
+		}
 		cmd.SetArgs([]string{"--help"})
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintf(os.Stderr, "Command execution failed: %v\n", err)
@@ -64,6 +69,8 @@ func init() {
 	RootCmd.AddCommand(commands.StartCmd)
 	RootCmd.AddCommand(commands.ConfigCmd)
 	RootCmd.AddCommand(commands.DeleteCmd)
+	RootCmd.AddCommand(VersionCmd)
+	RootCmd.PersistentFlags().BoolVarP(&showVersion, "version", "V", false, "Show the current dflow version")
 
 	// customize help
 	RootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
@@ -75,7 +82,7 @@ func init() {
 
 func shouldSkipBanner(args []string) bool {
 	for _, arg := range args {
-		if strings.HasPrefix(arg, "__complete") || arg == "completion" || arg == "--help" || arg == "-h" || arg == "help" {
+		if strings.HasPrefix(arg, "__complete") || arg == "completion" || arg == "--help" || arg == "-h" || arg == "help" || arg == "--version" || arg == "-V" || arg == "version" || arg == "ver" {
 			return true
 		}
 	}
