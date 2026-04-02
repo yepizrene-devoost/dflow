@@ -72,7 +72,11 @@ var StartCmd = &cobra.Command{
 			return nil
 		}
 
-		branchType := args[0]
+		branchType, err := utils.ParseBranchType(args[0])
+		if err != nil {
+			utils.Error("Unknown type. Use: feat, release, hotfix, bugfix")
+			return nil
+		}
 
 		//normalize name of branch, change "word with word" or multiple void spaaces to "word-with-word"
 		branchNameParts := strings.Fields(strings.Join(args[1:], " "))
@@ -89,25 +93,18 @@ var StartCmd = &cobra.Command{
 			return nil
 		}
 
-		var prefix, base string
-
-		switch branchType {
-		case "feat", "feature":
-			prefix = cfg.Branches.Features
-			base = cfg.Flow.Feature.Base
-		case "release":
-			prefix = cfg.Branches.Releases
-			base = cfg.Flow.Release.Base
-		case "hot", "hotfix":
-			prefix = cfg.Branches.Hotfixes
-			base = cfg.Flow.Hotfix.Base
-		case "bug", "bugfix":
-			prefix = cfg.Branches.Bugfixes
-			base = cfg.Flow.Bugfix.Base
-		default:
-			utils.Error("Unknown type. Use: feat, release, hotfix, bugfix")
+		prefix, err := utils.GetBranchPrefix(cfg, branchType)
+		if err != nil {
+			utils.Error(err.Error())
 			return nil
 		}
+
+		rule, err := utils.GetFlowRule(cfg, branchType)
+		if err != nil {
+			utils.Error(err.Error())
+			return nil
+		}
+		base := rule.Base
 
 		fullName := fmt.Sprintf("%s%s", prefix, branchName)
 
