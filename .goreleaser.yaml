@@ -2,6 +2,9 @@ version: 2
 
 project_name: dflow
 
+release:
+  mode: replace
+
 before:
   hooks:
     - go mod tidy
