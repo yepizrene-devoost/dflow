@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 📦 v0.2.0 – Finish Automation, Versioning & Flow Documentation
 
 ### Added
 - `dflow finish` command to resolve configured finish targets, merge `auto` targets, and report `manual` targets.

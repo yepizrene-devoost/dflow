@@ -6,7 +6,10 @@
 
 ---
 
-## 📦 Unreleased – Finish Automation, Versioning & Flow Documentation
+## 📦 v0.2.0 – Finish Automation, Versioning & Flow Documentation
+
+**Tag:** [`v0.2.0`](https://github.com/yepizrene-devoost/dflow/releases/tag/v0.2.0)  
+**Date:** 2026-04-02
 
 ### ⚙️ Added
 - `dflow finish` to automate the configured finish flow for work branches.
