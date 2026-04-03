@@ -14,8 +14,7 @@ import (
 // is created and that loaded values match the original configuration.
 func TestSaveAndLoadConfig(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.Setenv("DFLOW_CWD", tmpDir)
-	defer os.Unsetenv("DFLOW_CWD")
+	t.Setenv("DFLOW_CWD", tmpDir)
 
 	original := &utils.Config{}
 	original.Branches.Main = "main"
@@ -76,8 +75,7 @@ func TestSaveAndLoadConfig(t *testing.T) {
 
 func TestLoadLegacyConfigFormat(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.Setenv("DFLOW_CWD", tmpDir)
-	defer os.Unsetenv("DFLOW_CWD")
+	t.Setenv("DFLOW_CWD", tmpDir)
 
 	legacyConfig := `
 branches:

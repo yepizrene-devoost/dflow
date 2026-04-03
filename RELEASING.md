@@ -13,6 +13,9 @@ This document describes the release flow currently used by this repository.
 
 The GitHub release body is taken from `CHANGELOG.md`.
 
+Release credentials are loaded from a local `.env` file. Use `.env.example` as
+the template and keep real tokens out of version control.
+
 ## Release Checklist
 
 ### 1. Finish the feature work
@@ -92,6 +95,26 @@ git push origin :refs/tags/v0.2.0
 
 Then recreate the tag on the corrected commit.
 
+### Retagging or rerunning a release
+
+If you already created or pushed a tag and later need to correct release
+metadata before publishing the final release:
+
+```bash
+git tag -d v0.2.0
+git push origin :refs/tags/v0.2.0
+```
+
+Then:
+
+1. Commit the metadata fix on `main`
+2. Recreate the same tag on the corrected commit
+3. Push the tag again
+4. Rerun `make release`
+
+If the GitHub release entry already exists, GoReleaser is configured with
+`release.mode: replace`, so rerunning the release updates the existing body.
+
 ### 7. Publish the release
 
 Push `main` if needed, then run:
@@ -116,5 +139,6 @@ GoReleaser is configured to:
 - Always tag from `main`, never from `develop` or `release/*`
 - Keep the working tree clean before tagging or publishing
 - `CHANGELOG.md` is the published release body
+- `CHANGELOG.draft.md` is only a helper generated from commit history
 - `HISTORY.md` is the long-form project history
 - If `.env` contains old or unused tokens, remove them and rotate any exposed credentials

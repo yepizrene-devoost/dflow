@@ -42,7 +42,7 @@ tasks with a customizable flow model.`,
 
 	Run: func(cmd *cobra.Command, args []string) {
 		if showVersion {
-			fmt.Fprintf(cmd.OutOrStdout(), "dflow %s\n", utils.GetVersion())
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "dflow %s\n", utils.GetVersion())
 			return
 		}
 		cmd.SetArgs([]string{"--help"})

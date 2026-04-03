@@ -256,10 +256,7 @@ func (w WorkflowConfig) MarshalYAML() (interface{}, error) {
 		BranchRules      map[string]WorkflowBranchRule `yaml:"branch_rules"`
 	}
 
-	return workflowAlias{
-		DefaultMergeMode: w.DefaultMergeMode,
-		BranchRules:      w.BranchRules,
-	}, nil
+	return workflowAlias(w), nil
 }
 
 // GetMergeModeForBranch returns the merge mode ("auto" or "manual")
