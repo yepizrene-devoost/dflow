@@ -324,7 +324,7 @@ dflow finish
 - ✅ `dflow delete`, `dflow completion`, and `dflow version`
 - ✅ Go Reference available on `pkg.go.dev`
 - 📦 Multiplatform builds (via `GoReleaser`)
-- 📚 Open-source friendly documentation in `README.md`, `CHANGELOG.md`, and `HISTORY.md`
+- 📚 Open-source friendly documentation in `README.md`, `RELEASING.md`, `CHANGELOG.md`, and `HISTORY.md`
 
 ---
 
