@@ -1,8 +1,9 @@
-// Package root defines the root command for the dflow CLI.
+// Package root defines the root command tree for the dflow CLI.
 //
 // This package initializes the top-level `dflow` command, sets up persistent behavior
-// (like displaying the banner), and attaches all subcommands such as `init`, `start`,
-// and `config`. It uses Cobra for command parsing.
+// such as banner handling and global flags, and registers subcommands like `init`,
+// `start`, `finish`, `delete`, `config`, `completion`, and `version`. It uses Cobra
+// for command parsing.
 package root
 
 import (
@@ -81,8 +82,8 @@ var GenZshCmd = &cobra.Command{
 //
 //	$ source <(dflow completion fish)
 var GenFishCmd = &cobra.Command{
-	Use:   "fish",
-	Short: "Generate fish completion script",
+	Use:     "fish",
+	Short:   "Generate fish completion script",
 	Example: `  dflow completion fish | source`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return RootCmd.GenFishCompletion(os.Stdout, true)
@@ -94,8 +95,8 @@ var GenFishCmd = &cobra.Command{
 //
 //	PS> dflow completion powershell | Out-String | Invoke-Expression
 var GenPowerShellCmd = &cobra.Command{
-	Use:   "powershell",
-	Short: "Generate powershell completion script",
+	Use:     "powershell",
+	Short:   "Generate powershell completion script",
 	Example: `  dflow completion powershell | Out-String | Invoke-Expression`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return RootCmd.GenPowerShellCompletion(os.Stdout)

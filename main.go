@@ -1,21 +1,21 @@
 // dflow is a modern CLI tool for managing Git branching workflows.
 // Inspired by Git Flow, it simplifies the process of starting, managing, and finishing
-// feature, release, and hotfix branches with a customizable YAML-based configuration.
+// work branches with a customizable YAML-based configuration.
 //
-// Key features:
-//   - Interactive init wizard for first-time setup
-//   - Commands to start features, releases, and hotfixes
-//   - Automatic or manual (PR-based) merge modes
-//   - Branch rules per environment (e.g., protect main, allow direct to develop)
-//   - Generates changelogs with metadata for traceability
+// The tool combines interactive setup, configurable branch rules, and finish automation
+// on top of a project-local `.dflow.yaml` file. It supports feature, release, hotfix,
+// and bugfix branches, together with per-target merge strategies such as `auto` and
+// `manual`.
 //
-// Example usage:
+// Common entry points:
 //
 //	dflow init
 //	dflow start feat login-form
-//	dflow config author "Author name" --email email@domain.com
+//	dflow finish --dry-run
+//	dflow config set-author "Author Name" --email email@domain.com
+//	dflow version
 //
-// For full documentation, visit:
+// For user documentation and release notes, visit:
 //
 //	https://github.com/yepizrene-devoost/dflow
 package main

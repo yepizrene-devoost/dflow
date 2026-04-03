@@ -1,8 +1,7 @@
 // Package root defines the root command for the dflow CLI.
 //
-// This package initializes the top-level `dflow` command, sets up persistent behavior
-// (like displaying the banner), and attaches all subcommands such as `init`, `start`,
-// `finish`, and `config`. It uses Cobra for command parsing.
+// This package initializes the top-level `dflow` command, sets up persistent behavior,
+// and attaches all supported subcommands. It uses Cobra for command parsing.
 package root
 
 import (
@@ -21,12 +20,12 @@ import (
 // for all subcommands like `start`, `finish`, `init`, `config`, and `delete`.
 var RootCmd = &cobra.Command{
 	Use:   "dflow",
-	Short: "Manage Git branches with Devoost's adjusted flow",
-	Long: `dflow is a Git branching CLI tailored to Devoost's workflow.
+	Short: "Manage Git branches with a configurable workflow",
+	Long: `A CLI tool to manage Git branch workflows inspired by Git Flow.
 
-It helps teams initialize repository branch rules, start work branches with
-consistent prefixes, manage project-local metadata, and automate repetitive
-branching tasks on top of an adjusted Git Flow model.`,
+It helps repositories define branch rules, start work branches with consistent
+prefixes, manage project-local metadata, and automate repetitive branching
+tasks with a customizable flow model.`,
 	Example: `  dflow init
   dflow start feat login-form
   dflow finish

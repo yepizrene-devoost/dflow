@@ -1,9 +1,8 @@
-// Package commands provides the CLI subcommands for dflow, enabling users to manage
-// Git branching workflows using a consistent, configurable model.
+// Package commands defines the end-user subcommands that make up the dflow CLI.
 //
-// This includes project-local configuration commands under `dflow config`,
-// allowing users to set and retrieve metadata such as author name and email
-// for use in changelogs and other automated processes.
+// The package contains interactive and non-interactive commands for initializing
+// repositories, starting and finishing work branches, deleting branches, and
+// managing local dflow metadata stored in Git config.
 package commands
 
 import (
@@ -66,7 +65,7 @@ The email can be passed with --email or entered interactively when omitted.`,
 	Example: `  dflow config set-author "Jane Doe" --email=jane@example.com
   dflow config set-author "Jane Doe"
   dflow config set-author`,
-	Args:  cobra.MaximumNArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
 		var name string
 		var email string

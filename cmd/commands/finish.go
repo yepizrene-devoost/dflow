@@ -16,6 +16,9 @@ var FinishCmd = &cobra.Command{
 	Short: "Finish the current dflow branch using the configured merge rules",
 	Long: `Finish the current dflow branch by resolving its configured finish targets.
 
+Before running any merge, dflow requires a clean working tree and verifies that
+no merge is already in progress.
+
 For each target branch configured with merge_mode=auto, dflow will:
   - fetch updates from origin
   - checkout and sync the target branch
@@ -24,9 +27,16 @@ For each target branch configured with merge_mode=auto, dflow will:
 
 Targets configured with merge_mode=manual are not merged automatically.
 Instead, dflow reports them so the team can complete them through the usual
-pull request or manual review flow.`,
+pull request or manual review flow.
+
+After all automatic merges succeed, dflow switches back to the configured base
+branch for the finished work type. The source branch is not deleted automatically.
+
+Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`,
 	Example: `  dflow finish
-  dflow finish --dry-run`,
+  dflow finish --dry-run
+  dflow finish
+  # Merges only auto targets and returns to the configured base branch`,
 	Args: cobra.NoArgs,
 	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
 		dryRun, err := cmd.Flags().GetBool("dry-run")
