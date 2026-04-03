@@ -1,7 +1,8 @@
 // Package gitutils provides low-level Git utility functions used by dflow commands.
 //
 // These helpers wrap common Git operations such as checking out branches,
-// creating new ones, pushing to origin, and pulling updates.
+// creating new ones, pushing to origin, and pulling updates. This package is
+// used internally by dflow to manage Git workflows programmatically.
 package gitutils
 
 import (
@@ -33,10 +34,10 @@ func CheckOrCreateBranch(branch string) error {
 	return nil
 }
 
-// PushBranch pushes the specified branch to the remote `origin` and sets upstream tracking.
+// PushBranch pushes the specified branch to the remote 'origin' and sets upstream tracking.
 //
-// This wraps the command `git push -u origin <branch>`.
-// It logs success or failure to the console but does not return an error.
+// This wraps the command `git push -u origin <branch>` and logs the result
+// to the console. It returns an error if the push operation fails.
 func PushBranch(branch string) error {
 	spinner := utils.NewSpinner(fmt.Sprintf("Pushing branch '%s' to origin...", branch))
 	spinner.Start()
@@ -70,10 +71,19 @@ func CheckoutNew(branch string) error {
 	return cmd.Run()
 }
 
-// Pull pulls the latest changes from the remote for the current branch.
+// Pull updates the current branch with the latest changes from the remote 'origin'.
 //
-// It executes `git pull` and returns an error if the command fails.
+// If the remote 'origin' is not configured, the function skips the pull and
+// assumes the local branch is up-to-date. This is useful for local-only Git
+// repositories where no remote is defined.
+//
+// It returns an error only if the pull fails when attempted.
 func Pull() error {
+	if !HasOriginRemote() {
+		utils.Info("📁   Remote 'origin' not found. Skipping pull. Using local branch as latest.")
+		return nil
+	}
+
 	spinner := utils.NewSpinner("Pulling latest changes from origin...")
 	spinner.Start()
 
@@ -156,4 +166,16 @@ func GetLocalBranches() []string {
 	}
 
 	return branches
+}
+
+// HasOriginRemote checks whether the Git remote named 'origin' is configured.
+//
+// It executes `git remote get-url origin`, returning true if the command
+// succeeds, meaning the 'origin' remote exists and has a valid URL.
+//
+// This is useful to avoid pull/push errors in local-only Git repositories.
+func HasOriginRemote() bool {
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	err := cmd.Run()
+	return err == nil
 }

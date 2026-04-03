@@ -6,6 +6,28 @@
 
 ---
 
+## 📦 v0.2.0 – Finish Automation, Versioning & Flow Documentation
+
+**Tag:** [`v0.2.0`](https://github.com/yepizrene-devoost/dflow/releases/tag/v0.2.0)  
+**Date:** 2026-04-02
+
+### ⚙️ Added
+- `dflow finish` to automate the configured finish flow for work branches.
+- `dflow finish --dry-run` to preview merge and push operations safely.
+- `dflow version`, `dflow --version`, and `dflow -V`.
+- Workflow planning helpers and Git sync helpers to support finish automation.
+
+### 📝 Changed
+- `.dflow.yaml` now supports explicit `base` and `finish_targets` rules per branch type.
+- `workflow.branch_rules` now stores explicit branch settings with `merge_mode`.
+- `dflow init` now generates default rules for feature, release, bugfix, and hotfix flows.
+- README, changelog, and public GoDoc comments were updated to match the current CLI behavior.
+
+### 🧪 Internal
+- Added tests for workflow resolution, Git finish helpers, and the `finish` command flow.
+
+---
+
 ## 📦 v0.1.2 – Bugfix Flow, Shell Completion & Interactive Commands
 
 **Tag:** [`v0.1.2`](https://github.com/yepizrene-devoost/dflow/releases/tag/v0.1.2)  
@@ -85,15 +107,13 @@
 
 **Date:** 2025-07-01  
 **Summary:**  
-The project was created to formalize Devoost's internal Git workflows using a CLI. Goals included reproducibility, ease of onboarding, and better control over merges and release cycles.
+The project was created to formalize repeatable Git workflows using a CLI. Goals included reproducibility, ease of onboarding, and better control over merges and release cycles.
 
 ---
 
 ## 🔮 Future Plans
 
-- Add `dflow finish` to complete branches and perform merges automatically.
 - Automate changelog generation from Git history.
-- Add tests for core Git integrations.
 - Improve `config` options to support defaults or shared templates.
 
 ---

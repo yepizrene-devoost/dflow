@@ -26,6 +26,11 @@ func SetVersion(v string) {
 	version = v
 }
 
+// GetVersion returns the current CLI version string.
+func GetVersion() string {
+	return version
+}
+
 // PrintBanner prints the dflow ASCII banner with the current version.
 // Useful for CLI startup or version subcommand.
 func PrintBanner() {

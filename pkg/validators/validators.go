@@ -6,7 +6,9 @@ package validators
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
@@ -57,4 +59,65 @@ func WithChecks(skipDflowCheck bool, fn func(cmd *cobra.Command, args []string) 
 		}
 		return fn(cmd, args)
 	}
+}
+
+// IsValidGitBranchName checks whether a given branch name is valid according to Git's reference format rules.
+//
+// A branch name is considered invalid if it contains any of the following:
+//   - Double dots ("..")
+//   - Special characters such as ~, ^, :, ?, *, [, \, or the sequence "@{"
+//   - Starts with a dash ("-")
+//   - Ends with a slash ("/"), a dot ("."), or ".lock"
+//   - Is an empty string
+//
+// These checks are based on Git's rules for ref names described in `git-check-ref-format(1)`.
+//
+// Returns true if the branch name is valid, false otherwise.
+func IsValidGitBranchName(name string) (bool, string) {
+	if name == "" {
+		return false, "branch name is empty"
+	}
+
+	if strings.HasPrefix(name, "-") {
+		return false, "branch name cannot start with '-'"
+	}
+	if strings.HasPrefix(name, "/") {
+		return false, "branch name cannot start with '/'"
+	}
+	if strings.HasSuffix(name, "/") {
+		return false, "branch name cannot end with '/'"
+	}
+	if strings.HasSuffix(name, ".") {
+		return false, "branch name cannot end with '.'"
+	}
+	if strings.HasSuffix(name, ".lock") {
+		return false, "branch name cannot end with '.lock'"
+	}
+
+	invalidPatterns := []string{"..", "~", "^", ":", "?", "*", "[", "\\", "@{"}
+	for _, pattern := range invalidPatterns {
+		if strings.Contains(name, pattern) {
+			return false, fmt.Sprintf("branch name cannot contain '%s'", pattern)
+		}
+	}
+
+	// Component-level checks (split by '/')
+	parts := strings.Split(name, "/")
+	for _, part := range parts {
+		if part == "." || part == ".." {
+			return false, "branch name cannot contain path elements '.' or '..'"
+		}
+		if part == "" {
+			return false, "branch name cannot contain empty path segments ('//')"
+		}
+	}
+
+	// Control characters (ASCII 0-31) and DEL (127)
+	for i := 0; i < len(name); i++ {
+		if name[i] < 32 || name[i] == 127 {
+			return false, "branch name contains control characters"
+		}
+	}
+
+	return true, ""
 }

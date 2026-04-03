@@ -1,3 +1,5 @@
 dist/
 .DS_Store
 .env
+.agents/*
+AGENTS.md

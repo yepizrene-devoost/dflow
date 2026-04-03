@@ -1,8 +1,9 @@
-// Package root defines the root command for the dflow CLI.
+// Package root defines the root command tree for the dflow CLI.
 //
 // This package initializes the top-level `dflow` command, sets up persistent behavior
-// (like displaying the banner), and attaches all subcommands such as `init`, `start`,
-// and `config`. It uses Cobra for command parsing.
+// such as banner handling and global flags, and registers subcommands like `init`,
+// `start`, `finish`, `delete`, `config`, `completion`, and `version`. It uses Cobra
+// for command parsing.
 package root
 
 import (
@@ -55,6 +56,8 @@ For persistent installation, see 'dflow completion install'.`,
 var GenBashCmd = &cobra.Command{
 	Use:   "bash",
 	Short: "Generate bash completion script",
+	Example: `  source <(dflow completion bash)
+  dflow completion bash > ~/.bash_completion`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return RootCmd.GenBashCompletion(os.Stdout)
 	},
@@ -67,6 +70,8 @@ var GenBashCmd = &cobra.Command{
 var GenZshCmd = &cobra.Command{
 	Use:   "zsh",
 	Short: "Generate zsh completion script",
+	Example: `  source <(dflow completion zsh)
+  dflow completion zsh > ~/.zsh/completions/_dflow`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return RootCmd.GenZshCompletion(os.Stdout)
 	},
@@ -77,8 +82,9 @@ var GenZshCmd = &cobra.Command{
 //
 //	$ source <(dflow completion fish)
 var GenFishCmd = &cobra.Command{
-	Use:   "fish",
-	Short: "Generate fish completion script",
+	Use:     "fish",
+	Short:   "Generate fish completion script",
+	Example: `  dflow completion fish | source`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return RootCmd.GenFishCompletion(os.Stdout, true)
 	},
@@ -89,8 +95,9 @@ var GenFishCmd = &cobra.Command{
 //
 //	PS> dflow completion powershell | Out-String | Invoke-Expression
 var GenPowerShellCmd = &cobra.Command{
-	Use:   "powershell",
-	Short: "Generate powershell completion script",
+	Use:     "powershell",
+	Short:   "Generate powershell completion script",
+	Example: `  dflow completion powershell | Out-String | Invoke-Expression`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return RootCmd.GenPowerShellCompletion(os.Stdout)
 	},
@@ -104,6 +111,9 @@ var GenPowerShellCmd = &cobra.Command{
 var CompletionInstallCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Install shell autocompletion for your current shell",
+	Long: `Detect your current shell and install dflow autocompletion using the
+appropriate completion script for that shell.`,
+	Example: `  dflow completion install`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		shell := detectShell()
 		if shell == "" {
@@ -178,10 +188,10 @@ func detectShell() string {
 }
 
 func init() {
-	// Agregas tu subcomando personalizado
+	//added custom subcommand to install completion
 	CompletionCmd.AddCommand(CompletionInstallCmd)
 
-	// Agregas el comando built-in de cobra (bash/zsh/fish/powershell)
+	//added built-in commands of cobra (bash/zsh/fish/powershell)
 	CompletionCmd.AddCommand(GenBashCmd)
 	CompletionCmd.AddCommand(GenZshCmd)
 	CompletionCmd.AddCommand(GenFishCmd)
