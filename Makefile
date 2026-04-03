@@ -45,7 +45,7 @@ test:
 # 🔎 Linter (requires golangci-lint)
 .PHONY: lint
 lint:
-	golangci-lint run
+	GOCACHE=/tmp/dflow-gocache GOLANGCI_LINT_CACHE=/tmp/dflow-golangci-lint-cache golangci-lint run ./...
 
 # 🧰 Build the dflow installer CLI (optional)
 .PHONY: installer
@@ -56,10 +56,11 @@ installer:
 # 📝 Generate changelog from last tag
 .PHONY: changelog
 changelog:
-	@echo "📝 Generating CHANGELOG.md..."
-	@echo "# Changelog\n" > CHANGELOG.md
-	@git log $$(git describe --tags --abbrev=0)..HEAD --pretty=format:"- %s" >> CHANGELOG.md
-	@echo "\n✅ Done. Check CHANGELOG.md"
+	@echo "⚠️  CHANGELOG.md is maintained manually for each release."
+	@echo "📝 Generating CHANGELOG.draft.md from commits..."
+	@echo "# Changelog Draft\n" > CHANGELOG.draft.md
+	@git log $$(git describe --tags --abbrev=0)..HEAD --pretty=format:"- %s" >> CHANGELOG.draft.md
+	@echo "\n✅ Done. Review CHANGELOG.draft.md and copy only the notes you need into CHANGELOG.md"
 
 # 🧹 Clean compiled binaries
 .PHONY: clean

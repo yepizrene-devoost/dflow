@@ -19,6 +19,6 @@ var VersionCmd = &cobra.Command{
   dflow --version
   dflow -V`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Fprintf(cmd.OutOrStdout(), "dflow %s\n", utils.GetVersion())
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "dflow %s\n", utils.GetVersion())
 	},
 }
