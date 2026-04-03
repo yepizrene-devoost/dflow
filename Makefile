@@ -28,7 +28,7 @@ build-all:
 .PHONY: release
 release:
 	@echo "🚀 Running GoReleaser with .env"
-	@source .env && goreleaser release --clean
+	@set -a; . ./.env; set +a; goreleaser release --clean --release-notes=CHANGELOG.md
 
 # 📥 Install local build to $GOPATH/bin with version injected
 .PHONY: install
