@@ -7,11 +7,13 @@ import (
 
 var spinnerFrames = []rune{'⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'}
 
+// Spinner renders a lightweight terminal spinner for long-running CLI tasks.
 type Spinner struct {
 	message string
 	done    chan struct{}
 }
 
+// NewSpinner creates a spinner that displays the provided status message.
 func NewSpinner(message string) *Spinner {
 	return &Spinner{
 		message: message,
@@ -19,6 +21,7 @@ func NewSpinner(message string) *Spinner {
 	}
 }
 
+// Start begins rendering the spinner asynchronously until Stop is called.
 func (s *Spinner) Start() {
 	go func() {
 		i := 0
@@ -35,6 +38,9 @@ func (s *Spinner) Start() {
 	}()
 }
 
+// Stop clears the spinner and prints a final status line.
+//
+// If an icon is provided, it replaces the default success icon.
 func (s *Spinner) Stop(message string, icon ...string) {
 	close(s.done)
 

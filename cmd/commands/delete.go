@@ -1,9 +1,8 @@
-// Package commands provides the CLI subcommands for dflow, enabling users to manage
-// Git branching workflows using a consistent, configurable model.
+// Package commands defines the end-user subcommands that make up the dflow CLI.
 //
-// This includes project-local configuration commands under `dflow config`,
-// allowing users to set and retrieve metadata such as author name and email
-// for use in changelogs and other automated processes.
+// The package contains interactive and non-interactive commands for initializing
+// repositories, starting and finishing work branches, deleting branches, and
+// managing local dflow metadata stored in Git config.
 package commands
 
 import (
@@ -29,8 +28,15 @@ import (
 // Autocompletion suggests local branches when available.
 var DeleteCmd = &cobra.Command{
 	Use:   "delete <branch>",
-	Short: "Delete branch created previously",
-	Args:  cobra.ExactArgs(1),
+	Short: "Delete a local branch and its remote counterpart",
+	Long: `Delete a branch created with dflow from your local repository and, if it
+exists, from the 'origin' remote as well.
+
+The command asks for confirmation before deleting anything and skips the remote
+step automatically when the branch does not exist on origin.`,
+	Example: `  dflow delete feature/login-form
+  dflow delete bugfix/payment-timeout`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		branch := args[0]
 		var confirm bool

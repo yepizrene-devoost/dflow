@@ -1,8 +1,7 @@
 // Package root defines the root command for the dflow CLI.
 //
-// This package initializes the top-level `dflow` command, sets up persistent behavior
-// (like displaying the banner), and attaches all subcommands such as `init`, `start`,
-// and `config`. It uses Cobra for command parsing.
+// This package initializes the top-level `dflow` command, sets up persistent behavior,
+// and attaches all supported subcommands. It uses Cobra for command parsing.
 package root
 
 import (
@@ -18,20 +17,34 @@ import (
 // RootCmd is the base command for the dflow CLI.
 //
 // It defines global behavior such as the banner, help fallback, and command registration
-// for all subcommands like `start`, `init`, `config`, and `delete`.
+// for all subcommands like `start`, `finish`, `init`, `config`, and `delete`.
 var RootCmd = &cobra.Command{
 	Use:   "dflow",
-	Short: "dflow is a Git branching flow manager for Devoost",
-	Long:  "A CLI tool to manage Git feature/release/hotfix flows inspired by Git Flow",
+	Short: "Manage Git branches with a configurable workflow",
+	Long: `A CLI tool to manage Git branch workflows inspired by Git Flow.
+
+It helps repositories define branch rules, start work branches with consistent
+prefixes, manage project-local metadata, and automate repetitive branching
+tasks with a customizable flow model.`,
+	Example: `  dflow init
+  dflow start feat login-form
+  dflow finish
+  dflow start bug checkout-on-uat
+  dflow config set-author "Jane Doe" --email=jane@example.com
+  dflow version`,
 
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		if len(os.Args) > 1 && (strings.HasPrefix(os.Args[1], "__complete") || os.Args[1] == "completion") {
+		if shouldSkipBanner(os.Args[1:]) {
 			return
 		}
 		utils.PrintBanner()
 	},
 
 	Run: func(cmd *cobra.Command, args []string) {
+		if showVersion {
+			fmt.Fprintf(cmd.OutOrStdout(), "dflow %s\n", utils.GetVersion())
+			return
+		}
 		cmd.SetArgs([]string{"--help"})
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintf(os.Stderr, "Command execution failed: %v\n", err)
@@ -54,8 +67,11 @@ func init() {
 	RootCmd.AddCommand(CompletionCmd)
 	RootCmd.AddCommand(commands.InitCmd)
 	RootCmd.AddCommand(commands.StartCmd)
+	RootCmd.AddCommand(commands.FinishCmd)
 	RootCmd.AddCommand(commands.ConfigCmd)
 	RootCmd.AddCommand(commands.DeleteCmd)
+	RootCmd.AddCommand(VersionCmd)
+	RootCmd.PersistentFlags().BoolVarP(&showVersion, "version", "V", false, "Show the current dflow version")
 
 	// customize help
 	RootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
@@ -63,4 +79,13 @@ func init() {
 		_ = cmd.Help()
 	})
 
+}
+
+func shouldSkipBanner(args []string) bool {
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "__complete") || arg == "completion" || arg == "--help" || arg == "-h" || arg == "help" || arg == "--version" || arg == "-V" || arg == "version" || arg == "ver" {
+			return true
+		}
+	}
+	return false
 }

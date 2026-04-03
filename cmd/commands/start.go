@@ -1,9 +1,8 @@
-// Package commands provides the CLI subcommands for dflow, enabling users to manage
-// Git branching workflows using a consistent, configurable model.
+// Package commands defines the end-user subcommands that make up the dflow CLI.
 //
-// This includes project-local configuration commands under `dflow config`,
-// allowing users to set and retrieve metadata such as author name and email
-// for use in changelogs and other automated processes.
+// The package contains interactive and non-interactive commands for initializing
+// repositories, starting and finishing work branches, deleting branches, and
+// managing local dflow metadata stored in Git config.
 package commands
 
 import (
@@ -21,10 +20,10 @@ import (
 //
 // Supported branch types:
 //
-//   - feat|feature : Creates a feature branch from `flow.feature_base`
-//   - release      : Creates a release branch from `flow.release_base`
-//   - fix|hot|hotfix       : Creates a hotfix branch from `flow.hotfix_base`
-//   - bug|bugfix       : Creates a bugfix branch from `flow.bugfix_base`
+//   - feat|feature  : Creates a feature branch from the configured feature base
+//   - release       : Creates a release branch from the configured release base
+//   - fix|hot|hotfix: Creates a hotfix branch from the configured hotfix base
+//   - bug|bugfix    : Creates a bugfix branch from the configured bugfix base
 //
 // Branches are automatically prefixed using values from `.dflow.yaml`
 // under `branches.features`, `branches.releases`, or `branches.hotfixes`.
@@ -45,14 +44,14 @@ import (
 // If arguments are missing, help text is shown instead.
 var StartCmd = &cobra.Command{
 	Use:   "start [type] [name]",
-	Short: "Create and switch to a new feature, release, or hotfix branch",
+	Short: "Create and switch to a new feature, release, hotfix, or bugfix branch",
 	Long: `Start a new Git branch following the dflow branching model.
 	
   Valid types:
-    - feat|feature	: Starts a new feature branch from the configured 'feature_base'
-    - release	: Starts a new release branch from the configured 'release_base'
-    - fix|hot|hotfix	: Starts a new hotfix branch from the configured 'hotfix_base'
-    - bug|bugfix	: Starts a new bugfix branch from the configured 'bugfix_base'
+    - feat|feature	: Starts a new feature branch from the configured feature base branch
+    - release	: Starts a new release branch from the configured release base branch
+    - fix|hot|hotfix	: Starts a new hotfix branch from the configured hotfix base branch
+    - bug|bugfix	: Starts a new bugfix branch from the configured bugfix base branch
 
   Examples:
     dflow start feat login-form
@@ -64,7 +63,7 @@ var StartCmd = &cobra.Command{
   and based on the corresponding base branch defined in your .dflow.yaml configuration.`,
 	DisableFlagParsing: true,
 
-	Args: cobra.MinimumNArgs(2),
+	Args: cobra.ArbitraryArgs,
 	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
 
 		if len(args) < 2 {
@@ -72,7 +71,11 @@ var StartCmd = &cobra.Command{
 			return nil
 		}
 
-		branchType := args[0]
+		branchType, err := utils.ParseBranchType(args[0])
+		if err != nil {
+			utils.Error("Unknown type. Use: feat, release, hotfix, bugfix")
+			return nil
+		}
 
 		//normalize name of branch, change "word with word" or multiple void spaaces to "word-with-word"
 		branchNameParts := strings.Fields(strings.Join(args[1:], " "))
@@ -89,25 +92,18 @@ var StartCmd = &cobra.Command{
 			return nil
 		}
 
-		var prefix, base string
-
-		switch branchType {
-		case "feat", "feature":
-			prefix = cfg.Branches.Features
-			base = cfg.Flow.FeatureBase
-		case "release":
-			prefix = cfg.Branches.Releases
-			base = cfg.Flow.ReleaseBase
-		case "hot", "hotfix":
-			prefix = cfg.Branches.Hotfixes
-			base = cfg.Flow.HotfixBase
-		case "bug", "bugfix":
-			prefix = cfg.Branches.Bugfixes
-			base = cfg.Flow.BugfixBase
-		default:
-			utils.Error("Unknown type. Use: feat, release, hotfix")
+		prefix, err := utils.GetBranchPrefix(cfg, branchType)
+		if err != nil {
+			utils.Error(err.Error())
 			return nil
 		}
+
+		rule, err := utils.GetFlowRule(cfg, branchType)
+		if err != nil {
+			utils.Error(err.Error())
+			return nil
+		}
+		base := rule.Base
 
 		fullName := fmt.Sprintf("%s%s", prefix, branchName)
 
