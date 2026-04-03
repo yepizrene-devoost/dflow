@@ -137,6 +137,37 @@ func TestFetchOriginPullBranchAndHasUpstream(t *testing.T) {
 	})
 }
 
+func TestPullBranchCreatesLocalTrackingBranchWhenOnlyRemoteExists(t *testing.T) {
+	repoDir := initTempGitRepo(t)
+	remoteDir := initBareGitRepo(t)
+
+	runGit(t, repoDir, "checkout", "-b", "develop")
+	writeFileAndCommit(t, repoDir, "develop.txt", "develop\n", "seed develop")
+	runGit(t, repoDir, "remote", "add", "origin", remoteDir)
+	runGit(t, repoDir, "push", "-u", "origin", "main")
+	runGit(t, repoDir, "push", "-u", "origin", "develop")
+	runGit(t, repoDir, "checkout", "main")
+	runGit(t, repoDir, "branch", "-D", "develop")
+
+	withWorkingDir(t, repoDir, func() {
+		if gitutils.BranchExists("develop") {
+			t.Fatalf("expected develop to be absent locally before PullBranch")
+		}
+
+		if err := gitutils.PullBranch("develop"); err != nil {
+			t.Fatalf("PullBranch returned error: %v", err)
+		}
+
+		if !gitutils.BranchExists("develop") {
+			t.Fatalf("expected PullBranch to recreate local develop branch from origin")
+		}
+
+		if !gitutils.HasUpstream("develop") {
+			t.Fatalf("expected recreated develop branch to track origin")
+		}
+	})
+}
+
 func initTempGitRepo(t *testing.T) string {
 	t.Helper()
 
@@ -178,6 +209,19 @@ func runGit(t *testing.T, repoDir string, args ...string) {
 	if err != nil {
 		t.Fatalf("git %v failed: %v\n%s", args, err, string(output))
 	}
+}
+
+func runGitOutput(t *testing.T, repoDir string, args ...string) string {
+	t.Helper()
+
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repoDir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v failed: %v\n%s", args, err, string(output))
+	}
+
+	return string(output)
 }
 
 func withWorkingDir(t *testing.T, dir string, fn func()) {

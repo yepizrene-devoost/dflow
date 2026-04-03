@@ -40,6 +40,17 @@ func CheckoutExistingBranch(branch string) error {
 	return nil
 }
 
+// CheckoutTrackingBranch creates a local branch that tracks origin/<branch>.
+func CheckoutTrackingBranch(branch string) error {
+	cmd := exec.Command("git", "checkout", "--track", "-b", branch, "origin/"+branch)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create tracking branch %q from origin/%s: %w", branch, branch, err)
+	}
+	return nil
+}
+
 // IsWorkingTreeClean reports whether the repository has no staged, unstaged,
 // or untracked changes.
 func IsWorkingTreeClean() (bool, error) {
@@ -120,14 +131,44 @@ func HasUpstream(branch string) bool {
 
 // PullBranch checks out the given branch and updates it from origin when possible.
 func PullBranch(branch string) error {
-	if err := CheckoutExistingBranch(branch); err != nil {
-		return err
+	if BranchExists(branch) {
+		if err := CheckoutExistingBranch(branch); err != nil {
+			return err
+		}
+	} else if HasOriginRemote() && RemoteBranchExists(branch) {
+		if err := CheckoutTrackingBranch(branch); err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("branch %q does not exist locally or on origin", branch)
 	}
 
-	if err := Pull(); err != nil {
-		return fmt.Errorf("failed to update branch %q: %w", branch, err)
+	if !HasOriginRemote() {
+		return nil
 	}
 
+	if HasUpstream(branch) {
+		if err := Pull(); err != nil {
+			return fmt.Errorf("failed to update branch %q: %w", branch, err)
+		}
+		return nil
+	}
+
+	if !RemoteBranchExists(branch) {
+		utils.Info("Remote branch '%s' does not exist. Skipping pull for this target.", branch)
+		return nil
+	}
+
+	spinner := utils.NewSpinner(fmt.Sprintf("Pulling '%s' from origin...", branch))
+	spinner.Start()
+
+	cmd := exec.Command("git", "pull", "origin", branch)
+	if err := cmd.Run(); err != nil {
+		spinner.Stop("Failed to pull branch updates.")
+		return fmt.Errorf("failed to update branch %q from origin: %w", branch, err)
+	}
+
+	spinner.Stop(fmt.Sprintf("Updated '%s' from origin.", branch))
 	return nil
 }
 

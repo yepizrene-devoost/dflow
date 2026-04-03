@@ -142,6 +142,22 @@ dflow start bug broken checkout
 
 ---
 
+### `dflow finish`
+
+Finish the current dflow work branch using your configured merge rules.
+
+```bash
+dflow finish
+```
+
+- Detects the current branch type from your configured prefixes
+- Resolves the configured `finish_targets` for that branch type
+- Automatically merges and pushes only the targets with `merge_mode: auto`
+- Reports any `manual` targets so they can be completed through PR flow
+- Stops immediately if a merge conflict occurs on an auto target
+
+---
+
 ### `dflow config`
 
 Manage user-level configuration.
@@ -226,20 +242,9 @@ dflow start feat login-form
 
 # work and commit...
 
-# manually merge to develop (auto or PR) based on printed instructions
+dflow finish
+# ⇒ Merges feature/login-form into every auto target and reports any manual targets
 ```
-
----
-
-## ⏳ Coming Soon
-
-### `dflow finish`
-
-This command will automate the merge and changelog process for `feature`, `release`, and `hotfix` branches based on your merge mode configuration.
-
-For now, `dflow` prints manual instructions depending on your workflow setup.
-
-> 💡 This is currently a *manual* step. Use the printed guide or your team's PR flow until this command is fully available.
 
 ---
 
@@ -249,7 +254,7 @@ For now, `dflow` prints manual instructions depending on your workflow setup.
 - ✅ Customizable prefixes and merge rules
 - ✅ Support for hybrid workflows (direct merge + PR)
 - ✅ Git-aware config and validation
-- ⏳ `dflow finish` improvements in progress
+- ✅ `dflow finish` with auto/manual target handling
 - 📦 Multiplatform builds (via `GoReleaser`)
 - 🌐 Multi-language documentation (`README.md`, `README.es.md`)
 
