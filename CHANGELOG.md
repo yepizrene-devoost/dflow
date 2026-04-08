@@ -7,6 +7,9 @@
 - `dflow init` now generates release branches from `uat` with finish targets `main` and `develop`.
 - Documentation and tests were updated to reflect the new workflow defaults.
 
+### Added
+- `dflow finish --delete` to remove finished branches locally and remotely after a successful finish when no manual targets remain.
+
 ## 📦 v0.2.0 – Finish Automation, Versioning & Flow Documentation
 
 ### Added

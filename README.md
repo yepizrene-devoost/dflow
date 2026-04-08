@@ -145,6 +145,7 @@ Finish the current dflow work branch using your configured merge rules.
 ```bash
 dflow finish
 dflow finish --dry-run
+dflow finish --delete
 ```
 
 - Detects the current branch type from your configured prefixes
@@ -155,6 +156,7 @@ dflow finish --dry-run
 - Stops immediately if an auto target hits a merge conflict
 - Returns you to the configured `base` branch after a successful finish
 - Does not delete the source branch automatically
+- Supports `--delete` to remove the finished branch locally and remotely after a successful finish when no manual targets remain
 - Supports `--dry-run` to preview the plan without fetching, merging, or pushing
 
 ### `dflow delete <branch>`
@@ -286,8 +288,9 @@ When you run `dflow finish`, dflow:
 5. Reports any `manual` targets without merging them.
 6. Returns to the configured `base` branch when all automatic merges succeed.
 
-`dflow finish` does not delete the source branch for you. If your team wants to
-remove it after a successful finish, that remains a separate step.
+Use `dflow finish --delete` if you want dflow to remove the finished branch
+locally and remotely after all automatic targets succeed and no manual follow-up
+remains.
 
 Use `dflow finish --dry-run` to inspect that plan safely before touching any branch.
 
