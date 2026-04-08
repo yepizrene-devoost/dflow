@@ -30,16 +30,22 @@ Instead, dflow reports them so the team can complete them through the usual
 pull request or manual review flow.
 
 After all automatic merges succeed, dflow switches back to the configured base
-branch for the finished work type. The source branch is not deleted automatically.
+branch for the finished work type. The source branch is not deleted automatically
+unless you explicitly pass --delete and no manual targets remain.
 
 Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`,
 	Example: `  dflow finish
   dflow finish --dry-run
-  dflow finish
-  # Merges only auto targets and returns to the configured base branch`,
+  dflow finish --delete
+  # Merges auto targets, returns to the configured base branch, and deletes the source branch when no manual targets remain`,
 	Args: cobra.NoArgs,
 	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
 		dryRun, err := cmd.Flags().GetBool("dry-run")
+		if err != nil {
+			utils.Error(err.Error())
+			return nil
+		}
+		deleteBranch, err := cmd.Flags().GetBool("delete")
 		if err != nil {
 			utils.Error(err.Error())
 			return nil
@@ -99,6 +105,13 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 			for _, target := range autoTargets {
 				utils.Info("Would merge '%s' into '%s' and push the target branch.", plan.CurrentBranch, target)
 			}
+			if deleteBranch {
+				if len(manualTargets) == 0 {
+					utils.Info("Would delete '%s' locally and remotely after a successful finish.", plan.CurrentBranch)
+				} else {
+					utils.Warn("Would skip deleting '%s' because manual follow-up is still required.", plan.CurrentBranch)
+				}
+			}
 			if len(manualTargets) > 0 {
 				utils.Warn("Manual follow-up still required for: %s", strings.Join(manualTargets, ", "))
 			}
@@ -156,6 +169,18 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 		if len(manualTargets) > 0 {
 			utils.Warn("Manual follow-up still required for: %s", strings.Join(manualTargets, ", "))
 		}
+		if deleteBranch {
+			if len(manualTargets) > 0 {
+				utils.Warn("Skipping delete for '%s' because manual follow-up is still required.", plan.CurrentBranch)
+				return nil
+			}
+
+			if err := gitutils.Delete(plan.CurrentBranch); err != nil {
+				utils.Error(err.Error())
+				return nil
+			}
+			utils.Success("Deleted finished branch '%s' locally and remotely", plan.CurrentBranch)
+		}
 
 		return nil
 	}),
@@ -170,4 +195,5 @@ func formatBranchList(branches []string) string {
 
 func init() {
 	FinishCmd.Flags().Bool("dry-run", false, "Show the finish plan without performing any merge or push")
+	FinishCmd.Flags().Bool("delete", false, "Delete the finished branch locally and remotely after a successful finish when no manual targets remain")
 }
