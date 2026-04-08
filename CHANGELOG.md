@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- `dflow init` now generates feature branches from `develop` with finish targets `develop` and `uat`.
+- `dflow init` now generates release branches from `uat` with finish targets `main` and `develop`.
+- Documentation and tests were updated to reflect the new workflow defaults.
+
 ## 📦 v0.2.0 – Finish Automation, Versioning & Flow Documentation
 
 ### Added

@@ -32,7 +32,7 @@ func TestParseBranchTypeAliases(t *testing.T) {
 	}
 }
 
-func TestResolveFinishPlanWithDistinctTargets(t *testing.T) {
+func TestResolveFeatureFinishPlanWithDistinctTargets(t *testing.T) {
 	cfg := &utils.Config{}
 	cfg.Branches.Main = "main"
 	cfg.Branches.Develop = "develop"
@@ -42,13 +42,55 @@ func TestResolveFinishPlanWithDistinctTargets(t *testing.T) {
 	cfg.Branches.Hotfixes = "hotfix/"
 	cfg.Branches.Bugfixes = "bugfix/"
 
-	cfg.Flow.Release.Base = "develop"
-	cfg.Flow.Release.FinishTargets = []string{"uat", "main", "develop"}
+	cfg.Flow.Feature.Base = "develop"
+	cfg.Flow.Feature.FinishTargets = []string{"develop", "uat"}
 
 	cfg.Workflow.DefaultMergeMode = "manual"
 	cfg.Workflow.BranchRules = map[string]utils.WorkflowBranchRule{
 		"develop": {MergeMode: "auto"},
-		"uat":     {MergeMode: "auto"},
+		"uat":     {MergeMode: "manual"},
+	}
+
+	plan, err := utils.ResolveFinishPlan(cfg, "feature/login-form")
+	if err != nil {
+		t.Fatalf("ResolveFinishPlan returned error: %v", err)
+	}
+
+	if plan.BranchType != utils.BranchTypeFeature {
+		t.Fatalf("expected branch type %q, got %q", utils.BranchTypeFeature, plan.BranchType)
+	}
+
+	if plan.Base != "develop" {
+		t.Fatalf("expected base %q, got %q", "develop", plan.Base)
+	}
+
+	autoTargets := plan.AutoTargets()
+	if len(autoTargets) != 1 || autoTargets[0] != "develop" {
+		t.Fatalf("unexpected auto targets: %v", autoTargets)
+	}
+
+	manualTargets := plan.ManualTargets()
+	if len(manualTargets) != 1 || manualTargets[0] != "uat" {
+		t.Fatalf("unexpected manual targets: %v", manualTargets)
+	}
+}
+
+func TestResolveReleaseFinishPlanFromUAT(t *testing.T) {
+	cfg := &utils.Config{}
+	cfg.Branches.Main = "main"
+	cfg.Branches.Develop = "develop"
+	cfg.Branches.Uat = "uat"
+	cfg.Branches.Features = "feature/"
+	cfg.Branches.Releases = "release/"
+	cfg.Branches.Hotfixes = "hotfix/"
+	cfg.Branches.Bugfixes = "bugfix/"
+
+	cfg.Flow.Release.Base = "uat"
+	cfg.Flow.Release.FinishTargets = []string{"main", "develop"}
+
+	cfg.Workflow.DefaultMergeMode = "manual"
+	cfg.Workflow.BranchRules = map[string]utils.WorkflowBranchRule{
+		"develop": {MergeMode: "auto"},
 		"main":    {MergeMode: "manual"},
 	}
 
@@ -57,16 +99,12 @@ func TestResolveFinishPlanWithDistinctTargets(t *testing.T) {
 		t.Fatalf("ResolveFinishPlan returned error: %v", err)
 	}
 
-	if plan.BranchType != utils.BranchTypeRelease {
-		t.Fatalf("expected branch type %q, got %q", utils.BranchTypeRelease, plan.BranchType)
-	}
-
-	if plan.Base != "develop" {
-		t.Fatalf("expected base %q, got %q", "develop", plan.Base)
+	if plan.Base != "uat" {
+		t.Fatalf("expected base %q, got %q", "uat", plan.Base)
 	}
 
 	autoTargets := plan.AutoTargets()
-	if len(autoTargets) != 2 || autoTargets[0] != "uat" || autoTargets[1] != "develop" {
+	if len(autoTargets) != 1 || autoTargets[0] != "develop" {
 		t.Fatalf("unexpected auto targets: %v", autoTargets)
 	}
 

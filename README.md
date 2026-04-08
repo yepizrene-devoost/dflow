@@ -236,10 +236,10 @@ flow:
         base: develop
         finish_targets:
             - develop
-    release:
-        base: develop
-        finish_targets:
             - uat
+    release:
+        base: uat
+        finish_targets:
             - main
             - develop
     hotfix:
@@ -273,7 +273,7 @@ workflow:
 - `workflow.default_merge_mode` is the fallback mode used for targets not explicitly listed in `branch_rules`.
 - `workflow.branch_rules.<branch>.merge_mode` controls whether a target branch is handled by direct merge (`auto`) or left for PR/manual flow (`manual`).
 
-If `uat` and `develop` are the same branch in your repository, dflow automatically deduplicates finish targets so the same branch is not processed twice.
+If `uat` and `develop` are the same branch in your repository, dflow automatically deduplicates finish targets so the same branch is not processed twice. In that setup, a feature configured for both `develop` and `uat` will be processed only once.
 
 ### How `dflow finish` Works
 
