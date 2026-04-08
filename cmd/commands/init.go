@@ -54,8 +54,8 @@ var InitCmd = &cobra.Command{
       - hotfix/   → for hotfix branches
       - bugfix/   → for bugfix branches
     - Set flow rules:
-      - Features start from Develop and merge back into Develop
-      - Releases start from Develop and can be promoted to UAT, Main, and Develop
+      - Features start from Develop and can be promoted to Develop and UAT
+      - Releases start from UAT and can be promoted to Main and Develop
       - Bugfixes start from UAT and sync back to UAT and Develop
       - Hotfixes start from Main and sync back to Main, Develop, and UAT
     - Ensure the specified branches exist locally.
@@ -128,9 +128,9 @@ var InitCmd = &cobra.Command{
 		cfg.Branches.Bugfixes = "bugfix/"
 
 		cfg.Flow.Feature.Base = developBranch
-		cfg.Flow.Feature.FinishTargets = []string{developBranch}
-		cfg.Flow.Release.Base = developBranch
-		cfg.Flow.Release.FinishTargets = uniqueBranchNames(uatBranch, mainBranch, developBranch)
+		cfg.Flow.Feature.FinishTargets = uniqueBranchNames(developBranch, uatBranch)
+		cfg.Flow.Release.Base = uatBranch
+		cfg.Flow.Release.FinishTargets = uniqueBranchNames(mainBranch, developBranch)
 		cfg.Flow.Hotfix.Base = mainBranch
 		cfg.Flow.Hotfix.FinishTargets = uniqueBranchNames(mainBranch, developBranch, uatBranch)
 		cfg.Flow.Bugfix.Base = uatBranch
