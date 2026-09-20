@@ -45,6 +45,10 @@
 - Opinionated branching strategies with flexibility
 - Support for environments with or without pull requests
 
+The project was created (2025-07-01) to formalize repeatable Git workflows
+using a CLI, with three goals: reproducibility, ease of onboarding, and better
+control over merges and release cycles.
+
 Whether you're working solo or in a team, `dflow` helps you keep your Git history clean and your process repeatable.
 
 ---

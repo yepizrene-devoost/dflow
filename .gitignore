@@ -1,5 +1,5 @@
 dist/
 .DS_Store
 .env
-.agents/*
-AGENTS.md
+# Local Pi runtime state
+.atl/
