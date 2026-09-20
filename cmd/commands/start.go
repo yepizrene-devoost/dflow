@@ -72,6 +72,13 @@ var StartCmd = &cobra.Command{
 			return nil
 		}
 
+		pushFlag, _ := cmd.Flags().GetBool("push")
+		noPushFlag, _ := cmd.Flags().GetBool("no-push")
+		if pushFlag && noPushFlag {
+			utils.Error("--push and --no-push cannot be used together")
+			return nil
+		}
+
 		branchType, err := utils.ParseBranchType(args[0])
 		if err != nil {
 			utils.Error("Unknown type. Use: feat, release, hotfix, bugfix")
@@ -125,12 +132,7 @@ var StartCmd = &cobra.Command{
 		}
 
 		if fromBranch != "" {
-			if err := gitutils.FetchOrigin(); err != nil {
-				utils.Error(err.Error())
-				return nil
-			}
-
-			if err := gitutils.PullBranch(fromBranch); err != nil {
+			if err := gitutils.CheckoutBranch(fromBranch); err != nil {
 				utils.Error(err.Error())
 				return nil
 			}
@@ -152,13 +154,6 @@ var StartCmd = &cobra.Command{
 		}
 
 		utils.Success("Created and switched to branch '%s' from '%s'", fullName, base)
-
-		pushFlag, _ := cmd.Flags().GetBool("push")
-		noPushFlag, _ := cmd.Flags().GetBool("no-push")
-		if pushFlag && noPushFlag {
-			utils.Error("--push and --no-push cannot be used together")
-			return nil
-		}
 
 		pushBranch := pushFlag
 		if !pushFlag && !noPushFlag {

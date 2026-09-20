@@ -170,3 +170,84 @@ func TestStartPushPublishesRemote(t *testing.T) {
 		}
 	})
 }
+
+func TestStartFromLocalParentWithUnreachableOrigin(t *testing.T) {
+	repoDir := initTempGitRepo(t)
+
+	runGit(t, repoDir, "checkout", "-b", "develop")
+	writeFileAndCommit(t, repoDir, "app.txt", "develop base\n", "seed develop")
+
+	runGit(t, repoDir, "checkout", "-b", "feature/parent")
+	writeFileAndCommit(t, repoDir, "app.txt", "parent work\n", "parent work")
+
+	// Dead origin: any fetch/ls-remote/pull must not be reached for a local parent.
+	runGit(t, repoDir, "remote", "add", "origin", "/nonexistent/dflow-dead.git")
+
+	withWorkingDir(t, repoDir, func() {
+		if err := utils.SaveConfig(startTestConfig()); err != nil {
+			t.Fatalf("failed to save config: %v", err)
+		}
+
+		if err := commands.StartCmd.Flags().Set("from", "feature/parent"); err != nil {
+			t.Fatalf("failed to set --from: %v", err)
+		}
+		if err := commands.StartCmd.Flags().Set("no-push", "true"); err != nil {
+			t.Fatalf("failed to set --no-push: %v", err)
+		}
+		defer func() {
+			_ = commands.StartCmd.Flags().Set("from", "")
+			_ = commands.StartCmd.Flags().Set("no-push", "false")
+		}()
+
+		if err := commands.StartCmd.RunE(commands.StartCmd, []string{"feat", "child"}); err != nil {
+			t.Fatalf("StartCmd returned error: %v", err)
+		}
+
+		if !branchExists(t, repoDir, "feature/child") {
+			t.Fatalf("expected feature/child to be created from a local parent without touching origin")
+		}
+
+		childTip := strings.TrimSpace(runGitOutput(t, repoDir, "rev-parse", "feature/child"))
+		parentTip := strings.TrimSpace(runGitOutput(t, repoDir, "rev-parse", "feature/parent"))
+		if childTip != parentTip {
+			t.Fatalf("expected feature/child based on feature/parent (%s), got %s", parentTip, childTip)
+		}
+	})
+}
+
+func TestStartRejectsConflictingPushFlagsBeforeMutation(t *testing.T) {
+	repoDir := setupStartRepo(t)
+
+	withWorkingDir(t, repoDir, func() {
+		if err := utils.SaveConfig(startTestConfig()); err != nil {
+			t.Fatalf("failed to save config: %v", err)
+		}
+
+		if err := commands.StartCmd.Flags().Set("from", "feature/parent"); err != nil {
+			t.Fatalf("failed to set --from: %v", err)
+		}
+		if err := commands.StartCmd.Flags().Set("push", "true"); err != nil {
+			t.Fatalf("failed to set --push: %v", err)
+		}
+		if err := commands.StartCmd.Flags().Set("no-push", "true"); err != nil {
+			t.Fatalf("failed to set --no-push: %v", err)
+		}
+		defer func() {
+			_ = commands.StartCmd.Flags().Set("from", "")
+			_ = commands.StartCmd.Flags().Set("push", "false")
+			_ = commands.StartCmd.Flags().Set("no-push", "false")
+		}()
+
+		if err := commands.StartCmd.RunE(commands.StartCmd, []string{"feat", "child"}); err != nil {
+			t.Fatalf("StartCmd returned error: %v", err)
+		}
+
+		if branchExists(t, repoDir, "feature/child") {
+			t.Fatalf("expected feature/child NOT to be created when --push and --no-push conflict")
+		}
+
+		if currentBranchName(t, repoDir) != "feature/parent" {
+			t.Fatalf("expected to remain on feature/parent with no mutation, got %q", currentBranchName(t, repoDir))
+		}
+	})
+}
