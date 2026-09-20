@@ -16,13 +16,39 @@ Repository instructions for coding agents working in this project.
 
 ## Branch Workflow
 
-- Use `dflow` to manage branches, following `.dflow.yaml`.
+- Use `dflow` to manage branches, following `.dflow.yaml` and `.agents/workflows/dflow-workflow.md`.
 - For `feat` branches, use `develop` as the base branch.
 - For `release` branches, use `develop` as the base branch.
 - For `bugfix` branches, use `uat` as the base branch.
 - For `hotfix` branches, use `main` as the base branch.
+- `develop` merges directly (`auto`); `main` requires a PR (`manual`). Never suggest a PR toward an `auto` target.
+
+## Relevant Skills
+
+When available, load these skills while working in this project:
+
+| Skill | Applies to |
+| --- | --- |
+| `gentle-ai` | harness discipline (clarify, TDD, delegate, protect review) |
+| `gentle-ai-work-unit-commits` | reviewable work-unit commits |
+| `gentle-ai-chained-pr` | stacked/chained PRs (slices under 400 lines) |
+| `gentle-ai-branch-pr` | creating PRs with issue-first checks |
+| `gentle-ai-issue-creation` | issue creation and triage |
+| `gentle-ai-cognitive-doc-design` | docs with low cognitive load |
+| `gentle-ai-comment-writer` | PR/issue comments |
+
+Optional: `gentle-ai-judgment-day` (adversarial dual review, critical work only)
+and `gentle-ai-rdd-defect-workflow` (only under the RDD switch). Resolve exact
+skill paths from the local skill registry.
+
+## Project Memory
+
+- Read `.agents/MEMORY.md` before making consequential changes; it holds the
+  current-state decisions and architecture context. Keep it short and current
+  (it is not a log).
 
 ## Source Of Truth
 
 - Treat `.agents/workflows/commit-rules.md` as the source of truth for commit-message conventions.
+- Treat `.agents/workflows/dflow-workflow.md` as the source of truth for dflow usage and merge/PR rules.
 - If these rules are updated there, keep this file aligned with them.
