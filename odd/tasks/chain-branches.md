@@ -20,7 +20,7 @@ non-interactive use by agents.
 ## Evidence
 
 - `cmd/commands/start.go`: DisableFlagParsing removed; `--from`/`--push`/`--no-push` added.
-- `cmd/tests/start_cmd_test.go`: 4 tests added, all passing.
+- `cmd/tests/start_cmd_test.go`: 6 tests added, all passing.
 - Checks: gofmt clean, `go build ./...` OK, `go test ./...` green.
 - Commit: 2427ec6 `feat(start): support chained branches and non-interactive push`
 - Commit: 6831d26 `fix(gitutils): add checkout-only branch helper and reuse it in pull branch`
