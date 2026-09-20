@@ -70,15 +70,22 @@ Do not run `dflow finish` to:
 
 Default agent behavior: propose a PR. Direct merge is explicit, never assumed.
 
-## Chained branches (planned)
+## Issue lifecycle
 
-`dflow start <type> <name> --from <parent>` is planned to create a stacked
-branch from an existing work branch instead of the configured base. Until it
-ships, create stacked branches manually:
+- The repository default branch is `develop`, so an issue closes when the work
+  that addresses it lands in **`develop`** — not `main`.
+- Close it with a GitHub closing keyword (`Closes #<n>`) in the commit or merge
+  message. A merge **without** that keyword leaves the issue open.
+- `main` and release branches do not close issues. The release promotion
+  (`develop` → `main`) is recorded in the changelog, not in issues.
+- Issues track any work unit (feature, bug, chore, docs), not only production
+  incidents.
 
-```bash
-git checkout <parent> && git pull && git checkout -b feature/<name>
-```
+## Chained branches
+
+`dflow start <type> <name> --from <parent>` creates a stacked branch from an
+existing work branch instead of the configured base. Pass `--push` or
+`--no-push` to publish non-interactively; passing both is an error.
 
 When a stacked parent merges, rebase each child with
 `git rebase --onto <target> <old-parent> <child>` and retarget its PR. A
