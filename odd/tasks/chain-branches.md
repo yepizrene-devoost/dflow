@@ -2,6 +2,7 @@
 
 Branch: `feature/implement-chain-branches` (base: develop)
 Issues: #8 (MVP: start --from + non-interactive), #9 (rebase follow-up)
+Status: #8 done (RDD approved); #9 pending
 
 ## Goal
 
@@ -21,4 +22,7 @@ non-interactive use by agents.
 - `cmd/commands/start.go`: DisableFlagParsing removed; `--from`/`--push`/`--no-push` added.
 - `cmd/tests/start_cmd_test.go`: 4 tests added, all passing.
 - Checks: gofmt clean, `go build ./...` OK, `go test ./...` green.
-- Commits deferred: changes left uncommitted for review.
+- Commit: 2427ec6 `feat(start): support chained branches and non-interactive push`
+- Commit: 6831d26 `fix(gitutils): add checkout-only branch helper and reuse it in pull branch`
+- Commit: f778cf2 `fix(start): use checkout helper and validate push flags before mutation`
+- RDD: lineage review-66f23b55e8f5509d approved (authority burned); corrected `R3-checkout-remote-exists-before-fetch`
