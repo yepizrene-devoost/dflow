@@ -168,6 +168,41 @@ func TestPullBranchCreatesLocalTrackingBranchWhenOnlyRemoteExists(t *testing.T) 
 	})
 }
 
+func TestCheckoutBranch(t *testing.T) {
+	repoDir := initTempGitRepo(t)
+	remoteDir := initBareGitRepo(t)
+
+	runGit(t, repoDir, "checkout", "-b", "develop")
+	writeFileAndCommit(t, repoDir, "develop.txt", "develop\n", "seed develop")
+	runGit(t, repoDir, "remote", "add", "origin", remoteDir)
+	runGit(t, repoDir, "push", "-u", "origin", "main")
+	runGit(t, repoDir, "push", "-u", "origin", "develop")
+
+	withWorkingDir(t, repoDir, func() {
+		if err := gitutils.CheckoutBranch("develop"); err != nil {
+			t.Fatalf("CheckoutBranch returned error for local branch: %v", err)
+		}
+		branch, err := gitutils.CurrentBranch()
+		if err != nil || branch != "develop" {
+			t.Fatalf("expected checkout to develop, got %q (err %v)", branch, err)
+		}
+
+		if err := gitutils.CheckoutBranch("missing"); err == nil {
+			t.Fatalf("expected CheckoutBranch to fail for missing branch")
+		}
+
+		runGit(t, repoDir, "checkout", "main")
+		runGit(t, repoDir, "branch", "-D", "develop")
+
+		if err := gitutils.CheckoutBranch("develop"); err != nil {
+			t.Fatalf("CheckoutBranch returned error for remote-only branch: %v", err)
+		}
+		if !gitutils.BranchExists("develop") {
+			t.Fatalf("expected CheckoutBranch to recreate develop from origin")
+		}
+	})
+}
+
 func initTempGitRepo(t *testing.T) string {
 	t.Helper()
 
