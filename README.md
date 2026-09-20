@@ -142,6 +142,24 @@ dflow start bug broken checkout
 - Validates the resulting Git branch name before creating it
 - Checks out the new branch and optionally publishes it to `origin`
 
+Use `--from <parent>` to start from another local or remote work branch instead
+of the configured base:
+
+```bash
+dflow start feat login-validation --from feature/login-form --no-push
+```
+
+Choose whether to publish the new branch explicitly:
+
+```bash
+dflow start feat login-form --push     # Publish to origin
+dflow start feat local-experiment --no-push # Keep local only
+```
+
+Scripts and non-TTY callers **MUST supply exactly one** of `--push` or
+`--no-push`. Without either flag, the interactive push prompt remains; dflow
+does not automatically detect non-TTY input. The two flags cannot be combined.
+
 ### `dflow finish`
 
 Finish the current dflow work branch using your configured merge rules.
