@@ -179,7 +179,7 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 				utils.Error(err.Error())
 				return nil
 			}
-			utils.Success("Deleted finished branch '%s' locally and remotely", plan.CurrentBranch)
+			utils.Success("Deleted finished branch '%s'", plan.CurrentBranch)
 		}
 
 		return nil
