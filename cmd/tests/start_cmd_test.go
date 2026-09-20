@@ -238,8 +238,8 @@ func TestStartRejectsConflictingPushFlagsBeforeMutation(t *testing.T) {
 			_ = commands.StartCmd.Flags().Set("no-push", "false")
 		}()
 
-		if err := commands.StartCmd.RunE(commands.StartCmd, []string{"feat", "child"}); err != nil {
-			t.Fatalf("StartCmd returned error: %v", err)
+		if err := commands.StartCmd.RunE(commands.StartCmd, []string{"feat", "child"}); err == nil {
+			t.Fatalf("expected StartCmd to return an error when --push and --no-push conflict")
 		}
 
 		if branchExists(t, repoDir, "feature/child") {

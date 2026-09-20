@@ -75,8 +75,7 @@ var StartCmd = &cobra.Command{
 		pushFlag, _ := cmd.Flags().GetBool("push")
 		noPushFlag, _ := cmd.Flags().GetBool("no-push")
 		if pushFlag && noPushFlag {
-			utils.Error("--push and --no-push cannot be used together")
-			return nil
+			return fmt.Errorf("--push and --no-push cannot be used together")
 		}
 
 		branchType, err := utils.ParseBranchType(args[0])
