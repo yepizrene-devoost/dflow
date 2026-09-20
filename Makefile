@@ -2,7 +2,6 @@
 
 # Variables
 BINARY_NAME = dflow
-INSTALLER_NAME = dflow-installer
 BIN_DIR = bin
 VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "dev-local")
 
@@ -20,9 +19,9 @@ build:
 .PHONY: build-all
 build-all:
 	@echo "🧪 Building cross-platform binaries..."
-	GOOS=linux   GOARCH=amd64 go build -o $(BIN_DIR)/$(BINARY_NAME)-linux .
-	GOOS=darwin  GOARCH=amd64 go build -o $(BIN_DIR)/$(BINARY_NAME)-darwin .
-	GOOS=windows GOARCH=amd64 go build -o $(BIN_DIR)/$(BINARY_NAME).exe .
+	GOOS=linux   GOARCH=amd64 go build -ldflags="-X main.version=$(VERSION)" -o $(BIN_DIR)/$(BINARY_NAME)-linux .
+	GOOS=darwin  GOARCH=amd64 go build -ldflags="-X main.version=$(VERSION)" -o $(BIN_DIR)/$(BINARY_NAME)-darwin .
+	GOOS=windows GOARCH=amd64 go build -ldflags="-X main.version=$(VERSION)" -o $(BIN_DIR)/$(BINARY_NAME).exe .
 
 # 🚀 Release with GoReleaser + .env token
 .PHONY: release
@@ -46,12 +45,6 @@ test:
 .PHONY: lint
 lint:
 	GOCACHE=/tmp/dflow-gocache GOLANGCI_LINT_CACHE=/tmp/dflow-golangci-lint-cache golangci-lint run ./...
-
-# 🧰 Build the dflow installer CLI (optional)
-.PHONY: installer
-installer:
-	@echo "📦 Building installer CLI..."
-	go build -o $(BIN_DIR)/$(INSTALLER_NAME) ./installer
 
 # 📝 Generate changelog from last tag
 .PHONY: changelog

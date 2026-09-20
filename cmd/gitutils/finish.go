@@ -129,18 +129,36 @@ func HasUpstream(branch string) bool {
 	return cmd.Run() == nil
 }
 
+// CheckoutBranch switches to an existing branch without pulling or merging.
+//
+// When the branch exists locally, it is checked out directly with no network
+// access. When it exists only on origin, it is fetched and checked out as a
+// tracking branch. This is the checkout-only counterpart of PullBranch, used
+// when branching off a source branch that must not be updated.
+func CheckoutBranch(branch string) error {
+	if BranchExists(branch) {
+		return CheckoutExistingBranch(branch)
+	}
+
+	if !HasOriginRemote() {
+		return fmt.Errorf("branch %q does not exist locally and no 'origin' remote is configured", branch)
+	}
+
+	if err := FetchOrigin(); err != nil {
+		return err
+	}
+
+	if !RemoteBranchExists(branch) {
+		return fmt.Errorf("branch %q does not exist locally nor on 'origin'", branch)
+	}
+
+	return CheckoutTrackingBranch(branch)
+}
+
 // PullBranch checks out the given branch and updates it from origin when possible.
 func PullBranch(branch string) error {
-	if BranchExists(branch) {
-		if err := CheckoutExistingBranch(branch); err != nil {
-			return err
-		}
-	} else if HasOriginRemote() && RemoteBranchExists(branch) {
-		if err := CheckoutTrackingBranch(branch); err != nil {
-			return err
-		}
-	} else {
-		return fmt.Errorf("branch %q does not exist locally or on origin", branch)
+	if err := CheckoutBranch(branch); err != nil {
+		return err
 	}
 
 	if !HasOriginRemote() {

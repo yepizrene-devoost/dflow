@@ -47,6 +47,12 @@ skill paths from the local skill registry.
   current-state decisions and architecture context. Keep it short and current
   (it is not a log).
 
+## Task Tracking (odd/)
+
+- The ODD feature checklist lives in `odd/tasks/<feature>.md` and is committed to the repo.
+- Tick a task `[x]` as soon as it finishes, and sync the Engram mirror and the
+  visible todo list — a finished task is never left unmarked.
+
 ## Source Of Truth
 
 - Treat `.agents/workflows/commit-rules.md` as the source of truth for commit-message conventions.
