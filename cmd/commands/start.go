@@ -60,9 +60,10 @@ var StartCmd = &cobra.Command{
     dflow start bug bug-on-uat-detected
 
   The new branch will be created using the appropriate prefix (e.g., feature/, release/, hotfix/, bugfix/)
-  and based on the corresponding base branch defined in your .dflow.yaml configuration.`,
-	DisableFlagParsing: true,
+  and based on the corresponding base branch defined in your .dflow.yaml configuration.
 
+  Use --from to base the new branch on another work branch (chained/stacked branches) instead.
+  Use --push or --no-push to publish non-interactively (useful for agents and scripts).`,
 	Args: cobra.ArbitraryArgs,
 	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
 
@@ -103,7 +104,18 @@ var StartCmd = &cobra.Command{
 			utils.Error(err.Error())
 			return nil
 		}
+
+		fromBranch, _ := cmd.Flags().GetString("from")
 		base := rule.Base
+		if fromBranch != "" {
+			base = fromBranch
+			for _, primary := range []string{cfg.Branches.Main, cfg.Branches.Develop, cfg.Branches.Uat} {
+				if primary != "" && fromBranch == primary {
+					utils.Warn("'%s' is a primary branch; chained branches are usually based on another work branch", fromBranch)
+					break
+				}
+			}
+		}
 
 		fullName := fmt.Sprintf("%s%s", prefix, branchName)
 
@@ -112,14 +124,26 @@ var StartCmd = &cobra.Command{
 			return nil
 		}
 
-		if err := gitutils.Checkout(base); err != nil {
-			utils.Error("Could not checkout base branch '%s'", base)
-			return nil
-		}
+		if fromBranch != "" {
+			if err := gitutils.FetchOrigin(); err != nil {
+				utils.Error(err.Error())
+				return nil
+			}
 
-		if err := gitutils.Pull(); err != nil {
-			utils.Error("Failed to pull latest changes from '%s'", base)
-			return nil
+			if err := gitutils.PullBranch(fromBranch); err != nil {
+				utils.Error(err.Error())
+				return nil
+			}
+		} else {
+			if err := gitutils.Checkout(base); err != nil {
+				utils.Error("Could not checkout base branch '%s'", base)
+				return nil
+			}
+
+			if err := gitutils.Pull(); err != nil {
+				utils.Error("Failed to pull latest changes from '%s'", base)
+				return nil
+			}
 		}
 
 		if err := gitutils.CheckoutNew(fullName); err != nil {
@@ -129,15 +153,23 @@ var StartCmd = &cobra.Command{
 
 		utils.Success("Created and switched to branch '%s' from '%s'", fullName, base)
 
-		// Ask to push
-		var pushBranch bool
-		err = survey.AskOne(&survey.Confirm{
-			Message: fmt.Sprintf("Do you want to publish '%s' to origin?", fullName),
-			Default: true,
-		}, &pushBranch)
-		if err != nil {
-			fmt.Println("⚠️  Skipping push...")
+		pushFlag, _ := cmd.Flags().GetBool("push")
+		noPushFlag, _ := cmd.Flags().GetBool("no-push")
+		if pushFlag && noPushFlag {
+			utils.Error("--push and --no-push cannot be used together")
 			return nil
+		}
+
+		pushBranch := pushFlag
+		if !pushFlag && !noPushFlag {
+			err = survey.AskOne(&survey.Confirm{
+				Message: fmt.Sprintf("Do you want to publish '%s' to origin?", fullName),
+				Default: true,
+			}, &pushBranch)
+			if err != nil {
+				fmt.Println("⚠️  Skipping push... use --push to publish non-interactively")
+				return nil
+			}
 		}
 
 		if pushBranch {
@@ -152,6 +184,10 @@ var StartCmd = &cobra.Command{
 }
 
 func init() {
+	StartCmd.Flags().String("from", "", "existing work branch to base the new branch on (chained/stacked branch)")
+	StartCmd.Flags().Bool("push", false, "push the new branch to origin without prompting")
+	StartCmd.Flags().Bool("no-push", false, "skip pushing the new branch to origin")
+
 	StartCmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
 			return []string{
