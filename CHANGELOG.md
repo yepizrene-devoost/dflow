@@ -9,8 +9,12 @@
 
 ### Added
 - `dflow finish --delete` to remove finished branches locally and remotely after a successful finish when no manual targets remain.
+- `dflow version` now reports the commit the binary was installed from next to the channel/version marker, suffixed `-dirty` when the build tree had uncommitted changes.
+- `dflow version --revision` to print the full 40-character commit hash alone, or `unknown` when the binary carries no VCS stamp.
+- `dflow version --json` to print the marker, the full revision, and the dirty flag as one machine-readable document.
 
 ### Fixed
+- The `Makefile` no longer injects the latest release tag into development builds: a tag is used only when `HEAD` is exactly on it, and the installed commit is self-reported by the binary from its VCS stamp.
 - `dflow init` now refuses to overwrite an existing `.dflow.yaml`; use `--force` to regenerate it.
 - `dflow delete` is now idempotent: it deletes whichever copy of the branch still exists, reports an already absent copy instead of failing, and fails only when the branch exists in neither place.
 

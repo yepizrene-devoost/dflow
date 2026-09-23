@@ -3,7 +3,13 @@
 # Variables
 BINARY_NAME = dflow
 BIN_DIR = bin
-VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "dev-local")
+
+# 🏷️  Channel marker only. A tag is injected when HEAD is exactly on it; every
+# other revision keeps the `dev` marker, so a development tree never claims a
+# released version. The installed commit is deliberately NOT injected here: the
+# binary self-reports it from its own VCS stamp (buildvcs stays on), which keeps
+# one source of truth for the revision.
+VERSION ?= $(shell git describe --tags --exact-match 2>/dev/null || echo dev)
 
 # Default target
 .PHONY: all

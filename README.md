@@ -271,13 +271,22 @@ dflow completion install
 
 ### `dflow version`
 
-Show the current CLI version.
+Show the channel/version marker and the commit the binary was installed from.
 
 ```bash
-dflow version
+dflow version              # dflow dev 60d9e07
+dflow version --revision   # 60d9e07a1b2c3d4e5f60718293a4b5c6d7e8f901
+dflow version --json       # {"version":"dev","revision":"60d9e07...","dirty":false}
+dflow ver
 dflow --version
 dflow -V
 ```
+
+- The first token is the marker: `dev` for a development install, or the release version injected at build time.
+- The second token is the abbreviated commit the binary reports from its own VCS stamp, suffixed `-dirty` when the build tree had uncommitted changes.
+- `--revision` prints the full 40-character commit hash alone for scripts, or the literal `unknown` when the binary carries no stamp.
+- `--json` prints one machine-readable document with `version`, `revision`, and `dirty`.
+- A binary built without a VCS stamp (a release archive, or `go install module@version`) shows the marker alone.
 
 ---
 
