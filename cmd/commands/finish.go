@@ -155,7 +155,7 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 				if publishWorkBranch {
 					utils.Info("Would publish '%s' to origin.", plan.CurrentBranch)
 				} else {
-					utils.Info("Skipping publish of '%s' because --no-push was given.", plan.CurrentBranch)
+					utils.Info("%s", skipPublishMessage(plan.CurrentBranch))
 				}
 				return nil
 			}
@@ -163,7 +163,7 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 			if !publishWorkBranch {
 				// The dry-run variant of this path says why nothing is published; the
 				// mutating one owes the caller the same sentence.
-				utils.Info("Skipping publish of '%s' because --no-push was given.", plan.CurrentBranch)
+				utils.Info("%s", skipPublishMessage(plan.CurrentBranch))
 				return nil
 			}
 
@@ -176,7 +176,7 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 			if publishWorkBranch {
 				utils.Info("Would publish '%s' to origin before merging.", plan.CurrentBranch)
 			} else {
-				utils.Info("Skipping publish of '%s' because --no-push was given.", plan.CurrentBranch)
+				utils.Info("%s", skipPublishMessage(plan.CurrentBranch))
 			}
 			for _, target := range autoTargets {
 				utils.Info("Would merge '%s' into '%s' and push the target branch.", plan.CurrentBranch, target)
@@ -271,12 +271,18 @@ func formatBranchList(branches []string) string {
 	return strings.Join(branches, ", ")
 }
 
+// skipPublishMessage is the one sentence dflow prints wherever --no-push stops a
+// publish, so the paths that print it cannot drift apart in what they claim.
+func skipPublishMessage(branch string) string {
+	return fmt.Sprintf("Skipping publish of '%s' because --no-push was given.", branch)
+}
+
 // finishPlanReport is the machine-readable preview of `finish --dry-run --json`.
 //
 // It mirrors the human dry-run report: the branch being finished, where it
 // would land, its targets with their effective merge modes, whether a delete
-// was requested, and whether the work branch would be published. Field order is
-// the document order encoding/json produces.
+// was requested, and whether the plan includes publishing the work branch. Field
+// order is the document order encoding/json produces.
 type finishPlanReport struct {
 	CurrentBranch   string       `json:"current_branch"`
 	BranchType      string       `json:"branch_type"`
@@ -286,8 +292,10 @@ type finishPlanReport struct {
 	AutoTargets     []string     `json:"auto_targets"`
 	ManualTargets   []string     `json:"manual_targets"`
 	DeleteRequested bool         `json:"delete_requested"`
-	// PublishWorkBranch reports whether the work branch would be published to
-	// origin, so the plan's push behaviour is machine-readable too.
+	// PublishWorkBranch reports whether the plan includes publishing the work
+	// branch, the same class of answer as DeleteRequested: it is the plan's
+	// publish step, not a capability guarantee, and a run without an 'origin'
+	// remote still skips it like every other push in the plan.
 	PublishWorkBranch bool `json:"publish_work_branch"`
 	// DryRun reports the actual --dry-run flag value rather than a literal, so
 	// the field cannot lie if the reachability constraint that makes --json
