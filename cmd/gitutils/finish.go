@@ -226,3 +226,52 @@ func PushBranchUpdate(branch string) error {
 	spinner.Stop(fmt.Sprintf("Pushed updates for '%s'.", branch), "🚀")
 	return nil
 }
+
+// PushWorkBranch publishes the work branch to origin and sets its upstream.
+//
+// `dflow finish` publishes the branch before merging because a manual target is
+// completed through a pull request and a pull request cannot be opened until the
+// branch exists on origin; for an auto target the published branch is the backup
+// of the work the merge depends on.
+//
+// Publishing is idempotent on identity, not on existence: the remote commit for
+// the branch is compared with the local one, so a branch origin already holds at
+// this exact commit is left untouched and reported as up to date instead of
+// claiming a push that did not happen, while a branch origin does not have or
+// holds at an older commit is pushed. A repository without an 'origin' remote is
+// reported and skipped instead of failing a finish that can still merge its
+// local targets.
+func PushWorkBranch(branch string) error {
+	if !HasOriginRemote() {
+		utils.Icon("📁", "Remote 'origin' not found. Skipping push for '%s'.", branch)
+		return nil
+	}
+
+	remoteRevision, err := remoteBranchRevision(branch)
+	if err != nil {
+		return err
+	}
+
+	localCmd := exec.Command("git", "rev-parse", "--verify", "refs/heads/"+branch)
+	localOutput, err := localCmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to resolve local branch '%s': %w", branch, err)
+	}
+
+	if local := strings.TrimSpace(string(localOutput)); local == remoteRevision {
+		utils.Icon("✔", "Branch '%s' is already published and up to date on origin.", branch)
+		return nil
+	}
+
+	spinner := utils.NewSpinner(fmt.Sprintf("Publishing '%s' to origin...", branch))
+	spinner.Start()
+
+	cmd := exec.Command("git", "push", "-u", "origin", branch)
+	if err := cmd.Run(); err != nil {
+		spinner.Clear()
+		return fmt.Errorf("failed to push branch '%s': %w", branch, err)
+	}
+
+	spinner.Stop(fmt.Sprintf("Published '%s' to origin.", branch), "🚀")
+	return nil
+}

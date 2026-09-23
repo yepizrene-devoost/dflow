@@ -17,11 +17,16 @@ configuration lives in `.dflow.yaml`; this file explains how to read and apply i
 | `dflow finish --dry-run` | Preview the finish plan without merging or pushing |
 | `dflow finish --dry-run --json` | Preview the finish plan as a single JSON document |
 | `dflow finish --delete` | Also delete the branch when no `manual` targets remain |
+| `dflow finish --no-push` | Merge the current branch into its configured `auto` targets without publishing the work branch |
 | `dflow status [--json]` | Report branch, detected type, resolved targets and Git state |
 | `dflow delete <branch> [--yes]` | Delete a branch locally and remotely; idempotent, it deletes whichever copy still exists |
 | `dflow config set-author "Name" --email ...` | Store local `dflow.author` / `dflow.email` |
 | `dflow completion [install]` | Generate shell completions |
 | `dflow version` | Show the CLI version |
+
+`dflow finish` publishes the work branch to `origin` before merging, so a
+`manual` target's PR can be opened right after with no manual `git push`;
+`--no-push` keeps it local.
 
 ## Branch types
 

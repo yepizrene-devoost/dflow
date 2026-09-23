@@ -8,6 +8,7 @@
 - Documentation and tests were updated to reflect the new workflow defaults.
 
 ### Added
+- `dflow finish` now publishes the work branch to `origin` before merging, so a `manual` target can be promoted through a pull request without a manual `git push`; publishing is idempotent (a branch `origin` already holds at the same commit is left untouched) and `dflow finish --no-push` keeps the branch local.
 - `dflow finish --delete` to remove finished branches locally and remotely after a successful finish when no manual targets remain.
 - `dflow version` now reports the commit the binary was installed from next to the channel/version marker, suffixed `-dirty` when the build tree had uncommitted changes.
 - `dflow version --revision` to print the full 40-character commit hash alone, or `unknown` when the binary carries no VCS stamp.

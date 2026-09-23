@@ -21,6 +21,12 @@ var FinishCmd = &cobra.Command{
 Before running any merge, dflow requires a clean working tree and verifies that
 no merge is already in progress.
 
+Before merging, dflow publishes the current work branch to origin. A failed
+merge then still leaves the branch on the remote, and a manual target can be
+promoted through a pull request without a manual Git command. The publish is
+idempotent: a branch origin already holds at this exact commit is left
+untouched. Use --no-push to keep the branch local.
+
 For each target branch configured with merge_mode=auto, dflow will:
   - fetch updates from origin
   - checkout and sync the target branch
@@ -39,6 +45,7 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 	Example: `  dflow finish
   dflow finish --dry-run
   dflow finish --delete
+  dflow finish --no-push
   # Merges auto targets, returns to the configured base branch, and deletes the source branch when no manual targets remain`,
 	Args: cobra.NoArgs,
 	// The format is decided before the WithChecks wrapper inside RunE runs, so a
@@ -77,7 +84,12 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 		if err != nil {
 			return err
 		}
+		noPush, err := cmd.Flags().GetBool("no-push")
+		if err != nil {
+			return err
+		}
 
+		publishWorkBranch := !noPush
 		if err := gitutils.EnsureWorkingTreeClean(); err != nil {
 			return err
 		}
@@ -114,15 +126,16 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 		// (enforced in PreRunE), so this path never fetches, merges or pushes.
 		if utils.CurrentFormat() == utils.FormatJSON {
 			return utils.EmitJSON(finishPlanReport{
-				CurrentBranch:   plan.CurrentBranch,
-				BranchType:      string(plan.BranchType),
-				Base:            plan.Base,
-				ReturnBranch:    returnBranch,
-				Targets:         targetViews(plan.Targets),
-				AutoTargets:     nonNilStrings(autoTargets),
-				ManualTargets:   nonNilStrings(manualTargets),
-				DeleteRequested: deleteBranch,
-				DryRun:          dryRun,
+				CurrentBranch:     plan.CurrentBranch,
+				BranchType:        string(plan.BranchType),
+				Base:              plan.Base,
+				ReturnBranch:      returnBranch,
+				Targets:           targetViews(plan.Targets),
+				AutoTargets:       nonNilStrings(autoTargets),
+				ManualTargets:     nonNilStrings(manualTargets),
+				DeleteRequested:   deleteBranch,
+				PublishWorkBranch: publishWorkBranch,
+				DryRun:            dryRun,
 			})
 		}
 
@@ -135,12 +148,36 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 			if len(manualTargets) > 0 {
 				utils.Info("Manual follow-up required for: %s", strings.Join(manualTargets, ", "))
 			}
-			return nil
+			// No merge to do here, but still a publish: a manual target is completed
+			// through a pull request, and a pull request cannot be opened until the
+			// branch exists on origin.
+			if dryRun {
+				if publishWorkBranch {
+					utils.Info("Would publish '%s' to origin.", plan.CurrentBranch)
+				} else {
+					utils.Info("Skipping publish of '%s' because --no-push was given.", plan.CurrentBranch)
+				}
+				return nil
+			}
+
+			if !publishWorkBranch {
+				// The dry-run variant of this path says why nothing is published; the
+				// mutating one owes the caller the same sentence.
+				utils.Info("Skipping publish of '%s' because --no-push was given.", plan.CurrentBranch)
+				return nil
+			}
+
+			return gitutils.PushWorkBranch(plan.CurrentBranch)
 		}
 
 		if dryRun {
 			utils.Info("Dry run enabled. No branches will be checked out, merged, or pushed.")
 			utils.Info("Would return to branch: %s", returnBranch)
+			if publishWorkBranch {
+				utils.Info("Would publish '%s' to origin before merging.", plan.CurrentBranch)
+			} else {
+				utils.Info("Skipping publish of '%s' because --no-push was given.", plan.CurrentBranch)
+			}
 			for _, target := range autoTargets {
 				utils.Info("Would merge '%s' into '%s' and push the target branch.", plan.CurrentBranch, target)
 			}
@@ -159,6 +196,14 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 
 		if err := gitutils.FetchOrigin(); err != nil {
 			return err
+		}
+
+		// The publish comes before the first merge so a merge that fails still
+		// leaves the candidate on origin.
+		if publishWorkBranch {
+			if err := gitutils.PushWorkBranch(plan.CurrentBranch); err != nil {
+				return err
+			}
 		}
 
 		var mergedTargets []string
@@ -229,8 +274,9 @@ func formatBranchList(branches []string) string {
 // finishPlanReport is the machine-readable preview of `finish --dry-run --json`.
 //
 // It mirrors the human dry-run report: the branch being finished, where it
-// would land, its targets with their effective merge modes, and whether a delete
-// was requested. Field order is the document order encoding/json produces.
+// would land, its targets with their effective merge modes, whether a delete
+// was requested, and whether the work branch would be published. Field order is
+// the document order encoding/json produces.
 type finishPlanReport struct {
 	CurrentBranch   string       `json:"current_branch"`
 	BranchType      string       `json:"branch_type"`
@@ -240,6 +286,9 @@ type finishPlanReport struct {
 	AutoTargets     []string     `json:"auto_targets"`
 	ManualTargets   []string     `json:"manual_targets"`
 	DeleteRequested bool         `json:"delete_requested"`
+	// PublishWorkBranch reports whether the work branch would be published to
+	// origin, so the plan's push behaviour is machine-readable too.
+	PublishWorkBranch bool `json:"publish_work_branch"`
 	// DryRun reports the actual --dry-run flag value rather than a literal, so
 	// the field cannot lie if the reachability constraint that makes --json
 	// require --dry-run ever changes.
@@ -258,5 +307,6 @@ func nonNilStrings(values []string) []string {
 func init() {
 	FinishCmd.Flags().Bool("dry-run", false, "Show the finish plan without performing any merge or push")
 	FinishCmd.Flags().Bool("delete", false, "Delete the finished branch locally and remotely after a successful finish when no manual targets remain")
+	FinishCmd.Flags().Bool("no-push", false, "Skip publishing the work branch to origin; only the auto targets are pushed")
 	FinishCmd.Flags().Bool("json", false, "Print the --dry-run plan as a single JSON document on stdout; requires --dry-run")
 }

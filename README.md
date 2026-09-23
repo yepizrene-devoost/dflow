@@ -215,10 +215,14 @@ Finish the current dflow work branch using your configured merge rules.
 dflow finish
 dflow finish --dry-run
 dflow finish --delete
+dflow finish --no-push
 ```
 
 - Detects the current branch type from your configured prefixes
 - Resolves the configured `finish_targets` for that branch type
+- Publishes the current work branch to `origin` before merging, setting its upstream on the first push, so a `manual` target's pull request can be opened right after and a failed merge still leaves the branch on the remote
+- Publishes even when every target is `manual`, because the pull request itself needs the branch on `origin`
+- Leaves the branch untouched when `origin` already holds the same commit, so publishing is idempotent
 - Automatically merges and pushes only the targets with `merge_mode: auto`
 - Reports `manual` targets so they can be completed through PR flow
 - Requires a clean working tree before running
@@ -226,6 +230,7 @@ dflow finish --delete
 - Returns you to the configured `base` branch after a successful finish
 - Does not delete the source branch automatically
 - Supports `--delete` to remove the finished branch locally and remotely after a successful finish when no manual targets remain
+- Supports `--no-push` to keep the branch local, for offline repositories and CI sandboxes
 - Supports `--dry-run` to preview the plan without fetching, merging, or pushing
 - Supports `--dry-run --json` to print that plan as a single JSON document for scripts and agents; `--json` requires `--dry-run`, because a mutating finish has no report to serialize and `--json` would only hide the plan
 
@@ -407,9 +412,10 @@ When you run `dflow finish`, dflow:
 1. Detects the current work branch type from the configured prefix.
 2. Resolves the `base` and `finish_targets` for that branch type.
 3. Splits targets into `auto` and `manual` using the merge rules in `workflow.branch_rules`.
-4. For each `auto` target, fetches from `origin`, checks out and updates the target branch, merges the current work branch, and pushes the result.
-5. Reports any `manual` targets without merging them.
-6. Returns to the configured `base` branch when all automatic merges succeed.
+4. Publishes the current work branch to `origin` before merging, so a failed merge still leaves it on the remote and a `manual` target's pull request can be opened right after; a branch `origin` already holds at the same commit is left untouched, and `--no-push` keeps it local.
+5. For each `auto` target, fetches from `origin`, checks out and updates the target branch, merges the current work branch, and pushes the result.
+6. Reports any `manual` targets without merging them.
+7. Returns to the configured `base` branch when all automatic merges succeed.
 
 Use `dflow finish --delete` if you want dflow to remove the finished branch
 locally and remotely after all automatic targets succeed and no manual follow-up
