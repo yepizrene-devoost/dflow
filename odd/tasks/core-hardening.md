@@ -1,8 +1,8 @@
 # core-hardening — feature tracking
 
 Branch: `feature/core-hardening` (base: develop)
-Issues: #12 (WU1), #14 (WU2), #15 (WU3), #16 (WU4), #17 (WU5)
-Status: authorized; scope is the five work units below. Forge, deploy and TUI stay out.
+Issues: #12 (WU1), #14 (WU2), #15 (WU3), #16 (WU4), #17 (WU5); #18 is a tracked follow-up
+Status: authorized and implemented; six work units below. Forge, deploy and TUI stay out.
 
 ## Issues
 
@@ -16,12 +16,14 @@ lands in `develop`.
 | WU3 | #15 | `refactor: extract the branch planning core from the command layer` | open; extraction and output routing committed on this branch |
 | WU4 | #16 | `feat(cli): expose machine-readable state and validate merge modes` | open; fix committed on this branch |
 | WU5 | #17 | `fix(cli): keep the status icon in the chrome instead of the message` | open; fix committed on this branch |
+| WU6 | none | repairs the two contracts independent verification refuted | no issue of its own: it corrects the WU1 and WU2 claims rather than tracking a new finding |
+| follow-up | #18 | `fix(cli): stop git's own text from reaching the caller` | open; deliberately out of scope here |
 
 Closure: `Closes #15`, `Closes #16` and `Closes #17` ride on their own
 work-unit commits, and the closing `docs(odd)` commit carries `Closes #12` and
 `Closes #14` because those two fixes were committed before their issues existed.
 All five issues therefore close when this branch lands in `develop`, and none of
-them needs a manual close afterwards.
+them needs a manual close afterwards. #18 is a separate follow-up and stays open.
 
 ## Goal
 
@@ -526,3 +528,50 @@ $ dflow status --json=false --bogus-flag   # exit 1, human by design
 ```
 
 WU6 closes the two refuted claims; the two pre-existing limitations remain tracked separately.
+
+## Independent verification
+
+One read-only verification pass ran over the committed range `develop..HEAD` (then
+at `74641ed`) and reported a verdict for each of twelve claimed contracts: ten
+verified, two refuted, none left unverified. The two refutations are fixed by WU6:
+
+- refuted: "a non-zero exit leaves no side effect behind" — a failure after the
+  base checkout abandoned the caller on another branch, and a post-creation push
+  failure did not say the branch had been created;
+- refuted: the output guard was narrower than the invariant it claimed, missing
+  `fmt.Fprintf(os.Stdout, ...)`, `fmt.Fprintln(os.Stdout, ...)` and
+  `os.Stdout.Write(...)`.
+
+Independently reproduced green at that revision: `go build ./...`, `go vet ./...`,
+`gofmt -l .`, `go test -count=1 ./...` (`ok .../cmd/tests 10.147s`) and
+`git diff --check`. Two pre-existing limitations were deliberately left out of
+scope and are tracked as #18: git's own output reaching the caller's stdout through
+the checkout passthrough, and `dflow delete <current-branch> --yes` surfacing a raw
+Git refusal.
+
+Scope of that verification, stated honestly: it covered `74641ed`. WU6 then changed
+`cmd/commands/start.go`, `cmd/root/root.go` and the tests, and those changes carry
+their own evidence (build, vet, gofmt, full suite, planted guard probes in throwaway
+copies, and real-binary reproductions of both halves of the corrected contract) but
+were not re-verified by a second independent pass. The native review over the final
+candidate is the next independent check.
+
+## Delivery
+
+Work-unit commits on `feature/core-hardening`, based on `develop` at `af4dc14`:
+
+| Unit | Commit | Subject |
+| --- | --- | --- |
+| WU1 | `d046078` | `fix(cli): propagate real exit codes` |
+| WU2 | `0de2cce` | `feat(cli): detect non-interactive terminals` |
+| WU3 | `c18c832` | `refactor: extract the branch planning core` |
+| WU3b | `e0ae4ad` | `refactor(cli): route command output through one place` |
+| WU5 | `45cd878` | `fix(cli): keep the status icon in the chrome` |
+| WU4 | `74641ed` | `feat(cli): expose machine-readable state and validate merge modes` |
+| WU6 | `00796e2` | `fix(start): leave the repository as found when a step fails` |
+
+Eight commits, 31 files, roughly 2100 insertions. Each work unit is its own commit
+so the branch can be reviewed unit by unit instead of as one change of that size.
+
+Push and `dflow finish` were NOT performed: both remain the user's decisions. This
+branch has never been pushed, so `origin` has no copy of it.
