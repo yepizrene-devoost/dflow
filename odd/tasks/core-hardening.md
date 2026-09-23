@@ -575,3 +575,37 @@ so the branch can be reviewed unit by unit instead of as one change of that size
 
 Push and `dflow finish` were NOT performed: both remain the user's decisions. This
 branch has never been pushed, so `origin` has no copy of it.
+
+## Native review
+
+Reviewed by the native four-lens review under this clone's RDD switch.
+
+- lineage: `review-819ad26b9e0c322b`
+- target: `sha256:849d95f8ebbd5d66025654affda3f4c2df64768367182fef31ba2b9426d74a5e`
+- approved candidate: commit `8c856c4`, 32 changed paths, 3268 changed lines, tier `high`
+- outcome: `approved`; authority burned as `gentle-ai.review-acknowledged/v1`, consuming
+  revision `sha256:6a34e8b7582685fd7674b0016d81ef5da6e92704eee4258761940f6503f52e1d`
+- lenses: `review-risk`, `review-resilience`, `review-readability`, `review-reliability`
+
+One group attempt was refused at admission on the resilience lens: the reviewer emitted a
+payload outside the schema (`json: unknown field "evidence"`), preserved under
+`.git/gentle-ai/rejected-results/`. A fresh STATUS reoffered the exact slot and the rerun was
+admitted, so the refusal was not deterministic. Every refused byte was discarded rather than
+resubmitted.
+
+Four non-blocking advisories were recorded. They opened no correction and are deliberately left
+as later work, never as a reason to re-run the review on this candidate:
+
+| id | lens | location | severity |
+| --- | --- | --- | --- |
+| `R2-detect-as-predicate` | readability | `cmd/commands/status.go:140-142` | SUGGESTION |
+| `R2-dryrun-hardcoded` | readability | `cmd/commands/finish.go:95` | SUGGESTION |
+| `R2-icon-arg-convention` | readability | `cmd/gitutils/git.go:33` | WARNING |
+| `R2-shared-type-placement` | readability | `cmd/commands/finish.go:91` | SUGGESTION |
+
+`R2-icon-arg-convention` concerns the positional icon-argument convention of the output helpers,
+the same latent landmine WU3b already flagged: a short string argument sitting in the icon
+position is read as an icon instead of as a value.
+
+This section is post-review bookkeeping. It is the only file changed after approval, so the
+reviewed code is byte-identical to the approved candidate.
