@@ -328,6 +328,25 @@ dflow -V
 - `--json` prints one machine-readable document with `version`, `revision`, and `dirty`.
 - A binary built without a VCS stamp (a release archive, or `go install module@version`) shows the marker alone.
 
+### `dflow update`
+
+Update an existing dflow installation to the latest published release, in place.
+
+```bash
+dflow update
+dflow update --check
+dflow update --force
+dflow update --json
+```
+
+- Asks the GitHub API for the newest release (no token needed), compares it with the version this binary reports, and only when it is newer downloads the archive for your platform, verifies its SHA-256 against the release's published `checksums.txt`, and swaps the binary atomically next to the running one. A failure at any step leaves the current binary untouched.
+- `--check` reports whether an update is available without downloading or replacing anything.
+- `--force` reinstalls the latest release even when it is not newer (for example after a corrupted install); it cannot be combined with `--check`.
+- `--json` prints one machine-readable document: `current_version`, `latest_version`, `update_available`, `updated`, `path`, and `release_url`.
+- A binary with no release provenance (a plain `go build`, or `go install`) carries the `dev` marker: the command warns that its version cannot be compared and offers the update anyway; `go install`-managed binaries are usually best updated by running `go install` again.
+- The install location is resolved from the running binary itself (symlinks resolved), and the command refuses with an actionable message when that location is not writable — reinstall via the installer script, or install in a directory you own such as `~/.local/bin`.
+- Set `DFLOW_UPDATE_API_URL` to query a different GitHub API base URL (a mirror, or a local test server); it defaults to `https://api.github.com`.
+
 ---
 
 ## 🔧 Configuration
