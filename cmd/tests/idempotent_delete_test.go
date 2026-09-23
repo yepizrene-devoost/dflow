@@ -254,6 +254,41 @@ func TestDeleteKeepsTheAbsentSkipWhenNoOriginIsConfigured(t *testing.T) {
 	}
 }
 
+// TestDeleteReportsPartialSuccessWithoutABuiltBinary pins the partial-success
+// contract at the package boundary, so the returned error and the branch state it
+// reports are observable without building a CLI binary first.
+//
+// It is the same fixture as the real-binary test below — origin points at a path
+// that does not exist, so `git ls-remote` fails deterministically and offline —
+// and it deliberately leaves the exit code out of its assertions: only a process
+// can observe an exit code, so the binary-level test is not redundant coverage
+// and is left exactly as it is.
+func TestDeleteReportsPartialSuccessWithoutABuiltBinary(t *testing.T) {
+	repo := initTempGitRepo(t)
+	runGit(t, repo, "remote", "add", "origin", filepath.Join(t.TempDir(), "missing-remote"))
+	runGit(t, repo, "branch", "feature/example")
+
+	// Assertions happen outside the chdir closure: a t.Fatalf inside it would end
+	// the test goroutine before the post-call state checks ran.
+	var deleteErr error
+	withWorkingDir(t, repo, func() {
+		deleteErr = gitutils.Delete("feature/example")
+	})
+
+	if deleteErr == nil {
+		t.Fatalf("a failed remote lookup after a local deletion returned no error")
+	}
+	if !strings.Contains(deleteErr.Error(), "deleted local branch 'feature/example'") {
+		t.Fatalf("the error must name the local half as deleted, got: %v", deleteErr)
+	}
+	if !strings.Contains(deleteErr.Error(), "failed to check remote branch 'feature/example'") {
+		t.Fatalf("the error must name the remote half as uncheckable, got: %v", deleteErr)
+	}
+	if branchExists(t, repo, "feature/example") {
+		t.Fatalf("the local half should have been deleted")
+	}
+}
+
 // TestDeleteSurfacesAPartialSuccessWhenTheRemoteLookupFails pins the two runs of
 // the failed-lookup state through the real binary, where the process exit code is
 // part of the contract: the first run finishes the local half and must exit
