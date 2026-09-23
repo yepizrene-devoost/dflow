@@ -146,11 +146,16 @@ func Pull() error {
 
 // Delete removes the given Git branch both locally and remotely.
 //
-// It executes `git branch -D <branch>` to delete the local branch,
-// and `git push origin --delete <branch>` to remove the branch from the remote repository.
+// The two copies are independent, so the deletion is idempotent: each copy is
+// deleted when it exists, and a copy that is already gone is not an error. A
+// half-finished delete, a network failure in the middle of one, or a local
+// branch removed by hand must not block the copy that still exists.
 //
-// If both operations succeed, it logs a success message via utils.Success.
-// Returns an error if either operation fails.
+// It executes `git branch -D <branch>` for an existing local branch and
+// `git push origin --delete <branch>` for an existing remote one, in that order.
+// It returns an error when neither copy exists, and when deleting a copy that
+// does exist failed; a remote failure after a successful local deletion names the
+// remote branch that remains.
 func Delete(branch string) error {
 	// Refuse before anything is announced: this is a condition dflow can check
 	// without asking Git, and letting Git answer would surface its refusal as a
@@ -165,33 +170,59 @@ func Delete(branch string) error {
 		return fmt.Errorf("cannot delete branch '%s' because it is the branch you are currently on", branch)
 	}
 
+	// Observe both copies before touching either: what exists is decided once, and
+	// deciding it up front is what lets the local half stay untouched when only the
+	// remote branch is left. A branch absent from both places is the one case with
+	// nothing to do, and reporting success there would be a lie.
+	localExisted := BranchExists(branch)
+	remoteExisted := RemoteBranchExists(branch)
+	if !localExisted && !remoteExisted {
+		return fmt.Errorf("branch '%s' does not exist locally or on origin; nothing to delete", branch)
+	}
+
 	spinner := utils.NewSpinner(fmt.Sprintf("Deleting branch '%s' locally and remotely...", branch))
 	spinner.Start()
 
-	var stderr bytes.Buffer
-	cmd := exec.Command("git", "branch", "-D", branch)
-	cmd.Stderr = &stderr
-	cmd.Stdout = nil
-	if err := cmd.Run(); err != nil {
-		spinner.Clear()
-		return fmt.Errorf("failed to delete local branch '%s': %s", branch, stderr.String())
+	if localExisted {
+		var stderr bytes.Buffer
+		cmd := exec.Command("git", "branch", "-D", branch)
+		cmd.Stderr = &stderr
+		cmd.Stdout = nil
+		if err := cmd.Run(); err != nil {
+			spinner.Clear()
+			return fmt.Errorf("failed to delete local branch '%s': %s", branch, strings.TrimSpace(stderr.String()))
+		}
 	}
 
-	if RemoteBranchExists(branch) {
-		cmd = exec.Command("git", "push", "origin", "--delete", branch)
+	if remoteExisted {
+		var stderr bytes.Buffer
+		cmd := exec.Command("git", "push", "origin", "--delete", branch)
 		cmd.Stdout = nil
 		cmd.Stderr = &stderr
 		if err := cmd.Run(); err != nil {
 			spinner.Clear()
-			return fmt.Errorf("failed to delete remote branch: %s", stderr.String())
+			// localExisted is the observation taken before either half was touched, so a
+			// true value here means this same call already deleted the local branch. The
+			// report must name the half that remains instead of letting the caller read
+			// the failure as "nothing was deleted".
+			if localExisted {
+				return fmt.Errorf("deleted local branch '%s' but failed to delete remote branch '%s': %s", branch, branch, strings.TrimSpace(stderr.String()))
+			}
+			return fmt.Errorf("failed to delete remote branch '%s': %s", branch, strings.TrimSpace(stderr.String()))
 		}
-	} else {
-		spinner.Stop(fmt.Sprintf("Branch '%s' deleted locally.", branch), "🗑️")
-		utils.Info("Remote branch '%s' does not exist. Skipping remote deletion.", branch)
-		return nil
 	}
 
-	spinner.Stop(fmt.Sprintf("Branch '%s' deleted locally and remotely.", branch), "🗑️")
+	switch {
+	case localExisted && remoteExisted:
+		spinner.Stop(fmt.Sprintf("Branch '%s' deleted locally and remotely.", branch), "🗑️")
+	case localExisted:
+		spinner.Stop(fmt.Sprintf("Branch '%s' deleted locally.", branch), "🗑️")
+		utils.Info("Remote branch '%s' does not exist. Skipping remote deletion.", branch)
+	default:
+		spinner.Stop(fmt.Sprintf("Branch '%s' deleted remotely.", branch), "🗑️")
+		utils.Info("Local branch '%s' does not exist. Skipping local deletion.", branch)
+	}
+
 	return nil
 }
 

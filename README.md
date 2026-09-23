@@ -238,8 +238,10 @@ dflow delete feature/login-form --yes
 - Refuses to delete the branch currently checked out, with its own message, and leaves it intact
 - Supports `--yes`/`-y` to skip the confirmation, for scripts and agents
 - Without a terminal the confirmation cannot be answered, so the command exits non-zero unless `--yes` is passed
-- Removes the local branch
+- Removes the local branch when it exists
 - Deletes the remote branch from `origin` when it exists
+- Is idempotent: a copy that is already gone is reported as absent instead of failing, so the copy that still exists is still deleted. A half-finished delete, a failed network step mid-way, or a local branch removed by hand no longer blocks the remote one
+- Fails only when the branch exists in neither place, or when deleting a copy that does exist failed; a failed remote deletion after a local one says the local half is gone and names the remote branch that remains
 
 ### `dflow config`
 
