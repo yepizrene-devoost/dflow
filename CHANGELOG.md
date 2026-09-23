@@ -10,6 +10,9 @@
 ### Added
 - `dflow finish --delete` to remove finished branches locally and remotely after a successful finish when no manual targets remain.
 
+### Fixed
+- `dflow init` now refuses to overwrite an existing `.dflow.yaml`; use `--force` to regenerate it.
+
 ## 📦 v0.2.0 – Finish Automation, Versioning & Flow Documentation
 
 ### Added

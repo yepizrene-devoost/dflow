@@ -35,6 +35,10 @@ import (
 // The `.dflow.yaml` file is stored at the root of the repository and is used by all
 // subsequent dflow commands (`start`, `config`, `delete`, etc).
 //
+// When the project already has a `.dflow.yaml`, `init` refuses to run so a
+// hand-edited team contract is never overwritten by accident. Pass `--force` to
+// regenerate it deliberately.
+//
 // Example:
 //
 //	dflow init
@@ -64,19 +68,35 @@ var InitCmd = &cobra.Command{
 
   The resulting .dflow.yaml is stored in the project root and used by all dflow commands.
 
+  If .dflow.yaml already exists, init refuses to run instead of overwriting it.
+  Pass --force to regenerate the file deliberately. --force only authorizes the
+  overwrite: init still runs interactively and requires a terminal.
+
   Example:
     dflow init
+    dflow init --force
 
   This command is meant to be run once per project when setting up the dflow branching model.`,
-	Example: `  dflow init`,
+	Example: `  dflow init
+  dflow init --force`,
 	RunE: validators.WithChecks(true, func(cmd *cobra.Command, args []string) error {
+		force, err := cmd.Flags().GetBool("force")
+		if err != nil {
+			return err
+		}
+		if !force {
+			if err := validators.EnsureDflowNotInitialized(); err != nil {
+				return err
+			}
+		}
+
 		if !utils.IsInteractive() {
 			return fmt.Errorf("dflow init is interactive and requires a terminal")
 		}
 
 		var mainBranch, developBranch, uatBranch string
 
-		err := survey.AskOne(&survey.Input{Message: "Main branch name:", Default: "main"}, &mainBranch, survey.WithValidator(survey.Required))
+		err = survey.AskOne(&survey.Input{Message: "Main branch name:", Default: "main"}, &mainBranch, survey.WithValidator(survey.Required))
 		if err != nil {
 			return err
 		}
@@ -216,6 +236,10 @@ var InitCmd = &cobra.Command{
 		utils.Icon("🎉", "dflow is ready! Use `dflow start` to begin a new branch.")
 		return nil
 	}),
+}
+
+func init() {
+	InitCmd.Flags().Bool("force", false, "Regenerate .dflow.yaml even if the project is already initialized")
 }
 
 func uniqueBranchNames(branches ...string) []string {

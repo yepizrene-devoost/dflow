@@ -11,7 +11,7 @@ configuration lives in `.dflow.yaml`; this file explains how to read and apply i
 
 | Command | Purpose |
 | --- | --- |
-| `dflow init` | Initialize `.dflow.yaml` (run once per project) |
+| `dflow init` | Initialize `.dflow.yaml` (run once per project; refuses to overwrite an existing file, use `--force` to regenerate it) |
 | `dflow start <type> <name>` | Create and switch to a work branch |
 | `dflow finish` | Merge the current branch into its configured `auto` targets |
 | `dflow finish --dry-run` | Preview the finish plan without merging or pushing |
