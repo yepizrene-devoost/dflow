@@ -18,7 +18,7 @@ configuration lives in `.dflow.yaml`; this file explains how to read and apply i
 | `dflow finish --dry-run --json` | Preview the finish plan as a single JSON document |
 | `dflow finish --delete` | Also delete the branch when no `manual` targets remain |
 | `dflow status [--json]` | Report branch, detected type, resolved targets and Git state |
-| `dflow delete <branch> [--yes]` | Delete a branch locally and remotely |
+| `dflow delete <branch> [--yes]` | Delete a branch locally and remotely; idempotent, it deletes whichever copy still exists |
 | `dflow config set-author "Name" --email ...` | Store local `dflow.author` / `dflow.email` |
 | `dflow completion [install]` | Generate shell completions |
 | `dflow version` | Show the CLI version |

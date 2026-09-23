@@ -19,8 +19,7 @@ import (
 // This command requires the exact name of the branch to delete. It will:
 //
 //  1. Ask for confirmation before proceeding
-//  2. Delete the local branch
-//  3. Delete the corresponding remote branch from origin (if it exists)
+//  2. Delete whichever copy exists, locally and on origin
 //
 // Example usage:
 //
@@ -33,8 +32,10 @@ var DeleteCmd = &cobra.Command{
 	Long: `Delete a branch created with dflow from your local repository and, if it
 exists, from the 'origin' remote as well.
 
-The command asks for confirmation before deleting anything and skips the remote
-step automatically when the branch does not exist on origin.`,
+The command asks for confirmation before deleting anything and is idempotent: it
+deletes whichever copy still exists and reports a copy that is already gone as
+absent instead of failing. It only fails when the branch exists in neither place,
+or when deleting a copy that does exist failed.`,
 	Example: `  dflow delete feature/login-form
   dflow delete bugfix/payment-timeout`,
 	Args: cobra.ExactArgs(1),

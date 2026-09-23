@@ -12,6 +12,7 @@
 
 ### Fixed
 - `dflow init` now refuses to overwrite an existing `.dflow.yaml`; use `--force` to regenerate it.
+- `dflow delete` is now idempotent: it deletes whichever copy of the branch still exists, reports an already absent copy instead of failing, and fails only when the branch exists in neither place.
 
 ## 📦 v0.2.0 – Finish Automation, Versioning & Flow Documentation
 
