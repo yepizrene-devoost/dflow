@@ -178,3 +178,42 @@ bodies), and the whole-tree multiset of Go string literals is unchanged apart fr
 paths — the single removed literal is the `cmd/utils` import and the added ones are eight
 `pkg/flow` imports plus `gopkg.in/yaml.v3`, which moved with the YAML methods. No
 user-facing message, error string or generated YAML changed. WU4 remains unchecked.
+
+WU3b OUTCOME: done (the output-routing half of the same issue). Extended the `cmd/utils`
+choke point with the two shapes the command layer still needed. `Plain(formattedMessage,
+args...)` prints a formatted line with no icon and a single trailing newline, for output that
+is the requested result rather than commentary (the `config get-author` author/email lines,
+the raw `config list` listing). `Prompt(label, args...)` prints an inline input label with no
+trailing newline, so the cursor stays on the label's line. Both are documented with that
+rationale; `Error`/`Info`/`Success`/`Warn` are untouched. Routed every remaining direct
+write: `cmd/gitutils/git.go` `CheckOrCreateBranch`'s three messages, `cmd/commands/config.go`
+the two prompt labels, the `get-author` author/email lines and the `config list` output (the
+raw `git config` output's own trailing newline is trimmed with `strings.TrimSuffix` so `Plain`
+owns the terminator, keeping the bytes identical), `cmd/commands/delete.go` the declined
+confirmation, and `cmd/commands/init.go` the merge-mode explanation and merge-behaviour
+summary blocks plus their blank separator lines. The icon is passed explicitly in
+`CheckOrCreateBranch` so a short branch name cannot be read as a custom icon by the shared
+chrome and drop the `%s` argument.
+Guard: `cmd/tests/output_guard_test.go` parses the Go sources of `../commands` and
+`../gitutils` (relative to the package dir) with `go/parser` and fails on any
+`fmt.Print`/`fmt.Printf`/`fmt.Println` or builtin `println` call, naming the file:line and
+telling the reader to route the write through `cmd/utils`; `cmd/root` and `cmd/utils` are
+excluded on purpose. Verified fail-then-pass: adding `fmt.Println("temporary guard probe")` to
+`CheckOrCreateBranch` failed the test with `../gitutils/git.go:22: fmt.Println(...)`; removing
+it made the test pass.
+Chrome normalisations (the shared chrome pads a 1-rune icon to three spaces and a 2-rune icon
+to two; message text is unchanged): `✅ Created branch 'x'`, `✔ Branch 'x' exists`,
+`🚫 Operation aborted by user.`, `🔧 Dflow supports two types of merge modes:` and
+`✅ Merge behavior summary:` each move from one leading space after the icon to three. The
+`ℹ️  Branch 'x' does not exist. Creating...` line (two spaces), both prompt labels, the
+`get-author` and `config list` output, the explanation continuation lines, the summary detail
+lines and every blank separator are byte-identical.
+Files changed: `cmd/utils/messages.go`, `cmd/gitutils/git.go`,
+`cmd/commands/{config,delete,init}.go`, `cmd/tests/output_guard_test.go` (new).
+Checks: `go build ./...` ok, `go vet ./...` ok, `gofmt -l .` empty, `git diff --check` empty,
+`go test -count=1 ./...` green (`ok .../cmd/tests 7.855s`). Read-only real-binary spot checks:
+`dflow config get-author` and `dflow config list` print the same bytes as before, and the
+`utils.Error` render shows the expected three-space 1-rune chrome (1-rune vs 2-rune padding
+confirmed). The git passthrough (`cmd.Stdout = os.Stdout` in the checkout helpers),
+`cmd/root/completion.go` and `cmd/utils/interrupt.go` were deliberately left untouched. WU4
+remains unchecked.

@@ -21,14 +21,16 @@ import (
 func CheckOrCreateBranch(branch string) error {
 	cmd := exec.Command("git", "rev-parse", "--verify", branch)
 	if err := cmd.Run(); err != nil {
-		fmt.Printf("ℹ️  Branch '%s' does not exist. Creating...\n", branch)
+		// Pass the icon explicitly so a short branch name is never read as a
+		// custom icon by the shared chrome, which would drop the format argument.
+		utils.Info("Branch '%s' does not exist. Creating...", branch, "ℹ️")
 		create := exec.Command("git", "branch", branch)
 		if err := create.Run(); err != nil {
 			return fmt.Errorf("❌ failed to create branch '%s': %w", branch, err)
 		}
-		fmt.Printf("✅ Created branch '%s'\n", branch)
+		utils.Success("Created branch '%s'", branch, "✅")
 	} else {
-		fmt.Printf("✔ Branch '%s' exists\n", branch)
+		utils.Info("Branch '%s' exists", branch, "✔")
 	}
 
 	return nil

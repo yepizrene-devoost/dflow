@@ -82,7 +82,7 @@ The email can be passed with --email or entered interactively when omitted.`,
 				)
 			}
 
-			fmt.Print("👤 Enter author name: ")
+			utils.Prompt("👤 Enter author name: ")
 			reader := bufio.NewReader(os.Stdin)
 			name, err = reader.ReadString('\n')
 
@@ -103,7 +103,7 @@ The email can be passed with --email or entered interactively when omitted.`,
 				)
 			}
 
-			fmt.Print("📧 Enter author email: ")
+			utils.Prompt("📧 Enter author email: ")
 			reader := bufio.NewReader(os.Stdin)
 			email, err = reader.ReadString('\n')
 
@@ -147,8 +147,8 @@ configuration for this repository.`,
 			return fmt.Errorf("Author or email not set. Use `dflow config set-author`")
 		}
 
-		fmt.Printf("👤 Author: %s\n", strings.TrimSpace(string(author)))
-		fmt.Printf("📧 Email: %s\n", strings.TrimSpace(string(email)))
+		utils.Plain("👤 Author: %s", strings.TrimSpace(string(author)))
+		utils.Plain("📧 Email: %s", strings.TrimSpace(string(email)))
 
 		return nil
 	}),
@@ -173,7 +173,9 @@ namespace for the current repository.`,
 			return nil
 		}
 
-		fmt.Print(string(output))
+		// The raw `git config --get-regexp` output already ends with a newline;
+		// trim that one newline so Plain can own the line terminator.
+		utils.Plain("%s", strings.TrimSuffix(string(output), "\n"))
 
 		return nil
 	}),

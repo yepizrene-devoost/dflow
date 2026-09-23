@@ -26,6 +26,26 @@ func Warn(formattedMessage string, args ...interface{}) {
 	printWithIcon("⚠️", formattedMessage, args...)
 }
 
+// Plain prints the formatted message followed by a single newline, with no icon.
+//
+// Use Plain for output that is the requested result rather than commentary
+// around it: the author and email lines of `config get-author`, or the raw
+// listing from `config list`, for example. It exists so that every user-facing
+// write in the command path goes through this package, which keeps a future
+// output mode a change here instead of a hunt through the command layer.
+func Plain(formattedMessage string, args ...interface{}) {
+	fmt.Println(fmt.Sprintf(formattedMessage, args...))
+}
+
+// Prompt prints an inline input label without a trailing newline.
+//
+// Use Prompt for labels that precede a read from stdin, so the cursor stays on
+// the same line as the label. It lives here for the same reason as Plain: the
+// command path must not write to stdout directly.
+func Prompt(label string, args ...interface{}) {
+	fmt.Print(fmt.Sprintf(label, args...))
+}
+
 // Internal helper with optional icon override (like Spinner.Stop).
 func printWithIcon(defaultIcon string, formattedMessage string, args ...interface{}) {
 	finalIcon := defaultIcon

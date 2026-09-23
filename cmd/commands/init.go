@@ -92,9 +92,10 @@ var InitCmd = &cobra.Command{
 		}
 
 		// 🌟 merge modes explain
-		fmt.Println("\n🔧 Dflow supports two types of merge modes:")
-		fmt.Println("   - manual: you open Pull Requests and merge via your platform (e.g. GitHub, GitLab).")
-		fmt.Println("   - auto: dflow merges branches directly using Git commands (no PRs needed).")
+		utils.Plain("")
+		utils.Info("Dflow supports two types of merge modes:", "🔧")
+		utils.Plain("   - manual: you open Pull Requests and merge via your platform (e.g. GitHub, GitLab).")
+		utils.Plain("   - auto: dflow merges branches directly using Git commands (no PRs needed).")
 
 		var mergeModeOption string
 		err = survey.AskOne(&survey.Select{
@@ -166,12 +167,13 @@ var InitCmd = &cobra.Command{
 		utils.Success("Created .dflow.yaml")
 
 		// 📋 print summary
-		fmt.Println("\n✅ Merge behavior summary:")
-		fmt.Printf("   Default mode: %s\n", defaultMode)
+		utils.Plain("")
+		utils.Success("Merge behavior summary:")
+		utils.Plain("   Default mode: %s", defaultMode)
 		for _, branch := range allBranches {
-			fmt.Printf("   - %s: %s\n", branch, flow.GetMergeModeForBranch(&cfg, branch))
+			utils.Plain("   - %s: %s", branch, flow.GetMergeModeForBranch(&cfg, branch))
 		}
-		fmt.Println()
+		utils.Plain("")
 
 		// 🌱 verify if base branches exists
 		if err := gitutils.CheckOrCreateBranch(mainBranch); err != nil {
