@@ -240,8 +240,9 @@ dflow delete feature/login-form --yes
 - Without a terminal the confirmation cannot be answered, so the command exits non-zero unless `--yes` is passed
 - Removes the local branch when it exists
 - Deletes the remote branch from `origin` when it exists
+- Tells apart a remote branch that is absent from one that cannot be checked. With no `origin` configured there is nothing to look up, so the local half is deleted and the remote half is reported as absent, truthfully. With `origin` configured but unreachable the remote half is unknown: the local branch is still deleted and the command then says the remote could not be checked, and when there was no local branch to delete it touches nothing and fails on the lookup alone
 - Is idempotent: a copy that is already gone is reported as absent instead of failing, so the copy that still exists is still deleted. A half-finished delete, a failed network step mid-way, or a local branch removed by hand no longer blocks the remote one
-- Fails only when the branch exists in neither place, or when deleting a copy that does exist failed; a failed remote deletion after a local one says the local half is gone and names the remote branch that remains
+- Fails when the branch exists in neither place, when a configured `origin` cannot be reached, or when deleting a copy that does exist failed; a failed remote deletion after a local one says the local half is gone and names the remote branch that remains
 
 ### `dflow config`
 

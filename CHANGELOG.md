@@ -14,9 +14,10 @@
 - `dflow version --json` to print the marker, the full revision, and the dirty flag as one machine-readable document.
 
 ### Fixed
+- `dflow delete` no longer reports a remote branch as absent when `origin` is configured but cannot be reached: the local half is still deleted and the command then says the remote could not be checked, and with no local branch it touches nothing and fails on the lookup. A repository with no `origin` configured is a known absence, not a failed check, and still deletes the local half successfully.
 - The `Makefile` no longer injects the latest release tag into development builds: a tag is used only when `HEAD` is exactly on it, and the installed commit is self-reported by the binary from its VCS stamp.
 - `dflow init` now refuses to overwrite an existing `.dflow.yaml`; use `--force` to regenerate it.
-- `dflow delete` is now idempotent: it deletes whichever copy of the branch still exists, reports an already absent copy instead of failing, and fails only when the branch exists in neither place.
+- `dflow delete` is now idempotent: it deletes whichever copy of the branch still exists, reports an already absent copy instead of failing, and fails when the branch exists in neither place or a copy that exists could not be deleted.
 
 ## 📦 v0.2.0 – Finish Automation, Versioning & Flow Documentation
 

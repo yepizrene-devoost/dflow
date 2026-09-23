@@ -105,8 +105,13 @@ Checks: `go build ./...` ok, `go vet ./...` ok, `gofmt -l .` empty, `git diff --
 `go test -count=1 ./...` green (`ok .../cmd/tests 17.181s`), and `TestStartCLI` passes with all
 12 subtests including `init_requires_a_terminal`.
 
-Strict TDD was not active: no TDD runner is configured for this repository, so the tests are
-regression coverage rather than RED→GREEN evidence.
+TDD evidence: none produced, stated precisely. `~/.gentle-ai/state.json` records
+`strict_tdd: true`, which `extensions/sdd-init.ts:703` derives from a detected test command
+and forwards to SDD phase agents; it was not applied to this feature's inline ODD work, so the
+tests were written alongside the implementation as regression coverage instead of RED→GREEN.
+The first revision of this document claimed "Strict TDD was not active: no TDD runner is
+configured for this repository", which was wrong on both counts — strict TDD is enabled, and
+`go test` is a runner. Corrected here.
 
 Boundaries, all documented and non-blocking: the destructive `--force` regeneration under a
 real TTY is not exercised end-to-end, because driving the `survey` wizard headlessly was
