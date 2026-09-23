@@ -180,38 +180,40 @@ func Delete(branch string) error {
 	localExisted := BranchExists(branch)
 	remoteExisted, remoteErr := RemoteBranchExists(branch)
 
-	// The "remote could not be checked" outcome is settled here, as one explicit
-	// branch, instead of a return dropped between the two deletions below. With no
-	// local copy the lookup failure is the whole answer and neither copy is touched.
-	// With a local copy, the plan is to delete that copy and then report the failure
-	// naming the half that is gone.
-	if remoteErr != nil {
-		if !localExisted {
-			return remoteErr
-		}
-
-		spinner := utils.NewSpinner(fmt.Sprintf("Deleting branch '%s' locally and remotely...", branch))
-		spinner.Start()
-
-		// The remote half is unknown, so the local half is the only one this call can
-		// finish. Deleting it keeps the two halves independent, and the error below
-		// reports the operation as unfinished: the local half is gone and the remote
-		// half could not be checked.
-		if err := deleteLocalBranch(branch); err != nil {
-			spinner.Clear()
-			return err
-		}
-
-		spinner.Clear()
-		return fmt.Errorf("deleted local branch '%s' but %w", branch, remoteErr)
+	// The two outcomes that touch nothing are settled before the spinner exists,
+	// which is what leaves the operation below a single creation site: with no local
+	// copy the lookup failure is the whole answer and neither copy is touched, and a
+	// branch absent from both places is the one case with nothing to delete.
+	if remoteErr != nil && !localExisted {
+		return remoteErr
 	}
 
 	if !localExisted && !remoteExisted {
 		return fmt.Errorf("branch '%s' does not exist locally or on origin; nothing to delete", branch)
 	}
 
+	// One creation site and one termination: Stop and Clear share the spinner's
+	// stopOnce guard, so the deferred Clear is the only terminator on every failure
+	// path below and a no-op on the success paths, which call Stop first.
 	spinner := utils.NewSpinner(fmt.Sprintf("Deleting branch '%s' locally and remotely...", branch))
 	spinner.Start()
+	defer spinner.Clear()
+
+	// The "remote could not be checked" outcome is settled here, as one explicit
+	// branch, instead of a return dropped between the two deletions below: with a
+	// local copy, the plan is to delete that copy and then report the failure naming
+	// the half that is gone.
+	if remoteErr != nil {
+		// The remote half is unknown, so the local half is the only one this call can
+		// finish. Deleting it keeps the two halves independent, and the error below
+		// reports the operation as unfinished: the local half is gone and the remote
+		// half could not be checked.
+		if err := deleteLocalBranch(branch); err != nil {
+			return err
+		}
+
+		return fmt.Errorf("deleted local branch '%s' but %w", branch, remoteErr)
+	}
 
 	// The local half goes first, and it is not rolled back: once `git branch -D` has
 	// removed the branch it is gone, so a failure in a later half leaves the
@@ -221,7 +223,6 @@ func Delete(branch string) error {
 	// success.
 	if localExisted {
 		if err := deleteLocalBranch(branch); err != nil {
-			spinner.Clear()
 			return err
 		}
 	}
@@ -232,15 +233,7 @@ func Delete(branch string) error {
 		cmd.Stdout = nil
 		cmd.Stderr = &stderr
 		if err := cmd.Run(); err != nil {
-			spinner.Clear()
-			// localExisted is the observation taken before either half was touched, so a
-			// true value here means this same call already deleted the local branch. The
-			// report must name the half that remains instead of letting the caller read
-			// the failure as "nothing was deleted".
-			if localExisted {
-				return fmt.Errorf("deleted local branch '%s' but failed to delete remote branch '%s': %s", branch, branch, strings.TrimSpace(stderr.String()))
-			}
-			return fmt.Errorf("failed to delete remote branch '%s': %s", branch, strings.TrimSpace(stderr.String()))
+			return remoteDeleteFailure(branch, localExisted, stderr.String())
 		}
 	}
 
@@ -258,6 +251,24 @@ func Delete(branch string) error {
 	}
 
 	return nil
+}
+
+// remoteDeleteFailure reports a `git push origin --delete <branch>` that failed.
+//
+// Both message variants are chosen here, once, so no caller can drift from the
+// rule that decides between them. `localExisted` is the observation taken before
+// either half was touched, so a true value means this same call already deleted
+// the local branch and the report must name the half that remains: letting the
+// caller read the failure as "nothing was deleted" would hide a real deletion.
+//
+// Each variant keeps its exact wording, Git's captured diagnostics included.
+func remoteDeleteFailure(branch string, localExisted bool, diagnostics string) error {
+	diagnostics = strings.TrimSpace(diagnostics)
+	if localExisted {
+		return fmt.Errorf("deleted local branch '%s' but failed to delete remote branch '%s': %s", branch, branch, diagnostics)
+	}
+
+	return fmt.Errorf("failed to delete remote branch '%s': %s", branch, diagnostics)
 }
 
 // deleteLocalBranch removes the local branch with `git branch -D` and reports
