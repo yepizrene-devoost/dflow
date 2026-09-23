@@ -225,6 +225,7 @@ dflow delete feature/login-form --yes
 ```
 
 - Asks for confirmation before deleting anything
+- Refuses to delete the branch currently checked out, with its own message, and leaves it intact
 - Supports `--yes`/`-y` to skip the confirmation, for scripts and agents
 - Without a terminal the confirmation cannot be answered, so the command exits non-zero unless `--yes` is passed
 - Removes the local branch

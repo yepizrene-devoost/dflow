@@ -8,8 +8,8 @@ package gitutils
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
 )
@@ -51,24 +51,69 @@ func PushBranch(branch string) error {
 	return nil
 }
 
+// runCapturingGit runs cmd with both streams captured, so Git's own text never
+// reaches the caller's stdout directly.
+//
+// On failure the captured diagnostics are attached to the returned error, because
+// the reason a Git command failed is exactly what the caller needs and the exit
+// status alone never carries it. On success the captured stderr is discarded as
+// progress and advice noise, and any captured stdout is reported through the shared
+// CLI output helper, so it stays inside the single output choke point and a
+// machine-readable mode can silence it.
+func runCapturingGit(cmd *exec.Cmd) error {
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		diagnostics := strings.TrimSpace(stderr.String())
+		if diagnostics == "" {
+			// Some failures explain themselves on stdout instead (a merge conflict,
+			// for example); prefer stderr so a failure is never bare.
+			diagnostics = strings.TrimSpace(stdout.String())
+		}
+		if diagnostics == "" {
+			return err
+		}
+		return fmt.Errorf("%s: %w", diagnostics, err)
+	}
+
+	// A successful command's stderr is progress and advice noise and is dropped.
+	// Its stdout is the operation's result, so it goes through the shared output
+	// helper one line at a time instead of straight to the caller's stdout.
+	captured := strings.TrimSpace(stdout.String())
+	if captured == "" {
+		return nil
+	}
+	for _, line := range strings.Split(captured, "\n") {
+		utils.Plain("%s", strings.TrimRight(line, "\r"))
+	}
+
+	return nil
+}
+
 // Checkout switches the working directory to the given branch using `git checkout <branch>`.
+//
+// Git's own output is captured rather than wired to the CLI's streams, so a
+// failed checkout reports why instead of only its exit status. `--quiet` keeps
+// the successful checkout silent at the source: Git writes its branch-status
+// advice ("Your branch is ahead of 'origin/develop'...") to stdout, which is not
+// a result dflow asked for and must not reach the caller's stdout.
 //
 // Returns an error if the checkout operation fails.
 func Checkout(branch string) error {
-	cmd := exec.Command("git", "checkout", branch)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return runCapturingGit(exec.Command("git", "checkout", "--quiet", branch))
 }
 
 // CheckoutNew creates and checks out a new branch from the current HEAD.
 //
-// It wraps `git checkout -b <branch>` and returns an error if the operation fails.
+// It wraps `git checkout -b <branch>`. Git's own output is captured rather than
+// wired to the CLI's streams, and `--quiet` keeps a successful switch silent at
+// the source so its status advice never reaches the caller's stdout.
+//
+// It returns an error if the operation fails.
 func CheckoutNew(branch string) error {
-	cmd := exec.Command("git", "checkout", "-b", branch)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return runCapturingGit(exec.Command("git", "checkout", "--quiet", "-b", branch))
 }
 
 // Pull updates the current branch with the latest changes from the remote 'origin'.
@@ -107,6 +152,14 @@ func Pull() error {
 // If both operations succeed, it logs a success message via utils.Success.
 // Returns an error if either operation fails.
 func Delete(branch string) error {
+	// Refuse before anything is announced: this is a condition dflow can check
+	// without asking Git, and letting Git answer would surface its refusal as a
+	// foreign message. A branch checked out in another worktree stays Git's call,
+	// because only Git knows about it.
+	if current, err := CurrentBranch(); err == nil && current == branch {
+		return fmt.Errorf("cannot delete branch '%s' because it is the branch you are currently on", branch)
+	}
+
 	spinner := utils.NewSpinner(fmt.Sprintf("Deleting branch '%s' locally and remotely...", branch))
 	spinner.Start()
 

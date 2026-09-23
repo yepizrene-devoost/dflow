@@ -3,7 +3,6 @@ package gitutils
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 
@@ -41,11 +40,13 @@ func CheckoutExistingBranch(branch string) error {
 }
 
 // CheckoutTrackingBranch creates a local branch that tracks origin/<branch>.
+//
+// Git's own output is captured rather than wired to the CLI's streams, and
+// `--quiet` keeps a successful switch silent at the source so its status advice
+// never reaches the caller's stdout.
 func CheckoutTrackingBranch(branch string) error {
-	cmd := exec.Command("git", "checkout", "--track", "-b", branch, "origin/"+branch)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	cmd := exec.Command("git", "checkout", "--quiet", "--track", "-b", branch, "origin/"+branch)
+	if err := runCapturingGit(cmd); err != nil {
 		return fmt.Errorf("failed to create tracking branch %q from origin/%s: %w", branch, branch, err)
 	}
 	return nil
@@ -82,22 +83,23 @@ func MergeInProgress() bool {
 }
 
 // MergeBranchIntoCurrent merges the source branch into the current branch.
+//
+// Git's own output is captured rather than wired to the CLI's streams, so a
+// conflict reports what Git found instead of only its exit status.
 func MergeBranchIntoCurrent(sourceBranch string) error {
 	cmd := exec.Command("git", "merge", "--no-ff", "--no-edit", sourceBranch)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := runCapturingGit(cmd); err != nil {
 		return fmt.Errorf("failed to merge branch %q into current branch: %w", sourceBranch, err)
 	}
 	return nil
 }
 
 // AbortMerge aborts an in-progress merge.
+//
+// Git's own output is captured rather than wired to the CLI's streams.
 func AbortMerge() error {
 	cmd := exec.Command("git", "merge", "--abort")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := runCapturingGit(cmd); err != nil {
 		return fmt.Errorf("failed to abort merge: %w", err)
 	}
 	return nil
