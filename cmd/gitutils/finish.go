@@ -137,6 +137,9 @@ func HasUpstream(branch string) bool {
 // access. When it exists only on origin, it is fetched and checked out as a
 // tracking branch. This is the checkout-only counterpart of PullBranch, used
 // when branching off a source branch that must not be updated.
+//
+// The remote is resolved before the fetch, so a lookup that cannot reach origin
+// returns its own error instead of reporting the branch as absent.
 func CheckoutBranch(branch string) error {
 	if BranchExists(branch) {
 		return CheckoutExistingBranch(branch)
@@ -146,11 +149,19 @@ func CheckoutBranch(branch string) error {
 		return fmt.Errorf("branch %q does not exist locally and no 'origin' remote is configured", branch)
 	}
 
+	// The fetch exists only to materialize origin/<branch> for the tracking
+	// checkout, so existence is resolved first: a lookup that cannot check origin
+	// must surface as its own error, not be reduced to "absent".
+	remoteExisted, err := RemoteBranchExists(branch)
+	if err != nil {
+		return err
+	}
+
 	if err := FetchOrigin(); err != nil {
 		return err
 	}
 
-	if !RemoteBranchExists(branch) {
+	if !remoteExisted {
 		return fmt.Errorf("branch %q does not exist locally nor on 'origin'", branch)
 	}
 
@@ -174,7 +185,11 @@ func PullBranch(branch string) error {
 		return nil
 	}
 
-	if !RemoteBranchExists(branch) {
+	remoteExisted, err := RemoteBranchExists(branch)
+	if err != nil {
+		return err
+	}
+	if !remoteExisted {
 		utils.Info("Remote branch '%s' does not exist. Skipping pull for this target.", branch)
 		return nil
 	}

@@ -34,8 +34,9 @@ exists, from the 'origin' remote as well.
 
 The command asks for confirmation before deleting anything and is idempotent: it
 deletes whichever copy still exists and reports a copy that is already gone as
-absent instead of failing. It only fails when the branch exists in neither place,
-or when deleting a copy that does exist failed.`,
+absent instead of failing. It fails when the branch exists in neither place, when
+a configured 'origin' cannot be reached, or when deleting a copy that does exist
+failed.`,
 	Example: `  dflow delete feature/login-form
   dflow delete bugfix/payment-timeout`,
 	Args: cobra.ExactArgs(1),

@@ -153,9 +153,12 @@ func Pull() error {
 //
 // It executes `git branch -D <branch>` for an existing local branch and
 // `git push origin --delete <branch>` for an existing remote one, in that order.
-// It returns an error when neither copy exists, and when deleting a copy that
-// does exist failed; a remote failure after a successful local deletion names the
-// remote branch that remains.
+// It returns an error when neither copy exists, when the remote lookup cannot
+// determine existence, and when deleting a copy that does exist failed. A remote
+// failure after a successful local deletion names the remote branch that remains,
+// and a failed lookup is never reported as an absent remote: with a local copy it
+// is deleted first and the lookup error names what remains unknown, and with no
+// local copy nothing is touched.
 func Delete(branch string) error {
 	// Refuse before anything is announced: this is a condition dflow can check
 	// without asking Git, and letting Git answer would surface its refusal as a
@@ -170,12 +173,19 @@ func Delete(branch string) error {
 		return fmt.Errorf("cannot delete branch '%s' because it is the branch you are currently on", branch)
 	}
 
-	// Observe both copies before touching either: what exists is decided once, and
-	// deciding it up front is what lets the local half stay untouched when only the
-	// remote branch is left. A branch absent from both places is the one case with
-	// nothing to do, and reporting success there would be a lie.
+	// Decide existence once, before either copy is touched: that is what keeps the
+	// local half untouched when only the remote branch is left. A branch absent
+	// from both places is the one case with nothing to delete, and reporting
+	// success there would be a lie.
 	localExisted := BranchExists(branch)
-	remoteExisted := RemoteBranchExists(branch)
+	remoteExisted, remoteErr := RemoteBranchExists(branch)
+
+	if !localExisted && remoteErr != nil {
+		// Nothing exists locally and the remote half could not be checked, so the
+		// lookup failure is the whole answer and neither copy is touched.
+		return remoteErr
+	}
+
 	if !localExisted && !remoteExisted {
 		return fmt.Errorf("branch '%s' does not exist locally or on origin; nothing to delete", branch)
 	}
@@ -192,6 +202,14 @@ func Delete(branch string) error {
 			spinner.Clear()
 			return fmt.Errorf("failed to delete local branch '%s': %s", branch, strings.TrimSpace(stderr.String()))
 		}
+	}
+
+	if remoteErr != nil {
+		spinner.Clear()
+		// Reaching here means the local copy existed and has just been deleted. The
+		// remote half could not be checked, so it must not be reported as absent:
+		// name the half that is gone and wrap the lookup failure.
+		return fmt.Errorf("deleted local branch '%s' but %w", branch, remoteErr)
 	}
 
 	if remoteExisted {
@@ -218,7 +236,9 @@ func Delete(branch string) error {
 	case localExisted:
 		spinner.Stop(fmt.Sprintf("Branch '%s' deleted locally.", branch), "🗑️")
 		utils.Info("Remote branch '%s' does not exist. Skipping remote deletion.", branch)
-	default:
+	case remoteExisted:
+		// Explicit instead of a default: only the remote copy existed, and saying so
+		// must not depend on knowing which outcome arms came before this one.
 		spinner.Stop(fmt.Sprintf("Branch '%s' deleted remotely.", branch), "🗑️")
 		utils.Info("Local branch '%s' does not exist. Skipping local deletion.", branch)
 	}
@@ -226,13 +246,48 @@ func Delete(branch string) error {
 	return nil
 }
 
-// RemoteBranchExists checks if a branch exists on the remote `origin`.
+// RemoteBranchExists reports whether a branch exists on the remote `origin`.
 //
-// It runs `git ls-remote --heads origin <branch>` and returns true if the branch exists.
-func RemoteBranchExists(branch string) bool {
+// It runs `git ls-remote --heads origin <branch>`. The bool answers existence and
+// the error answers whether that could be determined, with two states kept apart:
+//
+//   - No `origin` remote is configured. No remote copy of any branch can exist,
+//     which is a known absence determinable locally, so the answer is `false, nil`
+//     and no network call is made.
+//   - `origin` is configured but the lookup fails (unreachable, bad URL, auth).
+//     That is the unknown case, and it returns an error carrying git's own
+//     diagnostics instead of pretending the branch is absent.
+//
+// The lookup's stderr is captured into the error rather than wired to the CLI's
+// streams, so it never reaches stdout.
+func RemoteBranchExists(branch string) (bool, error) {
+	// A missing origin is a known absence, not a failed check: a remote copy can
+	// only live in a remote, and with no remote configured there is none to find.
+	if !HasOriginRemote() {
+		return false, nil
+	}
+
 	cmd := exec.Command("git", "ls-remote", "--heads", "origin", branch)
-	output, err := cmd.Output()
-	return err == nil && len(output) > 0
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		diagnostics := strings.TrimSpace(stderr.String())
+		if diagnostics == "" {
+			diagnostics = strings.TrimSpace(stdout.String())
+		}
+		// Git's own explanation is the reason, so it ends the sentence: the existing
+		// delete and merge messages do the same and never append the exit status
+		// after it. `err` only carries the sentence when Git said nothing at all,
+		// which is the case where the status is the entire information available.
+		if diagnostics == "" {
+			return false, fmt.Errorf("failed to check remote branch '%s' on origin: %w", branch, err)
+		}
+		return false, fmt.Errorf("failed to check remote branch '%s' on origin: %s", branch, diagnostics)
+	}
+
+	return strings.TrimSpace(stdout.String()) != "", nil
 }
 
 // GetLocalBranches returns a list of local Git branch names.

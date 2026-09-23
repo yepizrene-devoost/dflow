@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -131,6 +132,126 @@ func TestDeleteNamesTheCopyThatWasAlreadyGone(t *testing.T) {
 			t.Fatalf("failure must say there is nothing to delete:\n%s", output)
 		}
 	})
+}
+
+// TestDeleteDistinguishesAnAbsentRemoteFromAFailedRemoteLookup is the regression
+// for the ambiguity issue #23 resolves: a failed `git ls-remote` (instrumented
+// here by pointing origin at a path that does not exist, so the failure is
+// deterministic and offline) must never be reported as "the remote branch does
+// not exist".
+//
+// The four rows are the four rules of the deletion contract, and each row pins a
+// different outcome: the local copy is deleted and an error returned when the
+// lookup fails, nothing is touched when there is no local copy either, a
+// successful lookup of an absent remote keeps the idle skip and exit 0, and the
+// neither-exists case keeps its refusal.
+func TestDeleteDistinguishesAnAbsentRemoteFromAFailedRemoteLookup(t *testing.T) {
+	cases := []struct {
+		name            string
+		createLocal     bool
+		reachableOrigin bool
+		wantErr         bool
+		wantContains    string
+		wantExcludes    []string
+	}{
+		{
+			name:         "local copy exists, remote lookup fails",
+			createLocal:  true,
+			wantErr:      true,
+			wantContains: "failed to check remote branch 'feature/example'",
+			// A lookup failure is not knowledge that the branch is absent.
+			wantExcludes: []string{"does not exist"},
+		},
+		{
+			name:         "no local copy, remote lookup fails",
+			createLocal:  false,
+			wantErr:      true,
+			wantContains: "failed to check remote branch 'feature/example'",
+			wantExcludes: []string{"nothing to delete"},
+		},
+		{
+			name:            "remote lookup succeeds and the remote copy is absent",
+			createLocal:     true,
+			reachableOrigin: true,
+		},
+		{
+			name:            "neither copy exists, remote lookup succeeds",
+			createLocal:     false,
+			reachableOrigin: true,
+			wantErr:         true,
+			wantContains:    "nothing to delete",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := initTempGitRepo(t)
+			originURL := filepath.Join(t.TempDir(), "missing-remote")
+			if tc.reachableOrigin {
+				originURL = initBareGitRepo(t)
+			}
+			runGit(t, repo, "remote", "add", "origin", originURL)
+
+			if tc.createLocal {
+				runGit(t, repo, "branch", "feature/example")
+			}
+
+			// Assertions happen outside the chdir closure: a t.Fatalf inside it would
+			// end the test goroutine before the post-call state checks ran.
+			var deleteErr error
+			withWorkingDir(t, repo, func() {
+				deleteErr = gitutils.Delete("feature/example")
+			})
+
+			if tc.wantErr && deleteErr == nil {
+				t.Fatalf("expected Delete to fail")
+			}
+			if !tc.wantErr && deleteErr != nil {
+				t.Fatalf("unexpected error: %v", deleteErr)
+			}
+			if deleteErr != nil {
+				if tc.wantContains != "" && !strings.Contains(deleteErr.Error(), tc.wantContains) {
+					t.Fatalf("error %q does not contain %q", deleteErr.Error(), tc.wantContains)
+				}
+				for _, excluded := range tc.wantExcludes {
+					if strings.Contains(deleteErr.Error(), excluded) {
+						t.Fatalf("error %q must not contain %q", deleteErr.Error(), excluded)
+					}
+				}
+			}
+
+			// Every rule ends with the local pointer absent: the first row proves the
+			// deletion happened (it existed before), the second proves nothing was
+			// touched (it never existed and still does not).
+			if branchExists(t, repo, "feature/example") {
+				t.Fatalf("local branch survived the delete")
+			}
+		})
+	}
+}
+
+// TestDeleteKeepsTheAbsentSkipWhenNoOriginIsConfigured is the end-to-end pair of
+// the lookup distinction: a repository with no `origin` has no remote copy by
+// definition, so deleting the local one keeps #19's exit 0 and skip message
+// instead of failing the whole command. It reuses the same fixture the other
+// real-binary delete tests use, with no origin remote added.
+func TestDeleteKeepsTheAbsentSkipWhenNoOriginIsConfigured(t *testing.T) {
+	setUpCLIEnv(t)
+	binary := buildDflowCLI(t)
+
+	repo := initTempGitRepo(t)
+	runGit(t, repo, "branch", "feature/example")
+
+	output, exitCode := startCLIRawOutput(t, 15*time.Second, repo, binary, "delete", "feature/example", "--yes")
+	if exitCode != 0 {
+		t.Fatalf("deleting without an origin remote exited %d, want 0\n%s", exitCode, output)
+	}
+	if !strings.Contains(output, "Remote branch 'feature/example' does not exist. Skipping remote deletion.") {
+		t.Fatalf("output must report the remote copy as absent, not as an unchecked failure:\n%s", output)
+	}
+	if branchExists(t, repo, "feature/example") {
+		t.Fatalf("local branch survived the delete")
+	}
 }
 
 // TestDeleteReportsWhatRemainsWhenTheRemoteStepFails guards the last part of the
