@@ -6,6 +6,7 @@ import (
 
 	"github.com/yepizrene-devoost/dflow/cmd/commands"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/flow"
 )
 
 func setupStartRepo(t *testing.T) string {
@@ -27,8 +28,8 @@ func setupStartRepo(t *testing.T) string {
 	return repoDir
 }
 
-func startTestConfig() *utils.Config {
-	cfg := &utils.Config{}
+func startTestConfig() *flow.Config {
+	cfg := &flow.Config{}
 	cfg.Branches.Main = "main"
 	cfg.Branches.Develop = "develop"
 	cfg.Branches.Uat = "uat"
@@ -39,7 +40,7 @@ func startTestConfig() *utils.Config {
 	cfg.Flow.Feature.Base = "develop"
 	cfg.Flow.Feature.FinishTargets = []string{"develop"}
 	cfg.Workflow.DefaultMergeMode = "manual"
-	cfg.Workflow.BranchRules = map[string]utils.WorkflowBranchRule{
+	cfg.Workflow.BranchRules = map[string]flow.WorkflowBranchRule{
 		"develop": {MergeMode: "auto"},
 	}
 	return cfg

@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/yepizrene-devoost/dflow/cmd/gitutils"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/flow"
 	"github.com/yepizrene-devoost/dflow/pkg/validators"
 )
 
@@ -92,7 +93,7 @@ var StartCmd = &cobra.Command{
 			)
 		}
 
-		branchType, err := utils.ParseBranchType(args[0])
+		branchType, err := flow.ParseBranchType(args[0])
 		if err != nil {
 			return fmt.Errorf("Unknown type. Use: feat, release, hotfix, bugfix")
 		}
@@ -111,12 +112,12 @@ var StartCmd = &cobra.Command{
 			return err
 		}
 
-		prefix, err := utils.GetBranchPrefix(cfg, branchType)
+		prefix, err := flow.GetBranchPrefix(cfg, branchType)
 		if err != nil {
 			return err
 		}
 
-		rule, err := utils.GetFlowRule(cfg, branchType)
+		rule, err := flow.GetFlowRule(cfg, branchType)
 		if err != nil {
 			return err
 		}

@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/yepizrene-devoost/dflow/cmd/gitutils"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/flow"
 	"github.com/yepizrene-devoost/dflow/pkg/validators"
 )
 
@@ -117,7 +118,7 @@ var InitCmd = &cobra.Command{
 			inverseMode = "auto"
 		}
 
-		cfg := utils.Config{}
+		cfg := flow.Config{}
 		cfg.Branches.Main = mainBranch
 		cfg.Branches.Develop = developBranch
 		cfg.Branches.Uat = uatBranch
@@ -136,7 +137,7 @@ var InitCmd = &cobra.Command{
 		cfg.Flow.Bugfix.FinishTargets = uniqueBranchNames(uatBranch, developBranch)
 
 		cfg.Workflow.DefaultMergeMode = defaultMode
-		cfg.Workflow.BranchRules = make(map[string]utils.WorkflowBranchRule)
+		cfg.Workflow.BranchRules = make(map[string]flow.WorkflowBranchRule)
 
 		// 🎯 ask exceptions at the default mode
 		var exceptionBranches []string
@@ -152,11 +153,11 @@ var InitCmd = &cobra.Command{
 		}
 
 		for _, branch := range allBranches {
-			cfg.Workflow.BranchRules[branch] = utils.WorkflowBranchRule{MergeMode: defaultMode}
+			cfg.Workflow.BranchRules[branch] = flow.WorkflowBranchRule{MergeMode: defaultMode}
 		}
 
 		for _, branch := range exceptionBranches {
-			cfg.Workflow.BranchRules[branch] = utils.WorkflowBranchRule{MergeMode: inverseMode}
+			cfg.Workflow.BranchRules[branch] = flow.WorkflowBranchRule{MergeMode: inverseMode}
 		}
 
 		if err := utils.SaveConfig(&cfg); err != nil {
@@ -168,7 +169,7 @@ var InitCmd = &cobra.Command{
 		fmt.Println("\n✅ Merge behavior summary:")
 		fmt.Printf("   Default mode: %s\n", defaultMode)
 		for _, branch := range allBranches {
-			fmt.Printf("   - %s: %s\n", branch, utils.GetMergeModeForBranch(&cfg, branch))
+			fmt.Printf("   - %s: %s\n", branch, flow.GetMergeModeForBranch(&cfg, branch))
 		}
 		fmt.Println()
 

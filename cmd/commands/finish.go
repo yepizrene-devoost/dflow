@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/yepizrene-devoost/dflow/cmd/gitutils"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/flow"
 	"github.com/yepizrene-devoost/dflow/pkg/validators"
 )
 
@@ -68,7 +69,7 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 			return err
 		}
 
-		plan, err := utils.ResolveFinishPlan(cfg, currentBranch)
+		plan, err := flow.ResolveFinishPlan(cfg, currentBranch)
 		if err != nil {
 			return err
 		}

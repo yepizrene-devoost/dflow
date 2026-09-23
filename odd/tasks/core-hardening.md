@@ -13,7 +13,7 @@ lands in `develop`.
 | --- | --- | --- | --- |
 | WU1 | #12 | `fix(cli): return a non-zero exit code on failure` | open; fix committed, keyword predates the issue-independent work |
 | WU2 | #14 | `fix(cli): make progress output and prompts terminal-aware` | open; fix committed on this branch |
-| WU3 | #15 | `refactor: extract the branch planning core from the command layer` | open; pending |
+| WU3 | #15 | `refactor: extract the branch planning core from the command layer` | open; split into extraction + output routing; extraction implemented on this branch |
 | WU4 | #16 | `feat(cli): expose machine-readable state and validate merge modes` | open; pending |
 
 Closure: the WU3 and WU4 work-unit commits carry `Closes #15` and `Closes #16`.
@@ -69,12 +69,17 @@ decisions in each client.
      flags and the interactive `init` requirement; see the WU2 OUTCOME under
      `## Evidence`.
 
-3. [ ] WU3 — extract the pure core into `pkg/flow`
-   - Move the planning and decision logic out of `cmd/utils` and replace direct
-     `fmt.Printf` output with an output sink, so CLI, future TUI and future
-     forge/deploy clients share one source of truth.
-   - Evidence pending: core package builds without depending on stdout; existing
-     tests stay green.
+3. [x] WU3 — extract the pure core into `pkg/flow`
+   - Move the planning and decision logic (config schema and YAML compatibility,
+     branch types, finish planning) out of `cmd/utils` into a pure package, so
+     CLI, future TUI and future forge/deploy clients share one source of truth.
+     The unit ships as two commits for reviewability: this extraction commit, and
+     a following output-routing commit under the same issue that replaces direct
+     `fmt.Printf` output with an output sink.
+   - Evidence: `pkg/flow` builds with no I/O imports, no `cmd/*` dependency and no
+     cycle; every moved body is byte-identical to its original; the existing suite
+     stays green with import/qualifier changes only; see the WU3 OUTCOME under
+     `## Evidence`.
 
 4. [ ] WU4 — machine-readable state and validated merge modes
    - `dflow status --json`, `finish --dry-run --json`, and validation of
@@ -145,3 +150,31 @@ prompt to publish the new branch without an interactive terminal; pass --push to
 or --no-push to keep it local`, branch absent, `develop` still checked out, nothing
 published. No PTY test for the interactive skipped-push path: it is not testable with the
 current harness. WU3–WU4 remain unchecked.
+
+### WU3 — extract the pure core
+
+OUTCOME: done (the extraction half; the output sink is the follow-up half). Created the
+pure `pkg/flow` package and moved the branching domain into it: the config schema and its
+YAML compatibility rules (`Config`, `BranchFlowRule`, `FlowConfig`, `WorkflowConfig`,
+`WorkflowBranchRule`, their `UnmarshalYAML`/`MarshalYAML` methods and the `uniqueStrings`
+helper, legacy flat-format support included), the branch model (`BranchType` plus its four
+constants, `ParseBranchType`, `DetectBranchType`, `GetBranchPrefix`, `GetFlowRule`) and
+finish planning (`FinishTarget`, `FinishPlan`, `ResolveFinishPlan`, `AutoTargets`,
+`ManualTargets`, `GetMergeModeForBranch`). `cmd/utils/workflow.go` is deleted and
+`cmd/utils/config.go` keeps only `LoadConfig`/`SaveConfig` (now `*flow.Config`, banner
+comment and error strings byte-identical) next to the existing message, spinner and TTY
+helpers. `cmd/commands/*` and `cmd/tests/*` changed by import path and package qualifier
+only, with no assertion touched; `start_cli_test.go` needed no edit because it reaches the
+moved types through the `startTestConfig` helper. `pkg/flow` imports only `fmt`, `slices`,
+`strings` and `gopkg.in/yaml.v3`: no I/O, no printing, no `cmd/*` dependency and therefore
+no cycle.
+Files changed: `pkg/flow/{doc,config,workflow}.go` (new), `cmd/utils/config.go`,
+`cmd/utils/workflow.go` (deleted), `cmd/commands/{init,start,finish}.go`,
+`cmd/tests/{finish_cmd,start_cmd,utils,workflow}_test.go`, `.agents/MEMORY.md`.
+Checks: `go build ./...` ok, `go vet ./...` ok, `gofmt -l .` empty, `git diff --check`
+empty, `go test -count=1 ./...` green (`ok .../cmd/tests 8.022s`). No-behaviour-change
+proof: diffing the moved line ranges against their originals is empty (byte-identical
+bodies), and the whole-tree multiset of Go string literals is unchanged apart from import
+paths — the single removed literal is the `cmd/utils` import and the added ones are eight
+`pkg/flow` imports plus `gopkg.in/yaml.v3`, which moved with the YAML methods. No
+user-facing message, error string or generated YAML changed. WU4 remains unchecked.

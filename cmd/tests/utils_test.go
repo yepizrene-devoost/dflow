@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/flow"
 )
 
 // TestSaveAndLoadConfig verifies that the dflow configuration can be saved
@@ -16,7 +17,7 @@ func TestSaveAndLoadConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("DFLOW_CWD", tmpDir)
 
-	original := &utils.Config{}
+	original := &flow.Config{}
 	original.Branches.Main = "main"
 	original.Branches.Develop = "develop"
 	original.Branches.Uat = "uat"
@@ -35,7 +36,7 @@ func TestSaveAndLoadConfig(t *testing.T) {
 	original.Flow.Bugfix.FinishTargets = []string{"uat", "develop"}
 
 	original.Workflow.DefaultMergeMode = "manual"
-	original.Workflow.BranchRules = map[string]utils.WorkflowBranchRule{
+	original.Workflow.BranchRules = map[string]flow.WorkflowBranchRule{
 		"main":    {MergeMode: "manual"},
 		"develop": {MergeMode: "auto"},
 		"uat":     {MergeMode: "auto"},
@@ -72,8 +73,8 @@ func TestSaveAndLoadConfig(t *testing.T) {
 		t.Fatalf("expected 3 hotfix targets, got %d", len(loaded.Flow.Hotfix.FinishTargets))
 	}
 
-	if utils.GetMergeModeForBranch(loaded, "develop") != "auto" {
-		t.Errorf("expected develop merge mode 'auto', got '%s'", utils.GetMergeModeForBranch(loaded, "develop"))
+	if flow.GetMergeModeForBranch(loaded, "develop") != "auto" {
+		t.Errorf("expected develop merge mode 'auto', got '%s'", flow.GetMergeModeForBranch(loaded, "develop"))
 	}
 }
 
@@ -120,8 +121,8 @@ workflow:
 		t.Fatalf("expected feature finish target 'develop', got %v", loaded.Flow.Feature.FinishTargets)
 	}
 
-	if utils.GetMergeModeForBranch(loaded, "main") != "manual" {
-		t.Errorf("expected main merge mode 'manual', got '%s'", utils.GetMergeModeForBranch(loaded, "main"))
+	if flow.GetMergeModeForBranch(loaded, "main") != "manual" {
+		t.Errorf("expected main merge mode 'manual', got '%s'", flow.GetMergeModeForBranch(loaded, "main"))
 	}
 
 	saved, err := os.ReadFile(configPath)
