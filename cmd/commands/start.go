@@ -29,10 +29,13 @@ import (
 // under `branches.features`, `branches.releases`, or `branches.hotfixes`.
 //
 // This command performs the following steps:
-//  1. Checks out the appropriate base branch
-//  2. Pulls the latest changes from origin
-//  3. Creates and checks out the new branch
-//  4. Prompts the user to push the new branch to origin
+//
+//  1. Fails fast when no terminal is available and neither --push nor --no-push
+//     was given, before loading config or touching the repository
+//  2. Checks out the appropriate base branch
+//  3. Pulls the latest changes from origin
+//  4. Creates and checks out the new branch
+//  5. Prompts the user to push the new branch to origin
 //
 // Example usage:
 //
@@ -76,6 +79,17 @@ var StartCmd = &cobra.Command{
 		noPushFlag, _ := cmd.Flags().GetBool("no-push")
 		if pushFlag && noPushFlag {
 			return fmt.Errorf("--push and --no-push cannot be used together")
+		}
+
+		// Fail fast, before loading config or touching the repository. The publish
+		// prompt can never be answered without a terminal, and a handler that
+		// exits non-zero must not have created a branch first: a caller that sees
+		// a failure and retries would otherwise hit "branch already exists".
+		if !pushFlag && !noPushFlag && !utils.IsInteractive() {
+			return utils.NonInteractiveError(
+				"prompt to publish the new branch",
+				"pass --push to publish or --no-push to keep it local",
+			)
 		}
 
 		branchType, err := utils.ParseBranchType(args[0])
@@ -147,12 +161,15 @@ var StartCmd = &cobra.Command{
 
 		pushBranch := pushFlag
 		if !pushFlag && !noPushFlag {
-			err = survey.AskOne(&survey.Confirm{
+			if err := survey.AskOne(&survey.Confirm{
 				Message: fmt.Sprintf("Do you want to publish '%s' to origin?", fullName),
 				Default: true,
-			}, &pushBranch)
-			if err != nil {
-				fmt.Println("⚠️  Skipping push... use --push to publish non-interactively")
+			}, &pushBranch); err != nil {
+				// The branch is already created, so the primary work succeeded.
+				// Report the skipped side effect honestly and exit 0; returning an
+				// error here would claim failure for work that partly happened.
+				utils.Warn("Branch '%s' was created, but the publish prompt could not be answered; the push was skipped.", fullName)
+				utils.Info("Publish it later with: git push -u origin %s", fullName)
 				return nil
 			}
 		}

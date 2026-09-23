@@ -69,6 +69,9 @@ var InitCmd = &cobra.Command{
   This command is meant to be run once per project when setting up the dflow branching model.`,
 	Example: `  dflow init`,
 	RunE: validators.WithChecks(true, func(cmd *cobra.Command, args []string) error {
+		if !utils.IsInteractive() {
+			return fmt.Errorf("dflow init is interactive and requires a terminal")
+		}
 
 		var mainBranch, developBranch, uatBranch string
 

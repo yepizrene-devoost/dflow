@@ -75,6 +75,13 @@ The email can be passed with --email or entered interactively when omitted.`,
 		if len(args) > 0 {
 			name = args[0]
 		} else {
+			if !utils.IsInteractive() {
+				return utils.NonInteractiveError(
+					"prompt for an author name",
+					`pass the name as an argument, e.g. dflow config set-author "Jane Doe"`,
+				)
+			}
+
 			fmt.Print("👤 Enter author name: ")
 			reader := bufio.NewReader(os.Stdin)
 			name, err = reader.ReadString('\n')
@@ -89,6 +96,13 @@ The email can be passed with --email or entered interactively when omitted.`,
 		// get email from flag or prompt input
 		email, _ = cmd.Flags().GetString("email")
 		if email == "" {
+			if !utils.IsInteractive() {
+				return utils.NonInteractiveError(
+					"prompt for an author email",
+					`pass --email, e.g. dflow config set-author "Jane Doe" --email=jane@example.com`,
+				)
+			}
+
 			fmt.Print("📧 Enter author email: ")
 			reader := bufio.NewReader(os.Stdin)
 			email, err = reader.ReadString('\n')

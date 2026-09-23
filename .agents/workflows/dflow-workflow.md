@@ -16,7 +16,7 @@ configuration lives in `.dflow.yaml`; this file explains how to read and apply i
 | `dflow finish` | Merge the current branch into its configured `auto` targets |
 | `dflow finish --dry-run` | Preview the finish plan without merging or pushing |
 | `dflow finish --delete` | Also delete the branch when no `manual` targets remain |
-| `dflow delete <branch>` | Delete a branch locally and remotely |
+| `dflow delete <branch> [--yes]` | Delete a branch locally and remotely |
 | `dflow config set-author "Name" --email ...` | Store local `dflow.author` / `dflow.email` |
 | `dflow completion [install]` | Generate shell completions |
 | `dflow version` | Show the CLI version |
@@ -85,7 +85,9 @@ Default agent behavior: propose a PR. Direct merge is explicit, never assumed.
 
 `dflow start <type> <name> --from <parent>` creates a stacked branch from an
 existing work branch instead of the configured base. Pass `--push` or
-`--no-push` to publish non-interactively; passing both is an error.
+`--no-push` to publish non-interactively; passing both is an error, and a
+missing terminal now fails fast before the branch is created instead of
+prompting.
 
 When a stacked parent merges, rebase each child with
 `git rebase --onto <target> <old-parent> <child>` and retarget its PR. A

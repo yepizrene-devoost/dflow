@@ -39,7 +39,7 @@ tasks with a customizable flow model.`,
 	SilenceUsage:  true,
 
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		if shouldSkipBanner(os.Args[1:]) {
+		if !utils.IsInteractive() || shouldSkipBanner(os.Args[1:]) {
 			return
 		}
 		utils.PrintBanner()

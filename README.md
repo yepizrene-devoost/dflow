@@ -112,6 +112,8 @@ go install
 
 ## 🛠️ Commands
 
+When the output is not a terminal, progress output degrades to plain single lines and the startup banner is suppressed.
+
 ### `dflow init`
 
 Interactive setup for your repository.
@@ -157,8 +159,9 @@ dflow start feat local-experiment --no-push # Keep local only
 ```
 
 Scripts and non-TTY callers **MUST supply exactly one** of `--push` or
-`--no-push`. Without either flag, the interactive push prompt remains; dflow
-does not automatically detect non-TTY input. The two flags cannot be combined.
+`--no-push`. When the output is not a terminal and neither flag is given, dflow
+detects it and fails fast before creating anything, instead of leaving the
+interactive prompt waiting. The two flags cannot be combined.
 
 ### `dflow finish`
 
@@ -187,9 +190,12 @@ Delete a branch locally and remotely.
 
 ```bash
 dflow delete feature/login-form
+dflow delete feature/login-form --yes
 ```
 
 - Asks for confirmation before deleting anything
+- Supports `--yes`/`-y` to skip the confirmation, for scripts and agents
+- Without a terminal the confirmation cannot be answered, so the command exits non-zero unless `--yes` is passed
 - Removes the local branch
 - Deletes the remote branch from `origin` when it exists
 

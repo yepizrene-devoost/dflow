@@ -35,7 +35,7 @@ decisions in each client.
      double-print, and have every command return its error after `utils.Error`.
    - Evidence: exit-code assertions in `cmd/tests`; see the WU1 OUTCOME under `## Evidence`.
 
-2. [ ] WU2 — TTY awareness
+2. [x] WU2 — TTY awareness
    - `cmd/utils/spinner.go` writes `\r<frame> <message>` every 100ms
      unconditionally, so a captured stdout prints every frame on its own line;
      `Stop` additionally emits ANSI `\r\033[K`. The banner and the prompts make
@@ -44,7 +44,12 @@ decisions in each client.
      spinner emits one plain line, the banner is suppressed, and prompts fail
      fast with an actionable message and a non-zero exit instead of hanging or
      degrading silently.
-   - Evidence pending: non-TTY CLI test asserting single-line output.
+   - `delete` gains a `--yes`/`-y` flag so a fail-fast confirmation message can
+     name a flag that exists; `start` fails fast naming `--push`/`--no-push`.
+   - Evidence: non-TTY CLI tests assert no `\r`, no ANSI escape, no banner and a
+     single pull status line, plus non-zero exits naming `--yes`, both push
+     flags and the interactive `init` requirement; see the WU2 OUTCOME under
+     `## Evidence`.
 
 3. [ ] WU3 — extract the pure core into `pkg/flow`
    - Move the planning and decision logic out of `cmd/utils` and replace direct
@@ -77,3 +82,48 @@ Files changed: `pkg/validators/validators.go`, `cmd/root/root.go`,
 Checks: `go build ./...` ok, `gofmt -l .` empty, `go test -count=1 ./...` green
 (`ok .../cmd/tests 7.233s`), `git diff --check` empty; new CLI assertions cover exit 1 on
 failure (single render) and exit 0 on success. WU2–WU4 remain unchecked.
+
+### WU2 — TTY awareness
+
+OUTCOME: done. Added `utils.IsInteractive()` (both stdin and stdout must be a terminal,
+via `golang.org/x/term.IsTerminal`) and gated every terminal assumption on it. When
+non-interactive the spinner prints the status message once on `Start` and a final icon
+plus message on `Stop` with no frames, no `\r` and no ANSI escape (and no double-close,
+since `Stop` is idempotent); the banner is skipped; and prompts fail fast with an
+actionable error that the WU1 single render point turns into exit 1. `delete` gained a
+`--yes`/`-y` flag and its prompt error path now returns the error instead of reporting
+success; `start` names `--push`/`--no-push`; `config set-author` names the argument or
+`--email`; `init` states it requires a terminal.
+Files changed: `cmd/utils/tty.go` (new), `cmd/utils/spinner.go`, `cmd/root/root.go`,
+`cmd/commands/{start,delete,config,init}.go`, `cmd/tests/start_cli_test.go`, `go.mod`
+(`golang.org/x/term` promoted to a direct requirement; `go.sum` unchanged).
+Checks: `go build ./...` ok, `gofmt -l .` empty, `go test -count=1 ./...` green
+(`ok .../cmd/tests 8.449s`), `git diff --check` empty. New subprocess assertions cover
+clean non-interactive output (no `\r`, no `\x1b[`, no banner, one pull status line) and
+fail-fast non-zero exits naming `--yes`, `--push`/`--no-push` and `init`'s terminal
+requirement. WU3–WU4 remain unchecked.
+
+FOLLOW-UP (review defects, same work unit): fixed two WU2 defects and synced the docs.
+(1) `start`'s non-interactive guard now runs at the top of `RunE`, next to the
+`--push`/`--no-push` conflict check and before `utils.LoadConfig`, every checkout, the
+pull and `gitutils.CheckoutNew`, so a refused invocation leaves the repository untouched
+instead of creating the branch and then exiting non-zero (which made a retry fail with
+"branch already exists"). (2) The interactive publish-prompt failure path no longer
+returns an error: it prints a warning that the branch WAS created but the push was
+skipped plus the exact `git push -u origin <branch>` command, and returns `nil`, so a
+command whose primary side effect succeeded exits 0. Synced `README.md` (start fail-fast
+paragraph, `delete` `--yes`/`-y`, the non-TTY progress/banner note) and
+`.agents/workflows/dflow-workflow.md` (`delete [--yes]` row and the chained-branch
+paragraph). Added the Defect 1 regression test in `cmd/tests/start_cli_test.go`:
+`dflow start feat no-flags` with no push flags exits non-zero and `feature/no-flags` is
+absent (`git branch --list`, `git rev-parse --verify`), with the fixture branch and HEAD
+unchanged.
+Files changed: `cmd/commands/start.go`, `cmd/tests/start_cli_test.go`, `README.md`,
+`.agents/workflows/dflow-workflow.md`.
+Checks: `go build ./...` ok, `gofmt -l .` empty, `go test -count=1 ./...` green
+(`ok .../cmd/tests 7.914s`), `git diff --check` empty. Manual real-binary run in a scratch
+clone outside the repository: `dflow start feat scratch-no-flags` exited 1 with `cannot
+prompt to publish the new branch without an interactive terminal; pass --push to publish
+or --no-push to keep it local`, branch absent, `develop` still checked out, nothing
+published. No PTY test for the interactive skipped-push path: it is not testable with the
+current harness. WU3–WU4 remain unchecked.
