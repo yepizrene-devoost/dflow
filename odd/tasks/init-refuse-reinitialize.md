@@ -139,3 +139,18 @@ config`, seven paths (the two production files, the new regression suite, the th
 documentation files and this feature document), 360 insertions and 3 deletions. This stage is
 closed by the short follow-up `docs(odd)` commit that carries this line, which is the one
 exception the repository allows for recording a commit identity.
+
+## Native review
+
+The branch was reviewed as candidate `review-72049692aa5c6e1f` over `develop..77402a3` (base
+`7b3dc7aca8588fe33e54ef94afe863efbc106ef7`, committed range, 7 changed paths, 365 changed
+lines): tier `medium`, one consolidated lens (`review-reliability`), **approved** with no
+findings, and the authority burned as `gentle-ai.review-acknowledged/v1`.
+
+The engine selected a single lens because the only path it classified as executable was
+`.agents/workflows/dflow-workflow.md`; the rest is code, tests and prose that one consolidated
+review covers at this size. No advisory was recorded and no correction was opened, so nothing
+followed the approval.
+
+Delivery is a separate decision under ordinary repository policy: the approval is a review
+outcome, not an authorization to merge.
