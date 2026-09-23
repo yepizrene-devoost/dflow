@@ -14,7 +14,7 @@ lands in `develop`.
 | WU1 | #12 | `fix(cli): return a non-zero exit code on failure` | open; keyword carried by the closing `docs(odd)` commit |
 | WU2 | #14 | `fix(cli): make progress output and prompts terminal-aware` | open; keyword carried by the closing `docs(odd)` commit |
 | WU3 | #15 | `refactor: extract the branch planning core from the command layer` | open; extraction and output routing committed on this branch |
-| WU4 | #16 | `feat(cli): expose machine-readable state and validate merge modes` | open; pending |
+| WU4 | #16 | `feat(cli): expose machine-readable state and validate merge modes` | open; fix committed on this branch |
 | WU5 | #17 | `fix(cli): keep the status icon in the chrome instead of the message` | open; fix committed on this branch |
 
 Closure: `Closes #15`, `Closes #16` and `Closes #17` ride on their own
@@ -89,11 +89,11 @@ decisions in each client.
      stays green with import/qualifier changes only; see the WU3 OUTCOME under
      `## Evidence`.
 
-4. [ ] WU4 — machine-readable state and validated merge modes
+4. [x] WU4 — machine-readable state and validated merge modes (issue #16)
    - `dflow status --json`, `finish --dry-run --json`, and validation of
      `merge_mode` so an unknown value fails loudly instead of silently matching
      neither `auto` nor `manual`.
-   - Evidence pending: JSON output assertions.
+   - Evidence: JSON output assertions in `cmd/tests`; see the WU4 OUTCOME under `## Evidence`.
 
 5. [x] WU5 — keep the status icon in the chrome (issue #17)
    - Found while verifying the branch, and ordered before WU4 because the JSON
@@ -275,3 +275,96 @@ inside a scratch clone after already writing the three source files and the test
 orchestrator completed the verification, the reproduction and this record. HEAD, every local
 branch and the reflog were inspected and found intact before resuming; the forced deletion the
 prompt referred to was inside a temporary clone outside the repository. WU4 remains unchecked.
+
+### WU4 — machine-readable state and validated modes (issue #16)
+
+OUTCOME: done. The contract a non-interactive caller depends on is now complete: a
+deterministic exit code (WU1), terminal-aware output (WU2), a machine-readable mode, and a
+`merge_mode` that fails loudly instead of silently skipping a target.
+
+Added `cmd/utils/output.go`: `Format` with `FormatHuman` (the zero value) and `FormatJSON`,
+`SetFormat`, `CurrentFormat`, and `EmitJSON`, which writes one compact newline-terminated
+JSON document to stdout. `cmd/utils/messages.go` is the single suppression point: `Plain`,
+`Prompt` and `printWithIcon` (and therefore `Error`, `Info`, `Success` and `Warn`) return
+before writing when the format is `FormatJSON`, so stdout carries the document and nothing
+else. Human mode is byte-identical to before. `cmd/root/root.go` renders a failure in JSON
+mode as one `{"error": ...}` document while still exiting 1, registers `StatusCmd`, and
+`shouldSkipBanner` now skips the banner when `--json` appears in the arguments, including
+`--json=true` (parsed with `strconv.ParseBool`, so an explicit `--json=false` still gets the
+banner).
+
+New `cmd/commands/status.go`: a config-dependent, `Args: cobra.NoArgs` command whose
+`PreRunE` sets the format early enough that a pre-handler failure such as a missing
+`.dflow.yaml` is also rendered as JSON (Cobra runs `PersistentPreRun`, then `PreRunE`, then
+the `WithChecks` wrapper inside `RunE`). It reports the current branch, the detected type, the
+resolved base, every target with its effective merge mode, whether the tree is clean, whether
+a merge is in progress, and whether an origin remote exists. A branch that matches no
+configured prefix is a successful query: empty `branch_type`, empty `base`, empty `targets`
+array, exit 0. Human mode prints the same seven keys as greppable `key: value` lines through
+`utils.Plain`, with `targets` rendered as `branch (merge_mode)` pairs and no icons.
+
+`cmd/commands/finish.go` gained `--json`. Its `PreRunE` sets the format first and then rejects
+`--json` without `--dry-run` with `--json requires --dry-run: a mutating finish has no JSON
+report, so --json would only hide the plan. Run \`dflow finish --dry-run --json\``, so the
+rejection is itself a JSON error document and exit 1. With `--dry-run`, JSON mode
+short-circuits before any human line and emits `finishPlanReport`; the human dry-run path is
+unchanged because the JSON branch returns first. `targetView` is shared by both commands, and
+`targetViews`/`nonNilStrings` keep empty lists as `[]` rather than `null`.
+
+`pkg/flow/workflow.go` added `MergeModeAuto`, `MergeModeManual` and `IsValidMergeMode`, replaced
+the two comparison literals in `AutoTargets`/`ManualTargets`, and made `ResolveFinishPlan`
+return a hard error for an unrecognized effective merge mode: `branch "develop" has invalid
+merge mode "pr": use "auto" or "manual"`. An empty value gets the config-aware message
+`branch "develop" has merge mode "", which is unset: set workflow.default_merge_mode or the
+workflow.branch_rules entry for "develop" to "auto" or "manual"`. `GetMergeModeForBranch`
+still returns the raw string so the error can name it. This is the unit's one intentional
+behaviour change and it is stated in the README: a config that previously did nothing silently
+now fails loudly.
+
+Files changed: `cmd/utils/output.go` (new), `cmd/utils/messages.go`, `cmd/commands/status.go`
+(new), `cmd/commands/finish.go`, `cmd/root/root.go`, `pkg/flow/workflow.go`,
+`cmd/tests/status_cli_test.go` (new), `README.md`, `.agents/workflows/dflow-workflow.md`.
+`cmd/gitutils/finish.go` was an allowed surface but needed no change: no merge-mode literal is
+compared there.
+
+Checks: `gofmt -l .` empty, `go build ./...` ok, `go vet ./...` ok, `git diff --check` empty,
+`go test -count=1 ./...` green (`ok .../cmd/tests 10.037s`). The new real-binary suite
+(`TestStatusAndFinishJSONCLI`, seven subtests) parses stdout with `encoding/json` and a
+`json.Decoder` that rejects trailing content, asserts no banner, no carriage return, no ANSI
+escape and no icon, and covers the invalid and unset merge modes, human `status` and the
+unchanged human `finish --dry-run`.
+
+Manual real-binary run in scratch repositories created under `$(mktemp -d)`, every JSON
+document piped through `python3 -m json.tool`:
+
+```
+$ dflow status                                              # exit 0
+branch: feature/example
+branch_type: feature
+base: develop
+targets: develop (auto)
+working_tree_clean: true
+merge_in_progress: false
+has_origin: true
+
+$ dflow status --json                                       # exit 0
+{"branch":"feature/example","branch_type":"feature","base":"develop","targets":[{"branch":"develop","merge_mode":"auto"}],"working_tree_clean":true,"merge_in_progress":false,"has_origin":true}
+
+$ dflow finish --dry-run --json                             # exit 0
+{"current_branch":"feature/example","branch_type":"feature","base":"develop","return_branch":"develop","targets":[{"branch":"develop","merge_mode":"auto"}],"auto_targets":["develop"],"manual_targets":[],"delete_requested":false,"dry_run":true}
+
+$ dflow finish --json                                       # exit 1
+{"error":"--json requires --dry-run: a mutating finish has no JSON report, so --json would only hide the plan. Run `dflow finish --dry-run --json`"}
+
+$ dflow status --json   # non-work branch main            # exit 0
+{"branch":"main","branch_type":"","base":"","targets":[],"working_tree_clean":true,"merge_in_progress":false,"has_origin":true}
+
+$ dflow finish --dry-run   # merge_mode: pr               # exit 1
+❌   branch "develop" has invalid merge mode "pr": use "auto" or "manual"
+
+$ dflow finish --dry-run   # merge_mode unset             # exit 1
+❌   branch "develop" has merge mode "", which is unset: set workflow.default_merge_mode or the workflow.branch_rules entry for "develop" to "auto" or "manual"
+```
+
+No branch was deleted and no destructive Git command was run in the scratch repositories. WU4
+is the last unit: every task in this file is now closed.

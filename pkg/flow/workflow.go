@@ -5,6 +5,20 @@ import (
 	"strings"
 )
 
+// Merge modes. These are the only values workflow.default_merge_mode and
+// workflow.branch_rules.<branch>.merge_mode may take.
+const (
+	// MergeModeAuto means dflow merges and pushes the target itself.
+	MergeModeAuto = "auto"
+	// MergeModeManual means the target is left for PR/manual review flow.
+	MergeModeManual = "manual"
+)
+
+// IsValidMergeMode reports whether mode is one of the supported merge modes.
+func IsValidMergeMode(mode string) bool {
+	return mode == MergeModeAuto || mode == MergeModeManual
+}
+
 // BranchType identifies the supported dflow working branch categories.
 type BranchType string
 
@@ -125,20 +139,45 @@ func ResolveFinishPlan(cfg *Config, currentBranch string) (*FinishPlan, error) {
 	}
 
 	for _, branch := range targetNames {
+		mergeMode := GetMergeModeForBranch(cfg, branch)
+		if !IsValidMergeMode(mergeMode) {
+			return nil, invalidMergeModeError(branch, mergeMode)
+		}
+
 		plan.Targets = append(plan.Targets, FinishTarget{
 			Branch:    branch,
-			MergeMode: GetMergeModeForBranch(cfg, branch),
+			MergeMode: mergeMode,
 		})
 	}
 
 	return plan, nil
 }
 
+// invalidMergeModeError describes an effective merge mode that dflow cannot act
+// on.
+//
+// An empty value is not a typo but missing configuration, so that message points
+// at both places the value could be set. A non-empty value is mistyped, so the
+// message names the offending value and the accepted ones.
+func invalidMergeModeError(branch, mergeMode string) error {
+	if mergeMode == "" {
+		return fmt.Errorf(
+			"branch %q has merge mode %q, which is unset: set workflow.default_merge_mode or the workflow.branch_rules entry for %q to %q or %q",
+			branch, mergeMode, branch, MergeModeAuto, MergeModeManual,
+		)
+	}
+
+	return fmt.Errorf(
+		"branch %q has invalid merge mode %q: use %q or %q",
+		branch, mergeMode, MergeModeAuto, MergeModeManual,
+	)
+}
+
 // AutoTargets returns the branches that can be merged directly by dflow.
 func (p FinishPlan) AutoTargets() []string {
 	var branches []string
 	for _, target := range p.Targets {
-		if target.MergeMode == "auto" {
+		if target.MergeMode == MergeModeAuto {
 			branches = append(branches, target.Branch)
 		}
 	}
@@ -149,7 +188,7 @@ func (p FinishPlan) AutoTargets() []string {
 func (p FinishPlan) ManualTargets() []string {
 	var branches []string
 	for _, target := range p.Targets {
-		if target.MergeMode == "manual" {
+		if target.MergeMode == MergeModeManual {
 			branches = append(branches, target.Branch)
 		}
 	}

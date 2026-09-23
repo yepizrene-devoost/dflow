@@ -183,6 +183,37 @@ dflow finish --delete
 - Does not delete the source branch automatically
 - Supports `--delete` to remove the finished branch locally and remotely after a successful finish when no manual targets remain
 - Supports `--dry-run` to preview the plan without fetching, merging, or pushing
+- Supports `--dry-run --json` to print that plan as a single JSON document for scripts and agents; `--json` requires `--dry-run`, because a mutating finish has no report to serialize and `--json` would only hide the plan
+
+### `dflow status`
+
+Report the current dflow state without changing anything.
+
+```bash
+dflow status
+dflow status --json
+```
+
+- Prints the checked out branch, its detected work type, the resolved base, every finish target with its effective merge mode, whether the working tree is clean, whether a merge is in progress, and whether an `origin` remote exists
+- Uses greppable `key: value` lines, so the report can be read, diffed, or grepped
+- Reports an empty `branch_type`, an empty `base` and an empty target list when the branch does not match any configured dflow prefix; that is a successful query that means "not a work branch", not an error
+- Supports `--json` to emit the same report as a single JSON document on stdout
+
+In JSON mode stdout carries exactly one JSON document and nothing else: no
+banner, no icons and no progress lines. The same applies to
+`dflow finish --dry-run --json`, which serializes the finish plan.
+
+```json
+{
+  "branch": "feature/example",
+  "branch_type": "feature",
+  "base": "develop",
+  "targets": [{"branch": "develop", "merge_mode": "auto"}],
+  "working_tree_clean": true,
+  "merge_in_progress": false,
+  "has_origin": true
+}
+```
 
 ### `dflow delete <branch>`
 
@@ -303,6 +334,13 @@ workflow:
 - `workflow.default_merge_mode` is the fallback mode used for targets not explicitly listed in `branch_rules`.
 - `workflow.branch_rules.<branch>.merge_mode` controls whether a target branch is handled by direct merge (`auto`) or left for PR/manual flow (`manual`).
 
+The only valid merge modes are `auto` and `manual`. When a finish target
+resolves to an unknown value, or to an empty one because neither
+`workflow.default_merge_mode` nor its `workflow.branch_rules` entry is set,
+`dflow finish` and `dflow status` fail with an error naming the branch and the
+offending value. The error points at the unset configuration when the value is
+empty. Previously such a target matched neither mode and was skipped silently.
+
 If `uat` and `develop` are the same branch in your repository, dflow automatically deduplicates finish targets so the same branch is not processed twice. In that setup, a feature configured for both `develop` and `uat` will be processed only once.
 
 ### How `dflow finish` Works
@@ -351,7 +389,8 @@ dflow finish
 - ✅ Customizable prefixes, base branches, finish targets, and merge rules
 - ✅ Support for hybrid workflows (direct merge + PR)
 - ✅ Git-aware config, validation, and branch safety checks
-- ✅ `dflow finish` with auto/manual target handling and `--dry-run`
+- ✅ `dflow finish` with auto/manual target handling, `--dry-run`, and a JSON plan report
+- ✅ `dflow status` with a JSON report for scripts and agents
 - ✅ `dflow delete`, `dflow completion`, and `dflow version`
 - ✅ Go Reference available on `pkg.go.dev`
 - 📦 Multiplatform builds (via `GoReleaser`)

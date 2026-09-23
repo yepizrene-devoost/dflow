@@ -7,6 +7,7 @@ package root
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -65,6 +66,17 @@ func Execute() {
 	if err := RootCmd.Execute(); err != nil {
 		// Single render point: Cobra is silenced above, so the failure is
 		// reported once here and the process exits non-zero.
+		//
+		// In JSON mode that same failure must still be machine-readable: it
+		// becomes one {"error": ...} document on stdout, and the non-zero exit
+		// code is unchanged.
+		if utils.CurrentFormat() == utils.FormatJSON {
+			if emitErr := utils.EmitJSON(map[string]string{"error": err.Error()}); emitErr != nil {
+				fmt.Fprintf(os.Stderr, "failed to encode the error as JSON: %v\n", emitErr)
+			}
+			os.Exit(1)
+		}
+
 		utils.Error("%s", err.Error())
 		os.Exit(1)
 	}
@@ -75,6 +87,7 @@ func init() {
 	RootCmd.AddCommand(commands.InitCmd)
 	RootCmd.AddCommand(commands.StartCmd)
 	RootCmd.AddCommand(commands.FinishCmd)
+	RootCmd.AddCommand(commands.StatusCmd)
 	RootCmd.AddCommand(commands.ConfigCmd)
 	RootCmd.AddCommand(commands.DeleteCmd)
 	RootCmd.AddCommand(VersionCmd)
@@ -92,6 +105,19 @@ func shouldSkipBanner(args []string) bool {
 	for _, arg := range args {
 		if strings.HasPrefix(arg, "__complete") || arg == "completion" || arg == "--help" || arg == "-h" || arg == "help" || arg == "--version" || arg == "-V" || arg == "version" || arg == "ver" {
 			return true
+		}
+
+		// A machine-readable invocation must never receive the banner. `--json`
+		// reaches this function before any command sets the output format, so the
+		// argument itself is the signal; the `--json=true` form and its boolean
+		// siblings are honoured, while an explicit `--json=false` is not.
+		if arg == "--json" {
+			return true
+		}
+		if value, ok := strings.CutPrefix(arg, "--json="); ok {
+			if enabled, err := strconv.ParseBool(value); err == nil && enabled {
+				return true
+			}
 		}
 	}
 	return false

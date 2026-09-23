@@ -15,7 +15,9 @@ configuration lives in `.dflow.yaml`; this file explains how to read and apply i
 | `dflow start <type> <name>` | Create and switch to a work branch |
 | `dflow finish` | Merge the current branch into its configured `auto` targets |
 | `dflow finish --dry-run` | Preview the finish plan without merging or pushing |
+| `dflow finish --dry-run --json` | Preview the finish plan as a single JSON document |
 | `dflow finish --delete` | Also delete the branch when no `manual` targets remain |
+| `dflow status [--json]` | Report branch, detected type, resolved targets and Git state |
 | `dflow delete <branch> [--yes]` | Delete a branch locally and remotely |
 | `dflow config set-author "Name" --email ...` | Store local `dflow.author` / `dflow.email` |
 | `dflow completion [install]` | Generate shell completions |
@@ -47,6 +49,10 @@ is merged directly by dflow or through a pull request:
 | `manual` | open a PR toward that target. Never use `dflow finish`. |
 
 This repository: `develop = auto`, `main = manual`.
+
+`auto` and `manual` are the only valid values. An unknown or missing merge mode
+now makes `dflow finish` and `dflow status` fail, naming the branch and the
+offending value, instead of silently skipping the target.
 
 Consequences:
 
@@ -92,6 +98,19 @@ prompting.
 When a stacked parent merges, rebase each child with
 `git rebase --onto <target> <old-parent> <child>` and retarget its PR. A
 `dflow chain` command (list/rebase) is tracked as a follow-up.
+
+## JSON output is a contract
+
+`dflow status --json` and `dflow finish --dry-run --json` are contracts for
+scripts and agents: stdout carries exactly one JSON document and nothing else —
+no banner, no icons, no progress lines — and a failure still exits non-zero with
+the reason in an `{"error": ...}` document. Parse it with a JSON parser, never by
+matching substrings. `finish --json` requires `--dry-run`; a mutating finish has
+no report to serialize.
+
+When the current branch matches no configured prefix, `status --json` succeeds
+with an empty `branch_type` and an empty `targets` array, which is the
+machine-readable way to say "not a work branch".
 
 ## Commit conventions
 

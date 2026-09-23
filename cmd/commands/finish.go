@@ -41,6 +41,33 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
   dflow finish --delete
   # Merges auto targets, returns to the configured base branch, and deletes the source branch when no manual targets remain`,
 	Args: cobra.NoArgs,
+	// The format is decided before the WithChecks wrapper inside RunE runs, so a
+	// pre-handler failure is reported in the requested format. --json only makes
+	// sense for a plan preview: a mutating finish has no JSON report, so the
+	// combination is rejected here before anything is loaded or touched.
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		jsonOutput, err := cmd.Flags().GetBool("json")
+		if err != nil {
+			return err
+		}
+		if !jsonOutput {
+			return nil
+		}
+
+		// Set the format first: a caller that passed --json must receive the
+		// rejection as a JSON document, not as styled text.
+		utils.SetFormat(utils.FormatJSON)
+
+		dryRun, err := cmd.Flags().GetBool("dry-run")
+		if err != nil {
+			return err
+		}
+		if !dryRun {
+			return fmt.Errorf("--json requires --dry-run: a mutating finish has no JSON report, so --json would only hide the plan. Run `dflow finish --dry-run --json`")
+		}
+
+		return nil
+	},
 	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
 		dryRun, err := cmd.Flags().GetBool("dry-run")
 		if err != nil {
@@ -77,6 +104,28 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 		autoTargets := plan.AutoTargets()
 		manualTargets := plan.ManualTargets()
 
+		returnBranch := plan.Base
+		if returnBranch == "" {
+			returnBranch = plan.CurrentBranch
+		}
+
+		// In JSON mode the resolved plan is the only thing stdout carries, so it
+		// is emitted before any human line. It is only reachable with --dry-run
+		// (enforced in PreRunE), so this path never fetches, merges or pushes.
+		if utils.CurrentFormat() == utils.FormatJSON {
+			return utils.EmitJSON(finishPlanReport{
+				CurrentBranch:   plan.CurrentBranch,
+				BranchType:      string(plan.BranchType),
+				Base:            plan.Base,
+				ReturnBranch:    returnBranch,
+				Targets:         targetViews(plan.Targets),
+				AutoTargets:     nonNilStrings(autoTargets),
+				ManualTargets:   nonNilStrings(manualTargets),
+				DeleteRequested: deleteBranch,
+				DryRun:          true,
+			})
+		}
+
 		utils.Info("Finishing branch '%s' (%s)", plan.CurrentBranch, plan.BranchType)
 		utils.Info("Auto targets: %s", formatBranchList(autoTargets))
 		utils.Info("Manual targets: %s", formatBranchList(manualTargets))
@@ -87,11 +136,6 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 				utils.Info("Manual follow-up required for: %s", strings.Join(manualTargets, ", "))
 			}
 			return nil
-		}
-
-		returnBranch := plan.Base
-		if returnBranch == "" {
-			returnBranch = plan.CurrentBranch
 		}
 
 		if dryRun {
@@ -182,7 +226,34 @@ func formatBranchList(branches []string) string {
 	return strings.Join(branches, ", ")
 }
 
+// finishPlanReport is the machine-readable preview of `finish --dry-run --json`.
+//
+// It mirrors the human dry-run report: the branch being finished, where it
+// would land, its targets with their effective merge modes, and whether a delete
+// was requested. Field order is the document order encoding/json produces.
+type finishPlanReport struct {
+	CurrentBranch   string       `json:"current_branch"`
+	BranchType      string       `json:"branch_type"`
+	Base            string       `json:"base"`
+	ReturnBranch    string       `json:"return_branch"`
+	Targets         []targetView `json:"targets"`
+	AutoTargets     []string     `json:"auto_targets"`
+	ManualTargets   []string     `json:"manual_targets"`
+	DeleteRequested bool         `json:"delete_requested"`
+	DryRun          bool         `json:"dry_run"`
+}
+
+// nonNilStrings returns a non-nil empty slice for a nil input, so an empty
+// target list marshals as `[]` rather than `null`.
+func nonNilStrings(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
+}
+
 func init() {
 	FinishCmd.Flags().Bool("dry-run", false, "Show the finish plan without performing any merge or push")
 	FinishCmd.Flags().Bool("delete", false, "Delete the finished branch locally and remotely after a successful finish when no manual targets remain")
+	FinishCmd.Flags().Bool("json", false, "Print the --dry-run plan as a single JSON document on stdout; requires --dry-run")
 }
