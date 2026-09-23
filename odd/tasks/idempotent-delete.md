@@ -274,11 +274,15 @@ Files changed: this document, plus the collapse itself.
 
 ### Commit identity
 
-WU1–WU5 are one work unit on this branch, collapsed pre-freeze from three commits
-(`7b923b5`, `7075d4c`, `fff1624`) into `<recorded by the follow-up docs(odd) commit>`, followed
-by the short `docs(odd)` commit that carries this line — the one exception the repository
-allows for recording a commit identity. Both commits are pre-freeze and therefore inside the
-reviewed candidate.
+WU1–WU5 are one work unit on this branch: `62ba349` — `fix(gitutils): make delete idempotent
+across both copies`, seven paths, 551 insertions and 23 deletions. It was collapsed pre-freeze
+from three earlier commits (`7b923b5` the original work unit, `7075d4c` its identity record and
+`fff1624` the first review's outcome record) with `git reset --soft` plus a single commit, while
+nothing was frozen; the replaced tip stayed reachable from
+`backup/idempotent-delete-precollapse` until that safety ref is removed once the review closes.
+This stage is closed by the short follow-up `docs(odd)` commit that carries this line, which is
+the one exception the repository allows for recording a commit identity. Both commits are
+pre-freeze and therefore inside the reviewed candidate.
 
 ## Native review
 
