@@ -9,11 +9,6 @@ import (
 
 var showVersion bool
 
-// showRevisionOnly carries the `--revision` decision from PreRunE to RunE, the
-// same way the output format is carried: the flag lookup happens once, where a
-// failure can be returned.
-var showRevisionOnly bool
-
 // versionReport is the machine-readable report of `dflow version`.
 //
 // Field order is the document order encoding/json produces. The marker and the
@@ -49,11 +44,16 @@ the full revision and the dirty flag.`,
   dflow --version
   dflow -V`,
 	Args: cobra.NoArgs,
-	// The format and the output mode must be decided before Run renders, so a
-	// failure is reported in the requested format. Cobra runs PersistentPreRun,
-	// then PreRunE, then RunE: this mirrors the existing --json contract in
-	// status.go. Both flags are resolved here rather than in RunE because a flag
-	// lookup failure must be returned, not swallowed into a default branch.
+	// The output format must be decided before Run renders, so a failure is
+	// reported in the requested format. Cobra runs PersistentPreRun, then
+	// PreRunE, then RunE: this mirrors the existing --json contract in status.go.
+	//
+	// Only the format is settled here. `--revision` is deliberately resolved
+	// inside RunE instead: unlike the format it does not change how the command
+	// reports, so it needs no package-level state to survive the hop between the
+	// two hooks, and keeping it next to the branch that consumes it means an
+	// unreadable flag is returned there rather than stored where RunE would have
+	// to trust it.
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		jsonOutput, err := cmd.Flags().GetBool("json")
 		if err != nil {
@@ -63,11 +63,6 @@ the full revision and the dirty flag.`,
 			utils.SetFormat(utils.FormatJSON)
 		}
 
-		revisionOnly, err := cmd.Flags().GetBool("revision")
-		if err != nil {
-			return err
-		}
-		showRevisionOnly = revisionOnly
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -84,7 +79,17 @@ the full revision and the dirty flag.`,
 			return utils.EmitJSON(report)
 		}
 
-		if showRevisionOnly {
+		// Resolved here rather than in PreRunE: --revision only picks which of the
+		// two human representations Run renders, so the lookup belongs next to the
+		// branch that uses it and a failure is returned instead of being parked in
+		// package state. --json still wins, because this is reached only when no
+		// machine-readable format was requested.
+		revisionOnly, err := cmd.Flags().GetBool("revision")
+		if err != nil {
+			return err
+		}
+
+		if revisionOnly {
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), revisionToken())
 			return nil
 		}
