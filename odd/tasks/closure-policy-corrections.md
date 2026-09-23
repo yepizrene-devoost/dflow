@@ -37,11 +37,18 @@ ended — survives a faithful reading of the rule.
 
 ## Advisories from the approved receipt
 
-The reviewer's own wording is **not retrievable** in this environment: the payload travelled through
-the host relay into the native review store, the facade exposes no read-back, and
-`gentle-ai review reopen-results` is a maintainer quarantine mutation rather than a reader. What the
-receipt certifies is identity, lens, location, severity and disposition. So the work below addresses
-the substance at each location, not a quoted requirement, and says so where it matters.
+Observed in this environment, at `gentle-ai 3.6.1`: the reviewer's own wording does not reach the
+tree. The `gentle-ai review` subcommand list — `acknowledge-approved`, `capture-result`,
+`capture-correction-plan`, `capture-refuter`, `capture-unachievable`, `capture-validation`,
+`lens-context`, `capabilities`, `assess`, `start`, `validate`, `status`, `repair`, `invalidate`,
+`abandon`, `recover`, `reclaim`, `store-reset`, `inspect-authority`, `inspect-candidate`,
+`reopen-results`, `schema`, `opencode-transport` — offers no reader for admitted reviewer results,
+and `gentle-ai review reopen-results --help` describes only a prepare-or-apply operation,
+"exact-revision, maintainer-authorized same-lineage quarantine of unusable reviewer results", gated
+behind `--actor`, `--reason` and `--maintainer-authorization`. At this version, in this environment,
+that subcommand is a maintainer-authorized mutation rather than a reader. What the receipt certifies
+is identity, lens, location, severity and disposition. So the work below addresses the substance at
+each location, not a quoted requirement, and says so where it matters.
 
 ## Tasks
 
