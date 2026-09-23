@@ -113,9 +113,16 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	}
 
 	target, resolveErr := resolveTargetBinary()
+	if target == "" {
+		// Without a path there is nothing to update and nothing to install into;
+		// continuing would fail later inside EnsureWritable with a message that
+		// names an empty path. The executable lookup is the one resolution step
+		// whose failure is fatal.
+		return fmt.Errorf("could not locate the running dflow binary: %w", resolveErr)
+	}
 	if resolveErr != nil {
 		// The raw path is still the binary we were started from, so the update
-		// proceeds there; the failed resolution is noted rather than swallowed.
+		// proceeds there; only the failed symlink resolution is noted.
 		utils.Warn("could not resolve the full path of the running dflow binary (%v); continuing with %s", resolveErr, target)
 	}
 
@@ -273,6 +280,16 @@ func installLatest(target string, latest *selfupdate.Release) error {
 	checksumsPath := filepath.Join(tempDir, checksumsName)
 	extractedPath := filepath.Join(tempDir, "dflow")
 
+	steps := installSteps{
+		archiveURL:    archiveURL,
+		checksumsURL:  checksumsURL,
+		archiveName:   archiveName,
+		archivePath:   archivePath,
+		checksumsPath: checksumsPath,
+		extractedPath: extractedPath,
+		target:        target,
+	}
+
 	// The spinner writes to stdout, which JSON mode reserves for the document,
 	// so it exists only for the human renderer. A non-interactive stream degrades
 	// it to plain single lines, which is still the progress a user wants to see.
@@ -282,7 +299,7 @@ func installLatest(target string, latest *selfupdate.Release) error {
 		spinner.Start()
 	}
 
-	if err := downloadVerifyInstall(archiveURL, checksumsURL, archiveName, archivePath, checksumsPath, extractedPath, target); err != nil {
+	if err := steps.run(); err != nil {
 		if spinner != nil {
 			spinner.Clear()
 		}
@@ -295,24 +312,38 @@ func installLatest(target string, latest *selfupdate.Release) error {
 	return nil
 }
 
-// downloadVerifyInstall is the ordered download-to-swap sequence. Each step is
-// fatal to the update: an unverifiable or unextractable archive must never
-// reach InstallBinary, and InstallBinary itself stages the new binary next to
-// the target so a failed swap leaves the running one untouched.
-func downloadVerifyInstall(archiveURL, checksumsURL, archiveName, archivePath, checksumsPath, extractedPath, target string) error {
-	if err := selfupdate.DownloadFile(archiveURL, archivePath, nil); err != nil {
+// installSteps bundles every path and URL the download-verify-install sequence
+// consumes, so the sequence is one method on a named value instead of a call
+// with seven positional strings where swapping two same-typed arguments would
+// still compile.
+type installSteps struct {
+	archiveURL    string
+	checksumsURL  string
+	archiveName   string
+	archivePath   string
+	checksumsPath string
+	extractedPath string
+	target        string
+}
+
+// run is the ordered download-to-swap sequence. Each step is fatal to the
+// update: an unverifiable or unextractable archive must never reach
+// InstallBinary, and InstallBinary itself stages the new binary next to the
+// target so a failed swap leaves the running one untouched.
+func (s installSteps) run() error {
+	if err := selfupdate.DownloadFile(s.archiveURL, s.archivePath, nil); err != nil {
 		return err
 	}
-	if err := selfupdate.DownloadFile(checksumsURL, checksumsPath, nil); err != nil {
+	if err := selfupdate.DownloadFile(s.checksumsURL, s.checksumsPath, nil); err != nil {
 		return err
 	}
-	if err := selfupdate.VerifyChecksum(archivePath, checksumsPath, archiveName); err != nil {
+	if err := selfupdate.VerifyChecksum(s.archivePath, s.checksumsPath, s.archiveName); err != nil {
 		return err
 	}
-	if err := selfupdate.ExtractBinary(archivePath, extractedPath, runtime.GOOS); err != nil {
+	if err := selfupdate.ExtractBinary(s.archivePath, s.extractedPath, runtime.GOOS); err != nil {
 		return err
 	}
-	return selfupdate.InstallBinary(extractedPath, target, runtime.GOOS)
+	return selfupdate.InstallBinary(s.extractedPath, s.target, runtime.GOOS)
 }
 
 func init() {

@@ -22,6 +22,16 @@ const sha256HexLen = sha256.Size * 2
 // `dflow_<version>_checksums.txt`, and assetName is the archive's name as it
 // appears in that file (the same name ArchiveName produces).
 //
+// Trust boundary: the checksums file is downloaded from the same release as
+// the archive, so this check proves the archive matches what its publisher
+// published. It reliably detects truncated, corrupted, or mismatched
+// transfers, but it cannot detect a compromised release itself: matching
+// bytes from a bad origin verify cleanly. The origin — GitHub release
+// infrastructure for the yepizrene-devoost/dflow repository — is trusted the
+// same way scripts/install.sh trusts it, and because this release flow
+// publishes no signatures, this checksum match is the strongest integrity
+// guarantee available to both installers.
+//
 // The comparison is case-insensitive because a digest is hex and some checksum
 // tools emit upper case; a case difference is not a corrupted download. Every
 // failure it returns is fatal to the update by design: an unverifiable archive

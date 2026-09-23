@@ -103,3 +103,24 @@ candidate against `develop` (`7fafc4c`). Its outcome belongs to the native
 receipt and to Engram. Issue #25 stays open until the delivering merge into
 `develop` reports `manual_targets:[]`; the closing comment then names that
 merge commit, per the issue-closure rule.
+
+## Review 1 outcome and advisory closure
+
+Review `review-800bb3cd4fbfe455` (tier high, 4/4 lenses) closed **approved**;
+the authority was acknowledged and burned. Three informational advisories were
+reported, and the user directed that none stay open as follow-ups:
+
+- `R1-checksum-origin` (SUGGESTION, `checksum.go:26-53`): the trust boundary is
+  now explicit in the `VerifyChecksum` doc — the checksums file shares the
+  archive's origin, so the check detects corrupted transfers but trusts the
+  release infrastructure itself, and with no signatures in this flow it is the
+  strongest guarantee available.
+- `R2-downloadVerifyInstall-params` (SUGGESTION, `update.go:305-317`): the
+  seven positional strings became the `installSteps` struct with a `run`
+  method; same-typed argument swaps no longer compile.
+- `R2-resolve-fallback` (WARNING, `update.go:115-120`): a failed
+  `os.Executable` lookup is now fatal with a clear error (an empty target used
+  to fall through to `EnsureWritable` and a confusing message); only a failed
+  symlink resolution continues on the raw path, with its warning.
+
+## Work-unit commit identity on `feature/update-command` (advisory fixes)
