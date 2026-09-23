@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	errorIcon   = "\u274c"     // ❌
-	successIcon = "\u2705"     // ✅
-	deleteIcon  = "\U0001F5D1" // 🗑️
+	errorIcon   = "\u274c"       // ❌
+	successIcon = "\u2705"       // ✅
+	deleteIcon  = "\U0001F5D1"   // 🗑️
+	infoIcon    = "\u2139\ufe0f" // ℹ️
 )
 
 // failureWords are the words a status line uses to describe an operation that
@@ -85,6 +86,44 @@ func TestFailurePathRendersOneErrorIconAndNoSuccessChrome(t *testing.T) {
 			t.Fatalf("successful delete lost its status text:\n%s", output)
 		}
 	})
+}
+
+// TestShortValueArgumentRendersAsValue guards the icon-argument contract against
+// the real binary: a one-rune value in the last argument position is a format
+// value, not an icon, so it must render instead of being swallowed.
+//
+// Before the shared chrome stopped sniffing the last argument, a short string
+// was consumed as a custom icon and removed from the format arguments, so this
+// exact path rendered `%!s(MISSING)`. The defect is only observable end to end,
+// through a message whose value the command layer passes unchanged.
+func TestShortValueArgumentRendersAsValue(t *testing.T) {
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_TERMINAL_PROMPT", "0")
+
+	binary := buildCLIBinaryForIconChromeTest(t)
+
+	repo := initTempGitRepo(t)
+	// `x` is the whole point: one rune is what the removed heuristic mistook
+	// for an icon, and it is deleted from a branch, so it is not the current
+	// branch.
+	runGit(t, repo, "branch", "x")
+
+	output, exitCode := startCLIRawOutput(t, 15*time.Second, repo, binary, "delete", "x", "--yes")
+	if exitCode != 0 {
+		t.Fatalf("delete x --yes exited %d, want 0\n%s", exitCode, output)
+	}
+
+	const line = "Remote branch 'x' does not exist. Skipping remote deletion."
+	if !strings.Contains(output, line) {
+		t.Fatalf("the one-rune value did not render in its message; want %q in:\n%s", line, output)
+	}
+	if !strings.Contains(output, infoIcon) {
+		t.Fatalf("the level default icon is missing; want %s in:\n%s", infoIcon, output)
+	}
+	if strings.Contains(output, "%!") {
+		t.Fatalf("output carries an unrendered format verb:\n%s", output)
+	}
 }
 
 // buildCLIBinaryForIconChromeTest builds the real entry point outside the

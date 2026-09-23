@@ -122,7 +122,7 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 				AutoTargets:     nonNilStrings(autoTargets),
 				ManualTargets:   nonNilStrings(manualTargets),
 				DeleteRequested: deleteBranch,
-				DryRun:          true,
+				DryRun:          dryRun,
 			})
 		}
 
@@ -240,7 +240,10 @@ type finishPlanReport struct {
 	AutoTargets     []string     `json:"auto_targets"`
 	ManualTargets   []string     `json:"manual_targets"`
 	DeleteRequested bool         `json:"delete_requested"`
-	DryRun          bool         `json:"dry_run"`
+	// DryRun reports the actual --dry-run flag value rather than a literal, so
+	// the field cannot lie if the reachability constraint that makes --json
+	// require --dry-run ever changes.
+	DryRun bool `json:"dry_run"`
 }
 
 // nonNilStrings returns a non-nil empty slice for a nil input, so an empty

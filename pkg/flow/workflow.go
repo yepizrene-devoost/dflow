@@ -82,6 +82,18 @@ func DetectBranchType(cfg *Config, branchName string) (BranchType, error) {
 	return "", fmt.Errorf("branch %q does not match any configured dflow prefix", branchName)
 }
 
+// IsWorkBranch reports whether branch matches one of the configured dflow
+// prefixes, so dflow can plan a finish for it.
+//
+// It is the predicate form of DetectBranchType: a caller that only asks
+// "is this a work branch?" states that question directly instead of
+// discarding a detected type. It delegates to DetectBranchType so the two can
+// never drift apart.
+func IsWorkBranch(cfg *Config, branchName string) bool {
+	_, err := DetectBranchType(cfg, branchName)
+	return err == nil
+}
+
 // GetBranchPrefix returns the configured prefix for the given branch type.
 func GetBranchPrefix(cfg *Config, branchType BranchType) (string, error) {
 	switch branchType {

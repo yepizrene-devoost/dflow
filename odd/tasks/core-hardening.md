@@ -2,7 +2,7 @@
 
 Branch: `feature/core-hardening` (base: develop)
 Issues: #12 (WU1), #14 (WU2), #15 (WU3), #16 (WU4), #17 (WU5); #18 is a tracked follow-up
-Status: authorized and implemented; six work units below. Forge, deploy and TUI stay out.
+Status: authorized and implemented; seven work units below. Forge, deploy and TUI stay out.
 
 ## Issues
 
@@ -120,6 +120,24 @@ decisions in each client.
      raw arguments so a flag-parse error is still JSON.
    - Evidence: real-binary before/after reproductions and planted-bypass guard failures;
      see the WU6 OUTCOME under `## Evidence`.
+
+7. [x] WU7 — address the review advisories
+   - The approved native review left four non-blocking advisories. The user chose
+     to fix all four now as a separate work unit, accepting that a new commit
+     creates a new candidate tree with its own review.
+   - `R2-icon-arg-convention`: the output helpers stop guessing the icon from the
+     last argument's length. `Error`/`Info`/`Success`/`Warn` always use their own
+     default icon and a new `utils.Icon(icon, message, args...)` declares a
+     non-default one, so a one-rune value can no longer be swallowed as an icon.
+   - `R2-detect-as-predicate`: `flow.IsWorkBranch(cfg, branch)` states the yes/no
+     question `status` was asking by discarding a detected branch type.
+   - `R2-shared-type-placement`: `targetView`/`targetViews` move to
+     `cmd/commands/report.go` as the shared report shape both commands emit.
+   - `R2-dryrun-hardcoded`: `finishPlanReport.DryRun` derives from the actual
+     `--dry-run` flag instead of a `true` literal.
+   - Evidence: real-binary before/after reproduction of the icon defect, plus a
+     byte-for-byte old/new comparison of every non-interactive call site; see the
+     WU7 OUTCOME under `## Evidence`.
 
 ## Out of scope
 
@@ -529,6 +547,104 @@ $ dflow status --json=false --bogus-flag   # exit 1, human by design
 
 WU6 closes the two refuted claims; the two pre-existing limitations remain tracked separately.
 
+### WU7 — review advisories
+
+OUTCOME: done. All four non-blocking advisories from the approved native review are fixed.
+No behaviour, flag, message or icon changed; `go build ./...`, `go vet ./...`, empty
+`gofmt -l .`, `git diff --check` and the full suite were green both before and after.
+
+`R2-icon-arg-convention` (WARNING) — the substantive one. `cmd/utils/messages.go` guessed a
+custom icon from the last argument's shape (`isCustomIcon`, 1–2 runes), so
+`utils.Info("Branch '%s' exists", "x")` consumed the value as an icon and rendered
+`%!s(MISSING)`. That heuristic and the last-argument branch in `printWithIcon` are gone.
+`Error`, `Info`, `Success` and `Warn` keep their signatures and always use their own default
+icon; the new `utils.Icon(icon, formattedMessage, args...)` declares a non-default icon as a
+normal parameter, so it can never be inferred. `Spinner.Stop(message, icon ...string)` is
+untouched on purpose: its icon is already a declared parameter, not an inference.
+
+Real-binary reproduction of the defect, in scratch repositories under `$(mktemp -d)`, before
+(the binary built from the committed `a34cff0` tree via a read-only `git archive` into the
+scratch directory) and after (the binary built from this working tree). The command is
+`dflow delete x --yes` in a repository with no `origin`, so the message's last argument is the
+one-rune branch name:
+
+```
+$ dflow delete x --yes          # before
+Deleting branch 'x' locally and remotely...
+🗑️  Branch 'x' deleted locally.
+x   Remote branch '%!s(MISSING)' does not exist. Skipping remote deletion.
+exit=0
+
+$ dflow delete x --yes          # after
+Deleting branch 'x' locally and remotely...
+🗑️  Branch 'x' deleted locally.
+ℹ️  Remote branch 'x' does not exist. Skipping remote deletion.
+exit=0
+```
+Before, the one-rune value became the icon and the format argument was dropped; after, it
+renders as the value under the level's default `ℹ️` icon. A durable regression test covers the
+same path: `TestShortValueArgumentRendersAsValue` in `cmd/tests/icon_chrome_test.go`.
+
+Call sites updated: the two defaults drop the argument
+(`utils.Info("Branch '%s' does not exist. Creating...", branch)` and
+`utils.Success("Created branch '%s'", branch)`), and the six non-default ones become
+`utils.Icon(...)`: the three `📁` messages (`cmd/gitutils/git.go`, `cmd/gitutils/finish.go`),
+`✔` in `cmd/gitutils/git.go`, `🚫` in `cmd/commands/delete.go`, `🔧` and `🎉` in
+`cmd/commands/init.go`. The `🎉` site at `cmd/commands/init.go:216` was not in the task's
+enumeration but is the same positional-icon convention; leaving it would have printed
+`%!(EXTRA string=🎉)`, so it was converted too.
+
+Byte-identity proof for the existing call sites. Method: two binaries — the committed
+`a34cff0` tree and this working tree — were run against freshly created, identical scratch
+repositories for every non-interactive path that reaches a changed call site, and the combined
+stdout+stderr and exit code were compared with `diff -u`. All byte-identical:
+`delete feature/doomed --yes` (`ℹ️` `Info`), `delete no-such-branch-xyz --yes` (`❌` `Error`),
+`start feat child --no-push` in a repository with no origin (`📁` `Icon` on the skipped pull),
+`status`, `status --json`, `finish --dry-run`, `finish --dry-run --delete`,
+`finish --dry-run --json` (unchanged document, `dry_run` still `true`) and a real `finish` in a
+repository with no origin (the other two `📁` `Icon` sites plus `✅` `Success`). The four sites
+that are only reachable through the interactive `init` flow (`ℹ️`/`✅`/`✔` in
+`CheckOrCreateBranch`, `🔧` and `🎉` in `init`) were proved at the argument level against
+`git show a34cff0:<file>`: the old form `Helper(format, args..., "icon")` resolved to exactly
+`icon = "icon"` and `args` under the removed branch, which is precisely what the new form
+declares, and `printWithIcon`'s render line `"%-3s %s\n"` is unchanged. No other positional
+string argument remains anywhere: `grep` finds no `isCustomIcon` and no `Error`/`Info`/
+`Success`/`Warn` call whose trailing argument is an icon literal.
+
+`R2-detect-as-predicate` (SUGGESTION). `pkg/flow/workflow.go` gains
+`IsWorkBranch(cfg *Config, branchName string) bool`, implemented as `DetectBranchType` plus an
+`err == nil` check so the predicate and the detection cannot drift apart.
+`cmd/commands/status.go` now asks `if !flow.IsWorkBranch(cfg, branch)` instead of discarding
+the returned type. `TestIsWorkBranchMirrorsDetection` pins the agreement for matching and
+non-matching branches.
+
+`R2-shared-type-placement` (SUGGESTION). `targetView` and `targetViews` moved from
+`cmd/commands/status.go` to the new `cmd/commands/report.go`, which documents them as the
+shared machine-readable shape both `status --json` and `finish --dry-run --json` emit. JSON
+tags, field order and the non-nil `[]` guarantee are unchanged, and the emitted documents are
+byte-identical in the comparison above.
+
+`R2-dryrun-hardcoded` (SUGGESTION). `finishPlanReport.DryRun` is now `dryRun`, the value the
+`RunE` already read from the flag, instead of the literal `true`. The only reachable path still
+requires `--dry-run` (enforced in `PreRunE`), so the value stays `true` there — confirmed by
+the identical `finish --dry-run --json` document — but the field can no longer lie if that
+reachability constraint changes.
+
+Files changed: `cmd/utils/messages.go`, `cmd/commands/report.go` (new),
+`cmd/commands/status.go`, `cmd/commands/finish.go`, `cmd/commands/delete.go`,
+`cmd/commands/init.go`, `cmd/gitutils/git.go`, `cmd/gitutils/finish.go`,
+`pkg/flow/workflow.go`, `cmd/tests/icon_chrome_test.go`, `cmd/tests/workflow_test.go`,
+`odd/tasks/core-hardening.md`. `cmd/gitutils/finish.go` needed only the two `📁` sites. The
+git passthrough plumbing, `cmd/utils/spinner.go`, `pkg/validators`, `README.md` and
+`.agents/*` were not touched.
+
+Checks: `go build ./...` ok, `go vet ./...` ok, `gofmt -l .` empty, `git diff --check` empty,
+`go test -count=1 ./...` green (`ok .../cmd/tests 11.827s`),
+`TestFailurePathRendersOneErrorIconAndNoSuccessChrome` (both subtests),
+`TestCommandLayerWritesGoThroughMessagesHelper`,
+`TestShortValueArgumentRendersAsValue` and `TestIsWorkBranchMirrorsDetection` all pass. The
+existing icon test asserted chrome, not sniffing behaviour, so no assertion needed weakening.
+
 ## Independent verification
 
 One read-only verification pass ran over the committed range `develop..HEAD` (then
@@ -607,5 +723,11 @@ as later work, never as a reason to re-run the review on this candidate:
 the same latent landmine WU3b already flagged: a short string argument sitting in the icon
 position is read as an icon instead of as a value.
 
-This section is post-review bookkeeping. It is the only file changed after approval, so the
-reviewed code is byte-identical to the approved candidate.
+This section is post-review bookkeeping. At `a34cff0` it was the only file changed after
+approval, so the reviewed code was byte-identical to the approved candidate.
+
+WU7 changes the candidate tree after approval. The approved candidate at the time of that
+delegation is HEAD `a34cff0` (the review itself bound the reviewed code at `8c856c4`, and
+`a34cff0` only records this section), so the WU7 changes described under
+`### WU7 — review advisories` form a new tree that carries its own review; the approval does
+not extend to it.

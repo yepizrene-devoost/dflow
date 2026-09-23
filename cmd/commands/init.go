@@ -93,7 +93,7 @@ var InitCmd = &cobra.Command{
 
 		// 🌟 merge modes explain
 		utils.Plain("")
-		utils.Info("Dflow supports two types of merge modes:", "🔧")
+		utils.Icon("🔧", "Dflow supports two types of merge modes:")
 		utils.Plain("   - manual: you open Pull Requests and merge via your platform (e.g. GitHub, GitLab).")
 		utils.Plain("   - auto: dflow merges branches directly using Git commands (no PRs needed).")
 
@@ -213,7 +213,7 @@ var InitCmd = &cobra.Command{
 			}
 		}
 
-		utils.Success("dflow is ready! Use `dflow start` to begin a new branch.", "🎉")
+		utils.Icon("🎉", "dflow is ready! Use `dflow start` to begin a new branch.")
 		return nil
 	}),
 }

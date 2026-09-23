@@ -21,16 +21,14 @@ import (
 func CheckOrCreateBranch(branch string) error {
 	cmd := exec.Command("git", "rev-parse", "--verify", branch)
 	if err := cmd.Run(); err != nil {
-		// Pass the icon explicitly so a short branch name is never read as a
-		// custom icon by the shared chrome, which would drop the format argument.
-		utils.Info("Branch '%s' does not exist. Creating...", branch, "ℹ️")
+		utils.Info("Branch '%s' does not exist. Creating...", branch)
 		create := exec.Command("git", "branch", branch)
 		if err := create.Run(); err != nil {
 			return fmt.Errorf("failed to create branch '%s': %w", branch, err)
 		}
-		utils.Success("Created branch '%s'", branch, "✅")
+		utils.Success("Created branch '%s'", branch)
 	} else {
-		utils.Info("Branch '%s' exists", branch, "✔")
+		utils.Icon("✔", "Branch '%s' exists", branch)
 	}
 
 	return nil
@@ -82,7 +80,7 @@ func CheckoutNew(branch string) error {
 // It returns an error only if the pull fails when attempted.
 func Pull() error {
 	if !HasOriginRemote() {
-		utils.Info("Remote 'origin' not found. Skipping pull. Using local branch as latest.", "📁")
+		utils.Icon("📁", "Remote 'origin' not found. Skipping pull. Using local branch as latest.")
 		return nil
 	}
 

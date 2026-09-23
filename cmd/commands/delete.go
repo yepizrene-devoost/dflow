@@ -59,7 +59,7 @@ step automatically when the branch does not exist on origin.`,
 			}
 
 			if !confirm {
-				utils.Warn("Operation aborted by user.", "🚫")
+				utils.Icon("🚫", "Operation aborted by user.")
 				return nil
 			}
 		}

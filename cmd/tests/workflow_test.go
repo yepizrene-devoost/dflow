@@ -154,3 +154,22 @@ func TestDetectBranchTypeRejectsUnknownBranch(t *testing.T) {
 		t.Fatalf("expected error for branch without dflow prefix")
 	}
 }
+
+// TestIsWorkBranchMirrorsDetection pins the predicate to the detection it is
+// defined in terms of, for both a matching and a non-matching branch, so the
+// two answers can never disagree.
+func TestIsWorkBranchMirrorsDetection(t *testing.T) {
+	cfg := &flow.Config{}
+	cfg.Branches.Features = "feature/"
+	cfg.Branches.Releases = "release/"
+	cfg.Branches.Hotfixes = "hotfix/"
+	cfg.Branches.Bugfixes = "bugfix/"
+
+	for _, branch := range []string{"feature/one", "hotfix/one", "develop", "main", ""} {
+		_, err := flow.DetectBranchType(cfg, branch)
+		want := err == nil
+		if got := flow.IsWorkBranch(cfg, branch); got != want {
+			t.Fatalf("IsWorkBranch(%q) = %t, want %t (DetectBranchType error: %v)", branch, got, want, err)
+		}
+	}
+}

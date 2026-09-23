@@ -106,7 +106,7 @@ func AbortMerge() error {
 // FetchOrigin fetches updates from the remote 'origin' when available.
 func FetchOrigin() error {
 	if !HasOriginRemote() {
-		utils.Info("Remote 'origin' not found. Skipping fetch.", "📁")
+		utils.Icon("📁", "Remote 'origin' not found. Skipping fetch.")
 		return nil
 	}
 
@@ -193,7 +193,7 @@ func PullBranch(branch string) error {
 // PushBranchUpdate pushes the given branch to origin without changing upstream tracking.
 func PushBranchUpdate(branch string) error {
 	if !HasOriginRemote() {
-		utils.Info("Remote 'origin' not found. Skipping push for '%s'.", branch, "📁")
+		utils.Icon("📁", "Remote 'origin' not found. Skipping push for '%s'.", branch)
 		return nil
 	}
 
