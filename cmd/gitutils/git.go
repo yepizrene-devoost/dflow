@@ -180,10 +180,30 @@ func Delete(branch string) error {
 	localExisted := BranchExists(branch)
 	remoteExisted, remoteErr := RemoteBranchExists(branch)
 
-	if !localExisted && remoteErr != nil {
-		// Nothing exists locally and the remote half could not be checked, so the
-		// lookup failure is the whole answer and neither copy is touched.
-		return remoteErr
+	// The "remote could not be checked" outcome is settled here, as one explicit
+	// branch, instead of a return dropped between the two deletions below. With no
+	// local copy the lookup failure is the whole answer and neither copy is touched.
+	// With a local copy, the plan is to delete that copy and then report the failure
+	// naming the half that is gone.
+	if remoteErr != nil {
+		if !localExisted {
+			return remoteErr
+		}
+
+		spinner := utils.NewSpinner(fmt.Sprintf("Deleting branch '%s' locally and remotely...", branch))
+		spinner.Start()
+
+		// The remote half is unknown, so the local half is the only one this call can
+		// finish. Deleting it keeps the two halves independent, and the error below
+		// reports the operation as unfinished: the local half is gone and the remote
+		// half could not be checked.
+		if err := deleteLocalBranch(branch); err != nil {
+			spinner.Clear()
+			return err
+		}
+
+		spinner.Clear()
+		return fmt.Errorf("deleted local branch '%s' but %w", branch, remoteErr)
 	}
 
 	if !localExisted && !remoteExisted {
@@ -193,23 +213,17 @@ func Delete(branch string) error {
 	spinner := utils.NewSpinner(fmt.Sprintf("Deleting branch '%s' locally and remotely...", branch))
 	spinner.Start()
 
+	// The local half goes first, and it is not rolled back: once `git branch -D` has
+	// removed the branch it is gone, so a failure in a later half leaves the
+	// operation finished locally and unfinished overall. Every failure after this
+	// point therefore exits non-zero while naming the half this call already
+	// deleted; a partial success is unfinished work, never a no-op and never a
+	// success.
 	if localExisted {
-		var stderr bytes.Buffer
-		cmd := exec.Command("git", "branch", "-D", branch)
-		cmd.Stderr = &stderr
-		cmd.Stdout = nil
-		if err := cmd.Run(); err != nil {
+		if err := deleteLocalBranch(branch); err != nil {
 			spinner.Clear()
-			return fmt.Errorf("failed to delete local branch '%s': %s", branch, strings.TrimSpace(stderr.String()))
+			return err
 		}
-	}
-
-	if remoteErr != nil {
-		spinner.Clear()
-		// Reaching here means the local copy existed and has just been deleted. The
-		// remote half could not be checked, so it must not be reported as absent:
-		// name the half that is gone and wrap the lookup failure.
-		return fmt.Errorf("deleted local branch '%s' but %w", branch, remoteErr)
 	}
 
 	if remoteExisted {
@@ -241,6 +255,22 @@ func Delete(branch string) error {
 		// must not depend on knowing which outcome arms came before this one.
 		spinner.Stop(fmt.Sprintf("Branch '%s' deleted remotely.", branch), "🗑️")
 		utils.Info("Local branch '%s' does not exist. Skipping local deletion.", branch)
+	}
+
+	return nil
+}
+
+// deleteLocalBranch removes the local branch with `git branch -D` and reports
+// Git's refusal in dflow's own words. It is a named step so the two call sites
+// that may need the local half deleted (the ordinary path and the path where the
+// remote half could not be checked) cannot drift apart in what they report.
+func deleteLocalBranch(branch string) error {
+	var stderr bytes.Buffer
+	cmd := exec.Command("git", "branch", "-D", branch)
+	cmd.Stdout = nil
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to delete local branch '%s': %s", branch, strings.TrimSpace(stderr.String()))
 	}
 
 	return nil

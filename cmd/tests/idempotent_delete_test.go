@@ -254,6 +254,92 @@ func TestDeleteKeepsTheAbsentSkipWhenNoOriginIsConfigured(t *testing.T) {
 	}
 }
 
+// TestDeleteSurfacesAPartialSuccessWhenTheRemoteLookupFails pins the two runs of
+// the failed-lookup state through the real binary, where the process exit code is
+// part of the contract: the first run finishes the local half and must exit
+// non-zero naming the remote half it could not check, and the second run has
+// nothing local left to touch and must fail on the lookup itself.
+//
+// origin points at a path that does not exist, so `git ls-remote` fails
+// deterministically and offline: no network, no mock, no timing.
+func TestDeleteSurfacesAPartialSuccessWhenTheRemoteLookupFails(t *testing.T) {
+	setUpCLIEnv(t)
+	binary := buildDflowCLI(t)
+
+	repo := initTempGitRepo(t)
+	runGit(t, repo, "remote", "add", "origin", filepath.Join(t.TempDir(), "missing-remote"))
+	runGit(t, repo, "branch", "feature/example")
+
+	// First run: the local copy exists, so it is deleted and the failure reports the
+	// half that is gone together with the half that could not be checked. Exiting
+	// non-zero is what makes a partial success readable as unfinished work.
+	output, exitCode := startCLIRawOutput(t, 15*time.Second, repo, binary, "delete", "feature/example", "--yes")
+	if exitCode == 0 {
+		t.Fatalf("a failed remote lookup after a local deletion exited 0, want non-zero\n%s", output)
+	}
+	if !strings.Contains(output, "deleted local branch 'feature/example'") {
+		t.Fatalf("failure must say the local half was deleted, got:\n%s", output)
+	}
+	if !strings.Contains(output, "failed to check remote branch 'feature/example'") {
+		t.Fatalf("failure must name the remote half it could not check, got:\n%s", output)
+	}
+	if branchExists(t, repo, "feature/example") {
+		t.Fatalf("the local half should have been deleted")
+	}
+
+	// Second run, same state minus the local copy: nothing is touched and the lookup
+	// failure is the whole answer, so the message must not claim a deletion.
+	output, exitCode = startCLIRawOutput(t, 15*time.Second, repo, binary, "delete", "feature/example", "--yes")
+	if exitCode == 0 {
+		t.Fatalf("a failed remote lookup with no local copy exited 0, want non-zero\n%s", output)
+	}
+	if !strings.Contains(output, "failed to check remote branch 'feature/example'") {
+		t.Fatalf("the second run must fail on the lookup, got:\n%s", output)
+	}
+	if strings.Contains(output, "deleted local branch") {
+		t.Fatalf("the second run had nothing local to delete, got:\n%s", output)
+	}
+	if branchExists(t, repo, "feature/example") {
+		t.Fatalf("the second run must not touch anything")
+	}
+}
+
+// TestDeleteStillRefusesARerunWithNoOriginOnceTheLocalHalfIsGone pins the other
+// end of the absent-skip boundary that the failed-lookup state walk crosses: no
+// `origin` is a known absence of the remote copy, not a licence to report success
+// for a delete that has nothing left to remove. After the local-only delete of
+// the first run, a re-run with no origin at all has neither copy, so it keeps the
+// unchanged refusal (non-zero, "nothing to delete") instead of the skip that was
+// correct while the local copy still existed.
+func TestDeleteStillRefusesARerunWithNoOriginOnceTheLocalHalfIsGone(t *testing.T) {
+	setUpCLIEnv(t)
+	binary := buildDflowCLI(t)
+
+	repo := initTempGitRepo(t)
+	runGit(t, repo, "branch", "feature/example")
+
+	output, exitCode := startCLIRawOutput(t, 15*time.Second, repo, binary, "delete", "feature/example", "--yes")
+	if exitCode != 0 {
+		t.Fatalf("the local-only delete exited %d, want 0\n%s", exitCode, output)
+	}
+	if !strings.Contains(output, "Remote branch 'feature/example' does not exist. Skipping remote deletion.") {
+		t.Fatalf("the local-only delete must keep the absent-skip message:\n%s", output)
+	}
+	if branchExists(t, repo, "feature/example") {
+		t.Fatalf("the local half should have been deleted")
+	}
+
+	// Same repository, no origin, nothing left locally: this is the refusal case,
+	// not a repeat of the skip.
+	output, exitCode = startCLIRawOutput(t, 15*time.Second, repo, binary, "delete", "feature/example", "--yes")
+	if exitCode == 0 {
+		t.Fatalf("re-running with neither copy left exited 0, want non-zero\n%s", output)
+	}
+	if !strings.Contains(output, "nothing to delete") {
+		t.Fatalf("the refusal must say there is nothing to delete:\n%s", output)
+	}
+}
+
 // TestDeleteReportsWhatRemainsWhenTheRemoteStepFails guards the last part of the
 // issue's expectation: a remote failure after a successful local deletion is
 // reported, names the remote branch that remains, and does not hide that the
