@@ -1,8 +1,8 @@
 # core-hardening — feature tracking
 
 Branch: `feature/core-hardening` (base: develop)
-Issues: #12 (WU1), #14 (WU2), #15 (WU3), #16 (WU4)
-Status: authorized; scope is the four work units below. Forge, deploy and TUI stay out.
+Issues: #12 (WU1), #14 (WU2), #15 (WU3), #16 (WU4), #17 (WU5)
+Status: authorized; scope is the five work units below. Forge, deploy and TUI stay out.
 
 ## Issues
 
@@ -11,16 +11,17 @@ lands in `develop`.
 
 | Unit | Issue | Title | State |
 | --- | --- | --- | --- |
-| WU1 | #12 | `fix(cli): return a non-zero exit code on failure` | open; fix committed, keyword predates the issue-independent work |
-| WU2 | #14 | `fix(cli): make progress output and prompts terminal-aware` | open; fix committed on this branch |
-| WU3 | #15 | `refactor: extract the branch planning core from the command layer` | open; split into extraction + output routing; extraction implemented on this branch |
+| WU1 | #12 | `fix(cli): return a non-zero exit code on failure` | open; keyword carried by the closing `docs(odd)` commit |
+| WU2 | #14 | `fix(cli): make progress output and prompts terminal-aware` | open; keyword carried by the closing `docs(odd)` commit |
+| WU3 | #15 | `refactor: extract the branch planning core from the command layer` | open; extraction and output routing committed on this branch |
 | WU4 | #16 | `feat(cli): expose machine-readable state and validate merge modes` | open; pending |
+| WU5 | #17 | `fix(cli): keep the status icon in the chrome instead of the message` | open; fix committed on this branch |
 
-Closure: the WU3 and WU4 work-unit commits carry `Closes #15` and `Closes #16`.
-The WU1 and WU2 fixes were committed before #14 existed, so the follow-up
-`docs(odd)` commit on this branch carries `Closes #12` and `Closes #14`; all four
-issues therefore close when this branch lands in `develop`, and none of them
-requires a manual close afterwards.
+Closure: `Closes #15`, `Closes #16` and `Closes #17` ride on their own
+work-unit commits, and the closing `docs(odd)` commit carries `Closes #12` and
+`Closes #14` because those two fixes were committed before their issues existed.
+All five issues therefore close when this branch lands in `develop`, and none of
+them needs a manual close afterwards.
 
 ## Goal
 
@@ -34,6 +35,13 @@ the user authorized it: delete `feature/dflow-implement-tui` (local + remote; it
 was identical to `develop` at `af4dc14`), create this branch from `develop`, and
 implement the four work units. Push and `dflow finish` remain separate user
 decisions.
+
+Scope extension, recorded rather than assumed: while verifying the branch, the
+`delete` failure path was found to render both a duplicated error icon and a
+success icon over a failure message, and the first defect was a regression
+introduced by WU1 itself. That finding is tracked as issue #17 and fixed as WU5
+before WU4, because the machine-readable output mode in WU4 would otherwise have
+inherited the malformed error strings.
 
 ## Why this order
 
@@ -86,6 +94,15 @@ decisions in each client.
      `merge_mode` so an unknown value fails loudly instead of silently matching
      neither `auto` nor `manual`.
    - Evidence pending: JSON output assertions.
+
+5. [x] WU5 — keep the status icon in the chrome (issue #17)
+   - Found while verifying the branch, and ordered before WU4 because the JSON
+     output mode would otherwise have inherited the malformed error strings.
+   - The icon is chrome, never message content: four error strings dropped their
+     embedded `❌`, and the failure paths stop the spinner with `Clear()` instead
+     of announcing a failure with the default success icon.
+   - Evidence: single-`❌` failure output, success chrome preserved, and a real
+     binary regression test; see the WU5 OUTCOME under `## Evidence`.
 
 ## Out of scope
 
@@ -217,3 +234,44 @@ Checks: `go build ./...` ok, `go vet ./...` ok, `gofmt -l .` empty, `git diff --
 confirmed). The git passthrough (`cmd.Stdout = os.Stdout` in the checkout helpers),
 `cmd/root/completion.go` and `cmd/utils/interrupt.go` were deliberately left untouched. WU4
 remains unchecked.
+
+### WU5 — icon is chrome, not message (issue #17)
+
+OUTCOME: done. A failure now renders exactly one `❌` line with no success chrome, and a
+success path keeps its own icon.
+
+Before, at `e0ae4ad`:
+
+```
+Deleting branch 'no-such-branch-xyz' locally and remotely...
+✅   Failed to delete local branch.
+❌   ❌ failed to delete local branch 'no-such-branch-xyz': error: branch 'no-such-branch-xyz' not found
+```
+
+After, with the real binary built from this working tree:
+
+```
+Deleting branch 'no-such-branch-xyz' locally and remotely...
+❌   failed to delete local branch 'no-such-branch-xyz': error: branch 'no-such-branch-xyz' not found
+```
+
+exit 1. The success path still renders its chrome: `🗑️  Branch 'feature/doomed' deleted
+locally.` and `ℹ️  Remote branch 'feature/doomed' does not exist. Skipping remote deletion.`,
+exit 0.
+
+Changes: `Spinner.Clear()` added, sharing one `terminate` guard with `Stop` so both terminators
+are idempotent, safe to combine, and safe without `Start`; `cmd/utils/spinner.go`. The four
+error strings in `cmd/gitutils/git.go` lost their embedded `❌`, as did one stray trailing
+newline; its three failure `Stop("Failed to ...")` calls and the three in
+`cmd/gitutils/finish.go` became `Clear()`, and the three informational `📁` messages moved the
+icon into the helper's icon argument. Files changed: `cmd/utils/spinner.go`,
+`cmd/gitutils/git.go`, `cmd/gitutils/finish.go`, `cmd/tests/icon_chrome_test.go` (new).
+Checks: `go build ./...` ok, `go vet ./...` ok, `gofmt -l .` empty, `go test -count=1 ./...`
+green (`ok .../cmd/tests 8.687s`), and both subtests of
+`TestFailurePathRendersOneErrorIconAndNoSuccessChrome` passing.
+
+Process note: the delegated writer stalled on a permission prompt for a guarded `git branch -D`
+inside a scratch clone after already writing the three source files and the test, so the
+orchestrator completed the verification, the reproduction and this record. HEAD, every local
+branch and the reflog were inspected and found intact before resuming; the forced deletion the
+prompt referred to was inside a temporary clone outside the repository. WU4 remains unchecked.

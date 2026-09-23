@@ -60,20 +60,46 @@ func (s *Spinner) Start() {
 // If an icon is provided, it replaces the default success icon. Stop is safe to
 // call whether or not Start ran, and it never double-closes the done channel.
 func (s *Spinner) Stop(message string, icon ...string) {
-	s.stopOnce.Do(func() {
-		close(s.done)
-	})
-
 	finalIcon := "✅"
 	if len(icon) > 0 && icon[0] != "" {
 		finalIcon = icon[0]
 	}
 
-	if !s.interactive {
-		fmt.Printf("%-3s %s\n", finalIcon, message)
-		return
-	}
+	s.terminate(func() {
+		if !s.interactive {
+			fmt.Printf("%-3s %s\n", finalIcon, message)
+			return
+		}
 
-	clear := "\r\033[K"
-	fmt.Printf("%s%-3s %s\n", clear, finalIcon, message)
+		clear := "\r\033[K"
+		fmt.Printf("%s%-3s %s\n", clear, finalIcon, message)
+	})
+}
+
+// Clear stops the spinner and erases its line without printing a status line.
+//
+// Use it on failure paths: the failure is reported by the returned error and
+// rendered once by the shared output path, so a status line here would either
+// duplicate the failure or announce it with the success icon.
+func (s *Spinner) Clear() {
+	s.terminate(func() {
+		// Non-interactive Start printed the status as a plain log line, so there
+		// is no spinner line to erase and nothing to add.
+		if !s.interactive {
+			return
+		}
+
+		fmt.Printf("\r\033[K")
+	})
+}
+
+// terminate renders the spinner's final state exactly once, on the first Stop
+// or Clear call, after closing done so the interactive goroutine exits. Sharing
+// one guard makes both terminators idempotent and safe to combine, and safe to
+// call whether or not Start ran.
+func (s *Spinner) terminate(render func()) {
+	s.stopOnce.Do(func() {
+		close(s.done)
+		render()
+	})
 }

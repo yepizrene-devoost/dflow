@@ -26,7 +26,7 @@ func CheckOrCreateBranch(branch string) error {
 		utils.Info("Branch '%s' does not exist. Creating...", branch, "ℹ️")
 		create := exec.Command("git", "branch", branch)
 		if err := create.Run(); err != nil {
-			return fmt.Errorf("❌ failed to create branch '%s': %w", branch, err)
+			return fmt.Errorf("failed to create branch '%s': %w", branch, err)
 		}
 		utils.Success("Created branch '%s'", branch, "✅")
 	} else {
@@ -46,9 +46,9 @@ func PushBranch(branch string) error {
 
 	cmd := exec.Command("git", "push", "-u", "origin", branch)
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("❌ failed to push branch '%s': %w", branch, err)
+		return fmt.Errorf("failed to push branch '%s': %w", branch, err)
 	}
-	spinner.Stop(fmt.Sprintf("Pushed branch '%s' to remote\n", branch), "🚀")
+	spinner.Stop(fmt.Sprintf("Pushed branch '%s' to remote", branch), "🚀")
 
 	return nil
 }
@@ -82,7 +82,7 @@ func CheckoutNew(branch string) error {
 // It returns an error only if the pull fails when attempted.
 func Pull() error {
 	if !HasOriginRemote() {
-		utils.Info("📁   Remote 'origin' not found. Skipping pull. Using local branch as latest.")
+		utils.Info("Remote 'origin' not found. Skipping pull. Using local branch as latest.", "📁")
 		return nil
 	}
 
@@ -93,7 +93,7 @@ func Pull() error {
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	if err := cmd.Run(); err != nil {
-		spinner.Stop("Failed to pull latest changes.")
+		spinner.Clear()
 		return err
 	}
 
@@ -117,8 +117,8 @@ func Delete(branch string) error {
 	cmd.Stderr = &stderr
 	cmd.Stdout = nil
 	if err := cmd.Run(); err != nil {
-		spinner.Stop("Failed to delete local branch.")
-		return fmt.Errorf("❌ failed to delete local branch '%s': %s", branch, stderr.String())
+		spinner.Clear()
+		return fmt.Errorf("failed to delete local branch '%s': %s", branch, stderr.String())
 	}
 
 	if RemoteBranchExists(branch) {
@@ -126,8 +126,8 @@ func Delete(branch string) error {
 		cmd.Stdout = nil
 		cmd.Stderr = &stderr
 		if err := cmd.Run(); err != nil {
-			spinner.Stop("Failed to delete remote branch.")
-			return fmt.Errorf("❌ failed to delete remote branch: %s", stderr.String())
+			spinner.Clear()
+			return fmt.Errorf("failed to delete remote branch: %s", stderr.String())
 		}
 	} else {
 		spinner.Stop(fmt.Sprintf("Branch '%s' deleted locally.", branch), "🗑️")
