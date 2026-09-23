@@ -134,6 +134,8 @@ Files changed: `README.md`, `CHANGELOG.md`, `.agents/workflows/dflow-workflow.md
 
 ### Commit identity
 
-Not yet recorded: the working tree holds the change and no commit has been made. Committing is
-a human decision in this repository, so the work-unit commit identity is recorded in a short
-follow-up `docs(odd)` commit once the human authorizes staging.
+WU1–WU3 are one work-unit commit: `713330d` — `fix(init): refuse to reinitialize an existing
+config`, seven paths (the two production files, the new regression suite, the three
+documentation files and this feature document), 360 insertions and 3 deletions. This stage is
+closed by the short follow-up `docs(odd)` commit that carries this line, which is the one
+exception the repository allows for recording a commit identity.
