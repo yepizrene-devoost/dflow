@@ -292,25 +292,28 @@ func deleteLocalBranch(branch string) error {
 	return nil
 }
 
-// RemoteBranchExists reports whether a branch exists on the remote `origin`.
+// remoteBranchRevision returns the commit `origin` holds for the branch, or an
+// empty string when origin has no such branch.
 //
-// It runs `git ls-remote --heads origin <branch>`. The bool answers existence and
-// the error answers whether that could be determined, with two states kept apart:
+// It runs `git ls-remote --heads origin <branch>` and keeps three states apart,
+// which is what RemoteBranchExists is defined over:
 //
 //   - No `origin` remote is configured. No remote copy of any branch can exist,
-//     which is a known absence determinable locally, so the answer is `false, nil`
+//     which is a known absence determinable locally, so the answer is `"", nil`
 //     and no network call is made.
 //   - `origin` is configured but the lookup fails (unreachable, bad URL, auth).
 //     That is the unknown case, and it returns an error carrying git's own
 //     diagnostics instead of pretending the branch is absent.
+//   - Otherwise the revision is origin's commit for the branch, empty when origin
+//     does not have it.
 //
 // The lookup's stderr is captured into the error rather than wired to the CLI's
 // streams, so it never reaches stdout.
-func RemoteBranchExists(branch string) (bool, error) {
+func remoteBranchRevision(branch string) (string, error) {
 	// A missing origin is a known absence, not a failed check: a remote copy can
 	// only live in a remote, and with no remote configured there is none to find.
 	if !HasOriginRemote() {
-		return false, nil
+		return "", nil
 	}
 
 	cmd := exec.Command("git", "ls-remote", "--heads", "origin", branch)
@@ -328,12 +331,35 @@ func RemoteBranchExists(branch string) (bool, error) {
 		// after it. `err` only carries the sentence when Git said nothing at all,
 		// which is the case where the status is the entire information available.
 		if diagnostics == "" {
-			return false, fmt.Errorf("failed to check remote branch '%s' on origin: %w", branch, err)
+			return "", fmt.Errorf("failed to check remote branch '%s' on origin: %w", branch, err)
 		}
-		return false, fmt.Errorf("failed to check remote branch '%s' on origin: %s", branch, diagnostics)
+		return "", fmt.Errorf("failed to check remote branch '%s' on origin: %s", branch, diagnostics)
 	}
 
-	return strings.TrimSpace(stdout.String()) != "", nil
+	// An exact ref name yields at most one line; no line means origin does not
+	// have the branch.
+	fields := strings.Fields(stdout.String())
+	if len(fields) == 0 {
+		return "", nil
+	}
+
+	return fields[0], nil
+}
+
+// RemoteBranchExists reports whether a branch exists on the remote `origin`.
+//
+// Existence is the remote revision being present, so this asks the one lookup
+// that the publish check also uses: the bool answers existence and the error
+// answers whether that could be determined, keeping the same two states apart as
+// remoteBranchRevision does (a missing `origin` is a known absence, and a
+// configured but unreachable `origin` is an error carrying git's diagnostics).
+func RemoteBranchExists(branch string) (bool, error) {
+	revision, err := remoteBranchRevision(branch)
+	if err != nil {
+		return false, err
+	}
+
+	return revision != "", nil
 }
 
 // GetLocalBranches returns a list of local Git branch names.

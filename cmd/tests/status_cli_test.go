@@ -97,12 +97,29 @@ func TestStatusAndFinishJSONCLI(t *testing.T) {
 		requireJSONString(t, doc, "base", "develop")
 		requireJSONString(t, doc, "return_branch", "develop")
 		requireJSONBool(t, doc, "delete_requested", false)
+		requireJSONBool(t, doc, "publish_work_branch", true)
 		requireJSONBool(t, doc, "dry_run", true)
 
 		targets := requireJSONArray(t, doc, "targets")
 		if len(targets) != 2 {
 			t.Fatalf("targets has %d entries, want 2:\n%v", len(targets), targets)
 		}
+		requireJSONStringSlice(t, doc, "auto_targets", []string{"develop"})
+		requireJSONStringSlice(t, doc, "manual_targets", []string{"main"})
+	})
+
+	t.Run("finish --dry-run --json --no-push", func(t *testing.T) {
+		repo := setupStatusRepo(t, statusTestConfig(), "feature/json-status")
+
+		output, exitCode := startCLIRawOutput(t, 15*time.Second, repo, binary, "finish", "--dry-run", "--json", "--no-push")
+		if exitCode != 0 {
+			t.Fatalf("finish --dry-run --json --no-push exited %d, want 0\n%s", exitCode, output)
+		}
+		assertNoHumanChrome(t, output)
+
+		doc := decodeSingleJSONDocument(t, output)
+		requireJSONBool(t, doc, "publish_work_branch", false)
+		requireJSONBool(t, doc, "dry_run", true)
 		requireJSONStringSlice(t, doc, "auto_targets", []string{"develop"})
 		requireJSONStringSlice(t, doc, "manual_targets", []string{"main"})
 	})

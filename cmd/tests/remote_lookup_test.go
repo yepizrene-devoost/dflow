@@ -106,3 +106,33 @@ func TestRemoteBranchExistsReportsAbsentAndPresentOnAReachableOrigin(t *testing.
 		}
 	})
 }
+
+// TestRemoteBranchExistsDoesNotMatchALongerBranchName pins the exact-ref-name
+// premise the publish identity comparison in PushWorkBranch rests on: a lookup
+// that prefix-matched would report `feature/demo` as existing when origin only
+// holds `feature/demo/sub`, letting a finish claim a branch it never published.
+func TestRemoteBranchExistsDoesNotMatchALongerBranchName(t *testing.T) {
+	repoDir := initTempGitRepo(t)
+	remoteDir := initBareGitRepo(t)
+	runGit(t, repoDir, "remote", "add", "origin", remoteDir)
+	runGit(t, repoDir, "branch", "feature/demo/sub")
+	runGit(t, repoDir, "push", "origin", "feature/demo/sub")
+
+	withWorkingDir(t, repoDir, func() {
+		exists, err := gitutils.RemoteBranchExists("feature/demo")
+		if err != nil {
+			t.Fatalf("looking up an absent shorter name must not fail: %v", err)
+		}
+		if exists {
+			t.Fatalf("expected feature/demo to be absent while origin only holds feature/demo/sub")
+		}
+
+		exists, err = gitutils.RemoteBranchExists("feature/demo/sub")
+		if err != nil {
+			t.Fatalf("looking up the pushed branch must not fail: %v", err)
+		}
+		if !exists {
+			t.Fatalf("expected feature/demo/sub to be reported as existing")
+		}
+	})
+}
