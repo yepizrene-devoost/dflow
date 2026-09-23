@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -42,41 +43,34 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
 		dryRun, err := cmd.Flags().GetBool("dry-run")
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 		deleteBranch, err := cmd.Flags().GetBool("delete")
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		if err := gitutils.EnsureWorkingTreeClean(); err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		if gitutils.MergeInProgress() {
-			utils.Error("A merge is already in progress. Resolve or abort it before running `dflow finish`.")
-			return nil
+			return fmt.Errorf("A merge is already in progress. Resolve or abort it before running `dflow finish`.")
 		}
 
 		cfg, err := utils.LoadConfig()
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		currentBranch, err := gitutils.CurrentBranch()
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		plan, err := utils.ResolveFinishPlan(cfg, currentBranch)
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		autoTargets := plan.AutoTargets()
@@ -119,8 +113,7 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 		}
 
 		if err := gitutils.FetchOrigin(); err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		var mergedTargets []string
@@ -137,23 +130,19 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 			utils.Info("Processing auto target '%s'...", target)
 
 			if err := gitutils.PullBranch(target); err != nil {
-				utils.Error(err.Error())
-				return nil
+				return err
 			}
 
 			if err := gitutils.MergeBranchIntoCurrent(plan.CurrentBranch); err != nil {
 				if gitutils.MergeInProgress() {
-					utils.Error("Merge conflict while merging '%s' into '%s'. Resolve or abort the merge on '%s' and try again.", plan.CurrentBranch, target, target)
-					return nil
+					return fmt.Errorf("Merge conflict while merging '%s' into '%s'. Resolve or abort the merge on '%s' and try again.", plan.CurrentBranch, target, target)
 				}
 
-				utils.Error(err.Error())
-				return nil
+				return err
 			}
 
 			if err := gitutils.PushBranchUpdate(target); err != nil {
-				utils.Error(err.Error())
-				return nil
+				return err
 			}
 
 			mergedTargets = append(mergedTargets, target)
@@ -176,8 +165,7 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 			}
 
 			if err := gitutils.Delete(plan.CurrentBranch); err != nil {
-				utils.Error(err.Error())
-				return nil
+				return err
 			}
 			utils.Success("Deleted finished branch '%s'", plan.CurrentBranch)
 		}

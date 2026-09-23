@@ -74,20 +74,17 @@ var InitCmd = &cobra.Command{
 
 		err := survey.AskOne(&survey.Input{Message: "Main branch name:", Default: "main"}, &mainBranch, survey.WithValidator(survey.Required))
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		err = survey.AskOne(&survey.Input{Message: "Development branch name:", Default: "develop"}, &developBranch, survey.WithValidator(survey.Required))
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		err = survey.AskOne(&survey.Input{Message: "UAT branch name:", Default: "uat"}, &uatBranch, survey.WithValidator(survey.Required))
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		// 🌟 merge modes explain
@@ -105,8 +102,7 @@ var InitCmd = &cobra.Command{
 			Default: "manual (via Pull Requests)",
 		}, &mergeModeOption)
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		var defaultMode, inverseMode string
@@ -149,8 +145,7 @@ var InitCmd = &cobra.Command{
 			Help:    fmt.Sprintf("Select the branches that require '%s' instead of the default '%s'", inverseMode, defaultMode),
 		}, &exceptionBranches)
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		for _, branch := range allBranches {
@@ -162,8 +157,7 @@ var InitCmd = &cobra.Command{
 		}
 
 		if err := utils.SaveConfig(&cfg); err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 		utils.Success("Created .dflow.yaml")
 
@@ -177,15 +171,12 @@ var InitCmd = &cobra.Command{
 
 		// 🌱 verify if base branches exists
 		if err := gitutils.CheckOrCreateBranch(mainBranch); err != nil {
-			utils.Error(err.Error())
 			return err
 		}
 		if err := gitutils.CheckOrCreateBranch(developBranch); err != nil {
-			utils.Error(err.Error())
 			return err
 		}
 		if err := gitutils.CheckOrCreateBranch(uatBranch); err != nil {
-			utils.Error(err.Error())
 			return err
 		}
 
@@ -201,22 +192,18 @@ var InitCmd = &cobra.Command{
 		}
 
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		if pushConfirm {
 			if err := gitutils.PushBranch(mainBranch); err != nil {
-				utils.Error("Failed to push '%s': %v", mainBranch, err)
-				return err
+				return fmt.Errorf("Failed to push '%s': %v", mainBranch, err)
 			}
 			if err := gitutils.PushBranch(developBranch); err != nil {
-				utils.Error("Failed to push '%s': %v", developBranch, err)
-				return err
+				return fmt.Errorf("Failed to push '%s': %v", developBranch, err)
 			}
 			if err := gitutils.PushBranch(uatBranch); err != nil {
-				utils.Error("Failed to push '%s': %v", uatBranch, err)
-				return err
+				return fmt.Errorf("Failed to push '%s': %v", uatBranch, err)
 			}
 		}
 

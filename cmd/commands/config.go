@@ -130,9 +130,7 @@ configuration for this repository.`,
 		email, err2 := exec.Command("git", "config", "--get", "dflow.email").Output()
 
 		if err1 != nil || err2 != nil {
-			utils.Error("Author or email not set. Use `dflow config set-author`")
-
-			return nil
+			return fmt.Errorf("Author or email not set. Use `dflow config set-author`")
 		}
 
 		fmt.Printf("👤 Author: %s\n", strings.TrimSpace(string(author)))

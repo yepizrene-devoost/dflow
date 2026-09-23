@@ -51,6 +51,46 @@ func TestStartCLI(t *testing.T) {
 		})
 	}
 
+	// The exit code is the contract a non-TTY caller observes through $?.
+	// Assert it against the real binary, and assert the styled failure line is
+	// rendered exactly once.
+	t.Run("exit codes", func(t *testing.T) {
+		repo := setupStartRepo(t)
+		saveStartCLIConfig(t, repo)
+
+		output, exitCode := startCLIExitCode(t, 15*time.Second, repo, binary, "start", "feat", "conflict", "--push", "--no-push")
+		if exitCode == 0 {
+			t.Fatalf("conflicting push flags exited %d, want non-zero\n%s", exitCode, output)
+		}
+		if !strings.Contains(output, "cannot be used together") {
+			t.Fatalf("failure message missing from output:\n%s", output)
+		}
+		if got := strings.Count(output, "\u274c"); got != 1 {
+			t.Fatalf("error line rendered %d times, want exactly 1:\n%s", got, output)
+		}
+
+		output, exitCode = startCLIExitCode(t, 15*time.Second, repo, binary, "start", "feat", "exit-ok", "--no-push")
+		if exitCode != 0 {
+			t.Fatalf("successful start exited %d, want 0\n%s", exitCode, output)
+		}
+	})
+
+	// A missing .dflow.yaml must fail through the validator wrapper, not only
+	// through a command handler returning its own error.
+	t.Run("uninitialized repo", func(t *testing.T) {
+		repo := initTempGitRepo(t)
+		output, exitCode := startCLIExitCode(t, 15*time.Second, repo, binary, "start", "feat", "no-config", "--no-push")
+		if exitCode == 0 {
+			t.Fatalf("start without .dflow.yaml exited 0, want non-zero\n%s", output)
+		}
+		if !strings.Contains(output, "not initialized") {
+			t.Fatalf("missing initialization error:\n%s", output)
+		}
+		if got := strings.Count(output, "\u274c"); got != 1 {
+			t.Fatalf("error line rendered %d times, want exactly 1:\n%s", got, output)
+		}
+	})
+
 	t.Run("remote-only parent", func(t *testing.T) {
 		publisher := setupStartRepo(t)
 		origin := startCLICommand(t, 10*time.Second, publisher, "git", "remote", "get-url", "origin")
@@ -127,4 +167,29 @@ func startCLICommand(t *testing.T, timeout time.Duration, dir, program string, a
 		t.Fatalf("%s %v failed: %v\n%s", program, args, err, output)
 	}
 	return strings.TrimSpace(string(output))
+}
+
+// startCLIExitCode mirrors startCLICommand but returns the process exit code
+// instead of failing the test on a non-zero result.
+func startCLIExitCode(t *testing.T, timeout time.Duration, dir, program string, args ...string) (string, int) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, program, args...)
+	cmd.Dir = dir
+	// A nil Stdin reads from the null device: EOF, never an interactive TTY.
+	cmd.Stdin = nil
+	cmd.WaitDelay = time.Second
+	output, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		t.Fatalf("%s %v timed out: %v\n%s", program, args, ctx.Err(), output)
+	}
+	if err == nil {
+		return strings.TrimSpace(string(output)), 0
+	}
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("%s %v did not run: %v\n%s", program, args, err, output)
+	}
+	return strings.TrimSpace(string(output)), exitErr.ExitCode()
 }

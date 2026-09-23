@@ -33,6 +33,11 @@ tasks with a customizable flow model.`,
   dflow config set-author "Jane Doe" --email=jane@example.com
   dflow version`,
 
+	// Cobra must not print errors or usage on its own: Execute renders the
+	// failure exactly once, keeping the styled single-render contract.
+	SilenceErrors: true,
+	SilenceUsage:  true,
+
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		if shouldSkipBanner(os.Args[1:]) {
 			return
@@ -58,7 +63,9 @@ tasks with a customizable flow model.`,
 // It should be called from the `main` function in main.go to start the CLI.
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
-		// fmt.Println(err)
+		// Single render point: Cobra is silenced above, so the failure is
+		// reported once here and the process exits non-zero.
+		utils.Error("%s", err.Error())
 		os.Exit(1)
 	}
 }

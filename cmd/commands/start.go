@@ -69,7 +69,7 @@ var StartCmd = &cobra.Command{
 
 		if len(args) < 2 {
 			_ = cmd.Help()
-			return nil
+			return fmt.Errorf("missing arguments: expected `dflow start <type> <name>`")
 		}
 
 		pushFlag, _ := cmd.Flags().GetBool("push")
@@ -80,8 +80,7 @@ var StartCmd = &cobra.Command{
 
 		branchType, err := utils.ParseBranchType(args[0])
 		if err != nil {
-			utils.Error("Unknown type. Use: feat, release, hotfix, bugfix")
-			return nil
+			return fmt.Errorf("Unknown type. Use: feat, release, hotfix, bugfix")
 		}
 
 		//normalize name of branch, change "word with word" or multiple void spaaces to "word-with-word"
@@ -95,20 +94,17 @@ var StartCmd = &cobra.Command{
 
 		cfg, err := utils.LoadConfig()
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		prefix, err := utils.GetBranchPrefix(cfg, branchType)
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		rule, err := utils.GetFlowRule(cfg, branchType)
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		fromBranch, _ := cmd.Flags().GetString("from")
@@ -126,30 +122,25 @@ var StartCmd = &cobra.Command{
 		fullName := fmt.Sprintf("%s%s", prefix, branchName)
 
 		if valid, reason := validators.IsValidGitBranchName(fullName); !valid {
-			utils.Error("Invalid branch name '%s': %s", fullName, reason)
-			return nil
+			return fmt.Errorf("Invalid branch name '%s': %s", fullName, reason)
 		}
 
 		if fromBranch != "" {
 			if err := gitutils.CheckoutBranch(fromBranch); err != nil {
-				utils.Error(err.Error())
-				return nil
+				return err
 			}
 		} else {
 			if err := gitutils.Checkout(base); err != nil {
-				utils.Error("Could not checkout base branch '%s'", base)
-				return nil
+				return fmt.Errorf("Could not checkout base branch '%s'", base)
 			}
 
 			if err := gitutils.Pull(); err != nil {
-				utils.Error("Failed to pull latest changes from '%s'", base)
-				return nil
+				return fmt.Errorf("Failed to pull latest changes from '%s'", base)
 			}
 		}
 
 		if err := gitutils.CheckoutNew(fullName); err != nil {
-			utils.Error("Failed to create branch '%s'", fullName)
-			return nil
+			return fmt.Errorf("Failed to create branch '%s'", fullName)
 		}
 
 		utils.Success("Created and switched to branch '%s' from '%s'", fullName, base)
@@ -168,8 +159,7 @@ var StartCmd = &cobra.Command{
 
 		if pushBranch {
 			if err := gitutils.PushBranch(fullName); err != nil {
-				utils.Error("Failed to push branch '%s': %v", fullName, err)
-				return err
+				return fmt.Errorf("Failed to push branch '%s': %v", fullName, err)
 			}
 		}
 
