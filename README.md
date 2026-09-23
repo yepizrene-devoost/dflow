@@ -55,9 +55,43 @@ Whether you're working solo or in a team, `dflow` helps you keep your Git histor
 
 ## 📦 Installation
 
-### 🧪 Option 1: Precompiled Binaries (Recommended)
+### ⚡ Option 1: One-Line Installer (Recommended)
 
-Download the latest binary for your platform from the [Releases page](https://github.com/yepizrene-devoost/dflow/releases).
+#### 🐧 Linux and macOS
+
+```bash
+curl -fsSL https://github.com/yepizrene-devoost/dflow/releases/latest/download/install.sh | sh
+```
+
+Resolves the latest release, downloads `dflow_<OS>_<arch>.tar.gz` together with its published SHA-256 checksums, verifies the archive before touching your system, and installs the binary to `$HOME/.local/bin` without `sudo`. If that directory is not on your `PATH` yet, the installer prints the exact line to add.
+
+#### 🪟 Windows (PowerShell)
+
+```powershell
+irm https://github.com/yepizrene-devoost/dflow/releases/latest/download/install.ps1 | iex
+```
+
+Runs the same flow for `dflow_Windows_<arch>.zip`, verifies the SHA-256 checksum, and installs to `%LOCALAPPDATA%\Programs\dflow`. It adds that directory to your user `PATH`, so open a new terminal (or sign out and back in) for the change to take effect.
+
+#### ⚙️ Installer options
+
+- `DFLOW_VERSION` pins a version instead of installing the latest release. Both installers accept `0.2.0` and `v0.2.0`.
+- `DFLOW_INSTALL_DIR` overrides the install directory. Shell installer only; defaults to `$HOME/.local/bin`.
+- The shell installer also supports `--help`.
+
+```bash
+curl -fsSL https://github.com/yepizrene-devoost/dflow/releases/latest/download/install.sh | DFLOW_VERSION=v0.2.0 DFLOW_INSTALL_DIR="$HOME/bin" sh
+```
+
+```powershell
+$env:DFLOW_VERSION = '0.2.0'; irm https://github.com/yepizrene-devoost/dflow/releases/latest/download/install.ps1 | iex
+```
+
+---
+
+### 📥 Option 2: Manual Download
+
+Prefer to install by hand? Grab the archive for your platform from the [Releases page](https://github.com/yepizrene-devoost/dflow/releases), extract it, and move the binary onto your `PATH`.
 
 #### Linux (x86_64)
 ```bash
@@ -99,7 +133,7 @@ rm -rf dflow_Darwin_arm64.tar.gz dflow_tmp
 
 ---
 
-### 🛠 Option 2: Build from Source
+### 🛠 Option 3: Build from Source
 
 Requires [Go 1.21+](https://golang.org/doc/install):
 
