@@ -95,18 +95,29 @@ Default agent behavior: propose a PR. Direct merge is explicit, never assumed.
 
 Close the issue when the finished branch has no manual targets left, and only then:
 
-- **Trigger** — `dflow finish --dry-run` reports `Manual targets: none`; the
-  machine-readable equivalent is `"manual_targets": []` in `dflow finish
-  --dry-run --json`. Check it at the finish, before the branch is deleted:
+- **Trigger** — `dflow finish --dry-run` prints a line containing
+  `Manual targets: none`; the `ℹ️` icon and the two spaces after it are chrome,
+  not part of what you match. The machine-readable equivalent is the
+  `manual_targets` field of `dflow finish --dry-run --json`, which reads
+  `"manual_targets":[]` — parse the field, never the spacing. Check it at the
+  finish, while the branch is still a work branch: `dflow finish` does **not**
+  delete the branch, `--delete` is the only thing that removes it, and only when
+  no manual target remains. A later check from `develop` fails only because the
+  base branch is not a work branch, not because a branch was deleted, so
+  re-check from the branch, which survives:
   - No manual target: close the issue as part of that finish.
   - A manual target remains — the PR toward `main` on a `release` or `hotfix`
     branch: the merge into `develop` does **not** close the issue. Close it when
     the last manual target is completed, that is, when that PR merges.
   Work a human still has to finish is not finished, which is why the issue stays
   open until then.
-- **Labels** — remove `status:approved` ("Approved for implementation — PRs can
-  now be opened") and `status:needs-review` ("Awaiting maintainer review"); keep
-  the issue's `type:` label. There is no `status:delivered` label.
+- **Labels** — remove every `status:` label naming a state that has ended,
+  whatever its name: `status:approved` ("Approved for implementation — PRs can
+  now be opened"), `status:needs-review` ("Awaiting maintainer review"),
+  `status:needs-design` ("Valid idea; needs an architectural decision before a
+  PR") and any other. Keep the issue's `type:` label. Issue #22 is the case that
+  exposed this: it carried `status:needs-design`, so naming only the other two
+  would have left a stale status behind. There is no `status:delivered` label.
 - **Closing comment** — one comment, naming the merge commit that landed the
   branch on `develop`: `git log --merges -1 --format=%H develop` taken right
   after the finish, or, for a branch already merged, the merge commit whose
