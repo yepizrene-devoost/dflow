@@ -289,8 +289,7 @@ func branchExists(t *testing.T, repoDir, branch string) bool {
 func remoteBranchExists(t *testing.T, repoDir, branch string) bool {
 	t.Helper()
 
-	output := runGitOutput(t, repoDir, "ls-remote", "--heads", "origin", branch)
-	return strings.TrimSpace(output) != ""
+	return remoteRevision(t, repoDir, branch) != ""
 }
 
 // finishPublishRepo builds the fixture the publish tests share: a repository with
