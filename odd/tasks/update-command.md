@@ -44,10 +44,21 @@ Closes forge issue #25 (`feat(update): add dflow update self-update command`).
      65 subtests against httptest/temp files, zero real network. Controller-run
      checks on the work tree: `go build ./...`, `go vet ./...`, `gofmt -l .`
      clean, `go test -count=1 ./cmd/selfupdate/...` ok.
-3. [ ] WU2 — replacement logic (`cmd/selfupdate`)
-   - `os.Executable()` discovery, writability check, atomic stage + rename,
-     Windows rename-aside for the locked executable, `dev`-marker provenance
-     warning. Unit tests for pure paths and Windows-flagged paths.
+3. [x] WU2 — replacement logic (`cmd/selfupdate`)
+   - Delegated to a bounded `gentle-ai-worker`; then one controller correction.
+     `fetch.go` (streaming download, injectable client, partial-file cleanup),
+     `archive.go` (tar.gz/zip extraction by goos, zip-slip guard on every
+     entry, `dflow.exe` accepted per install.ps1), `replace.go`
+     (`EnsureWritable` + staged atomic `InstallBinary`, Windows rename-aside
+     with restore-on-failure), `provenance.go` (`HasReleaseProvenance`).
+     Accepted worker deviation: no post-swap `.old` removal — a running Windows
+     process keeps it locked anyway, and a stale aside is cleared best-effort
+     before each rename, so nothing accumulates. Controller correction: the
+     O_WRONLY probe in `EnsureWritable` now treats ETXTBSY as a pass (it is the
+     signature of probing the running binary itself, and the rename strategy
+     never needs a write-open) — without it, `dflow update` would have refused
+     on every Unix host. Checks: `go build ./...`, `go vet ./...`,
+     `gofmt -l .`, `GOOS=windows go vet`, `go test -count=1 ./cmd/selfupdate/...` all green.
 4. [ ] WU3 — command wiring (`cmd/commands/update.go`)
    - `dflow update` with `--force`, `--check`, `--json`; human output via
      `utils` helpers; JSON document contract; root registration; CLI tests.
@@ -61,3 +72,4 @@ Closes forge issue #25 (`feat(update): add dflow update self-update command`).
 
 | Unit | Commit | Subject |
 | --- | --- | --- |
+| WU1 | `e2cfe29` | `feat(update): add release discovery and checksum verification` |
