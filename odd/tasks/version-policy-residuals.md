@@ -39,7 +39,7 @@ policy and backfill the closed issues to match it (#22), and clear the residuals
      tag for a non-release tree.
    - Tests: version formatting, dirty suffix, no-stamping fallback, flag output.
    - Evidence: see WU1 under `## Evidence`.
-2. [ ] WU2 — issue #23: code and prose residuals
+2. [x] WU2 — issue #23: code and prose residuals
    - `cmd/gitutils/git.go:218-221` (R2-1): readability of the deletion-outcome switch `default:` arm.
    - `cmd/gitutils/git.go:177-178` (R2-2): the "observe both copies before touching either" comment.
    - `RemoteBranchExists`: separate "absent" from "lookup failed"; update `Delete()` and the two
@@ -48,15 +48,18 @@ policy and backfill the closed issues to match it (#22), and clear the residuals
    - Stale Strict TDD sentence in `odd/tasks/init-refuse-reinitialize.md`; verify the
      `odd/tasks/git-output-hygiene.md` claim (grep does not find the sentence there — record the
      discrepancy).
-3. [ ] WU3 — issue #22: the issue-closure policy
+   - Evidence: see WU2 under `## Evidence`.
+3. [x] WU3 — issue #22: the issue-closure policy
    - Rule written in `.agents/workflows/dflow-workflow.md`, referenced from `AGENTS.md` (not
      restated): trigger, labels at close, closing-comment traceability, rejected/duplicate
      out-of-scope note.
-4. [ ] WU4 — checks, docs and commit identity
+   - Evidence: see WU3 under `## Evidence`.
+4. [x] WU4 — checks, docs and commit identity
    - `go build ./...`, `go vet ./...`, `gofmt -l .`, `go test -count=1 ./...`, `git diff --check`.
    - `README.md` and `CHANGELOG.md` where the behavior is user-visible.
    - Housekeeping (no commit): delete the merged local branch `feature/idempotent-delete`.
    - Record work-unit commit SHAs here.
+   - Evidence: see WU4 under `## Evidence`.
 
 ## Out of scope
 
@@ -149,8 +152,159 @@ Residuals accepted for WU1, all small:
 - GoReleaser's build flags were not re-inspected beyond confirming it injects `main.version`,
   which the channel-only decision leaves meaningful.
 
-### WU2 — pending
+### WU2 — the residuals left by #19 (issue #23)
 
-### WU3 — pending
+Written by a bounded `gentle-ai-worker` (tasks `mudzxyr9-2-j3lh`, then `mue0fc0h-4-j3lh` for the
+correction below) on `cmd/gitutils/*`, `cmd/commands/delete.go`, three test files and
+`odd/tasks/init-refuse-reinitialize.md`.
 
-### WU4 — pending
+**The brief was wrong and the tests caught it.** The contract handed to the writer — "`git
+ls-remote` fails when `origin` is unreachable **or absent**" — made a repository with no `origin`
+remote at all a failure case. Three pre-existing delete subtests went red
+(`TestFailurePathRendersOneErrorIconAndNoSuccessChrome/successful delete keeps its chrome`,
+`TestShortValueArgumentRendersAsValue`, `TestStartCLI/delete_--yes`), and the writer correctly
+stopped and asked to expand its surfaces so it could give those fixtures an `origin`.
+
+That request was refused, and the fixtures were left untouched. A missing `origin` is a **known
+absence**, decidable locally: `HasOriginRemote()` is `git remote get-url origin`, no network, and
+the repository already treats that state as benign in five places (`FetchOrigin`/`Pull`,
+`CheckoutBranch`, `PullBranch`, `PushBranchUpdate`, and `dflow status`'s `has_origin`). For
+`dflow delete` with no `origin`, "the remote branch does not exist, skipping remote deletion" with
+exit 0 is a true statement and it is the guarantee #19 shipped. #23 names the other state — "with
+the network down and the local branch present" — which is `origin` configured and the lookup
+failing. The fix went into the lookup: known absence returns `false, nil` before any network call,
+the unknown case returns an error. All three red subtests then passed with no edit to their files,
+which is the check that the diagnosis was right rather than the fixtures being wrong.
+
+Final behavior table for `RemoteBranchExists` / `Delete`:
+
+| `origin` | lookup | remote copy | `Delete` outcome |
+| --- | --- | --- | --- |
+| not configured | not attempted | known absent | local half deleted, skip message, exit 0 |
+| configured | succeeds | absent | local half deleted, skip message, exit 0 |
+| configured | **fails** | unknown | local half deleted, then error naming what could not be checked; with no local half, nothing is touched |
+| configured | succeeds | present | both halves deleted, or the remote failure names the half that remains |
+
+R2-1 and R2-2 are presentation-only as the review recorded them: the outcome switch now reads
+`case remoteExisted:` instead of `default:`, and the "observe both copies" comment states the
+reason without re-deriving it. The three outcome messages are byte-identical, so no new test was
+invented for them and none is claimed.
+
+TDD: strict TDD applied to the behavior change. RED for the known-absence pair came from the
+lookup returning the failure (`a missing origin is a known absence, not a lookup failure: failed
+to check remote branch 'feature/example' on origin: ...`) and the CLI exiting 1 where 0 is
+required; GREEN after the early return. The discriminating pair asserts both states inside one
+test (`missing origin → (false, nil)` with no request, `configured-but-unreachable → error`), so a
+change that collapsed them again could not pass.
+
+**Mutation check of that claim, and an incident while running it.** The early return was removed
+and the focused run went red exactly on the two new tests, confirming they discriminate rather
+than merely pass. Restoring the file the second time used `git checkout cmd/gitutils/git.go`, which
+reverts to `HEAD` and discarded the unit's uncommitted work on that file; it was recovered from the
+`/tmp` copy taken before the mutation, and the recovery was verified by `cmp`, by the diffstat
+returning to 65 insertions / 14 deletions, by `go build ./...`, and by a full green `go test
+-count=1 ./...`. Recorded because `git checkout` on a file carrying uncommitted work is the trap,
+not the mutation: the restore must come from the backup, and a second mutation round on an
+uncommitted file should copy the backup in before testing rather than reaching for Git.
+
+Two small controller edits after that, both local: the `--help` sentence in `cmd/commands/delete.go`
+narrowed to "a configured 'origin' cannot be reached" so it does not read as "no origin is an
+error" (delegated, then reviewed), and the new comment sentence in `git.go` rewritten — "every
+branch copy lives in a remote" was wrong as written, since a local copy is also a branch copy.
+
+A third edit came out of the end-to-end check rather than from the report. The failure message
+ended with git's explanation **and** `: exit status 128`, which is not what the existing delete and
+merge messages do: they let git's own text end the sentence. It now does the same. The assertion
+pinning that shape was added to the unknown-case test, and it was mutation-checked by restoring the
+`: %s: %w` form and seeing it go red.
+
+**A second trap in that mutation check.** The first attempt to run the new assertion used
+`-run TestRemoteBranchExistsSeparatesAbsentFromFailedLookup`, and it passed with the mutation
+still in place. The reason was not that the assertion was useless: it had landed in
+`TestRemoteBranchExistsKeepsAMissingOriginAndAFailedOriginApart`, because two tests ended with the
+same `if exists { ... }` block and the edit matched the other occurrence. Running the mutation
+against the file rather than against the intended test name produced a false green and nearly a
+wrong conclusion — the assertion discriminates, the run was the defect. Both incidents are recorded
+because both are cheap to repeat.
+
+**Refuted item from the issue.** #23 lists the stale Strict TDD sentence as living in both
+`odd/tasks/init-refuse-reinitialize.md` and `odd/tasks/git-output-hygiene.md`. Only the first is
+true: `git show 60d9e07:odd/tasks/git-output-hygiene.md | grep -ci tdd` → `0`, and the same count
+against the working tree. That file was not edited. The correction in `init-refuse-reinitialize.md`
+follows the shape #19 used: it states what evidence exists, what does not, and quotes the sentence
+that was wrong, instead of inventing RED→GREEN retroactively.
+
+Accepted residual, flagged for review: `CheckoutBranch` now resolves the remote **before**
+`FetchOrigin`. Both orders are honest (an unreachable `origin` already failed at the fetch), but
+the error a user sees when offline changes from `failed to fetch origin` to `failed to check remote
+branch ... on origin`, and the writer's stated reason was to make the unknown case reachable from a
+fixture. Kept, because it also avoids a pointless full fetch when the branch is not on the remote
+at all.
+
+### WU3 — the issue-closure policy (issue #22)
+
+Written by a bounded `gentle-ai-worker` (task `mudzyhab-3-3ofy`) in an isolated worktree on
+`.agents/workflows/dflow-workflow.md` and `AGENTS.md` only; the patch applied to this tree clean.
+
+Both quoted observables were verified here rather than taken from the report: `Manual targets: %s`
+renders `none` for an empty list (`cmd/commands/finish.go:131` with `formatBranchList`), and
+`"manual_targets": []` is a real field of the finish plan document
+(`cmd/commands/finish.go:241`). The structural reason the rule gives for not relying on `Closes
+#N` is also real: `develop` is an `auto` target and the finish runs `git merge --no-ff --no-edit`
+(`cmd/gitutils/finish.go:90`), so Git writes the merge message itself and no PR carries the keyword.
+
+Two defects found in review, both corrected:
+
+- **Two triggers that disagreed.** The pre-existing bullet said an issue closes when the work
+  "lands in `develop`", while the new checklist made the trigger "no manual targets remain". On a
+  `release` or `hotfix` branch those give opposite answers, because `develop` receives the merge
+  while the PR toward `main` is still open. The document now names one trigger and the old bullet
+  points at it.
+- **The trigger was half-written.** It said the issue stays open while a manual target remains but
+  not when to close it, and the check cannot be repeated later: once the branch is finished
+  (especially with `--delete`) there is no branch left to dry-run. It now says to check at the
+  finish, and to close when the last manual target's PR merges.
+
+Prose-only, so strict TDD did not apply and is not claimed; the verification is the source greps
+above plus `git diff --check`. The backfill of #17, #18, #19 and #20 is a forge action and belongs
+to the close-out, not to this commit.
+
+### WU4 — checks and commit identity
+
+Checks over the whole branch, run in this tree with all three units applied:
+`go build ./...`, `go vet ./...`, `gofmt -l .` clean;
+`go test -count=1 ./...` green (`ok cmd/tests 23.366s`, `ok cmd/utils 0.350s`, four packages with no
+test files); `git diff --check` clean.
+
+End-to-end verification of the delete contract with a real binary built from this tree, not the
+test suite alone:
+
+| fixture | observed |
+| --- | --- |
+| no `origin`, local branch present | `Branch 'feature/x' deleted locally.` + `Remote branch 'feature/x' does not exist. Skipping remote deletion.`, exit 0 |
+| `origin` at a missing path, local branch present | local branch deleted, then `deleted local branch 'feature/y' but failed to check remote branch 'feature/y' on origin: fatal: ... does not appear to be a git repository ...`, exit 1 |
+
+Housekeeping: the merged local branch `feature/idempotent-delete` was already absent
+(`git branch --list` is empty for it, and `git branch -a` lists only `develop`, `main` and this
+branch), so the item was satisfied by the state #19 left behind and needed no deletion. Nothing was
+removed by this session.
+
+The documentation issue template was not created, per the decision recorded at the top of this
+document: issue #23 makes it conditional on a real need appearing, and no issue or request in this
+session asked for one. That choice is reported in the closing comment on #23 rather than being
+silently dropped.
+
+Work-unit commit identity on `feature/version-policy-residuals`:
+
+| Unit | Commit | Subject |
+| --- | --- | --- |
+| WU1 | `b016811` | `feat(version): report the exact build revision` |
+| WU2 | `b97b730` | `fix(gitutils): tell an absent remote branch apart from an unchecked one` |
+| WU3 | `1b9ec51` | `docs(workflow): define a uniform issue-closure policy` |
+
+This document's own commit is the follow-up `docs(odd)` commit the ODD rule allows: it carries the
+identity record above and closes WU4, and it is the last tracked write before the freeze.
+
+`size:exception` applies to this branch: the changed-line total is far above the 400-line review
+budget, because WU1 alone adds 418 lines of tests. The exception is a maintainer decision and is
+recorded on the issues, since `develop` is an `auto` target and no pull request carries it.
