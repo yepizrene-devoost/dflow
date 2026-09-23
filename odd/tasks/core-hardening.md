@@ -731,3 +731,18 @@ delegation is HEAD `a34cff0` (the review itself bound the reviewed code at `8c85
 `a34cff0` only records this section), so the WU7 changes described under
 `### WU7 — review advisories` form a new tree that carries its own review; the approval does
 not extend to it.
+
+### WU7 delta review
+
+The advisory fix was reviewed as its own candidate rather than by re-freezing the whole branch,
+which keeps each approval bound to what it actually examined:
+
+- lineage: `review-37bbce2c4b0a7908`, base `a34cff0`, 12 changed paths, 317 changed lines
+- outcome: `approved`, 4 of 4 lenses admitted, no advisories reported
+- authority burned as `gentle-ai.review-acknowledged/v1`, consuming revision
+  `sha256:2e0a8fe213e0a8ae33751de325223f34ffbbb8afc9f0ddec377d035db523d6a0`
+
+The two approvals together cover the branch: `review-819ad26b9e0c322b` for everything up to
+`8c856c4`, and `review-37bbce2c4b0a7908` for the advisory fix in `097ecb4`. A delta review also
+costs a fraction of a whole-branch freeze: the lens prompts were about 38 KB each against
+184 KB for the first review.
