@@ -156,6 +156,11 @@ func Delete(branch string) error {
 	// without asking Git, and letting Git answer would surface its refusal as a
 	// foreign message. A branch checked out in another worktree stays Git's call,
 	// because only Git knows about it.
+	//
+	// A failed lookup deliberately does not fail the deletion: when the current
+	// branch cannot be determined the guard stands aside and lets Git decide,
+	// because propagating that error would turn a deletion Git would have allowed
+	// into a refusal caused by an unrelated problem.
 	if current, err := CurrentBranch(); err == nil && current == branch {
 		return fmt.Errorf("cannot delete branch '%s' because it is the branch you are currently on", branch)
 	}

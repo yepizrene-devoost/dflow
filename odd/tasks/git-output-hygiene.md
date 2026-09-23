@@ -132,3 +132,19 @@ empty, `go test -count=1 ./...` green. Existing contract suites re-run green:
 `TestShortValueArgumentRendersAsValue`, `TestStatusAndFinishJSONCLI`,
 `TestJSONFlagParseFailureStaysJSON`. `dflow finish --dry-run --json` still emits
 exactly one JSON document (manual run plus `TestStatusAndFinishJSONCLI/finish_--dry-run_--json`).
+
+## Native review
+
+The branch was reviewed as candidate `review-dd4f7244f0a3c9bc` over `develop..f038e5d`:
+tier `high`, 5 changed paths, 502 changed lines, 4 of 4 lenses admitted, **approved**, and
+the authority burned as `gentle-ai.review-acknowledged/v1`.
+
+One non-blocking SUGGESTION was recorded: `R2-001`, readability, on the current-branch
+guard in `Delete`. The guard reads `if current, err := CurrentBranch(); err == nil &&
+current == branch`, so a failed lookup silently skips it.
+
+Resolution: the behaviour is kept and the intent is now documented. A failed lookup must
+not turn a deletion Git would have allowed into a refusal caused by an unrelated problem,
+so the guard stands aside deliberately and the error is not propagated. The comment in
+`Delete` states that. No behaviour changed, no correction was opened, and the approved
+receipt stands.
