@@ -263,12 +263,17 @@ func Delete(branch string) error {
 //
 // Each variant keeps its exact wording, Git's captured diagnostics included.
 func remoteDeleteFailure(branch string, localExisted bool, diagnostics string) error {
-	diagnostics = strings.TrimSpace(diagnostics)
-	if localExisted {
-		return fmt.Errorf("deleted local branch '%s' but failed to delete remote branch '%s': %s", branch, branch, diagnostics)
+	// The remote half's sentence is built once and the other variant composes over
+	// it, so the wording of `failed to delete remote branch '<branch>'` exists in a
+	// single place and the two variants cannot drift apart in what they say.
+	remoteFailure := fmt.Errorf("failed to delete remote branch '%s': %s", branch, strings.TrimSpace(diagnostics))
+	if !localExisted {
+		return remoteFailure
 	}
 
-	return fmt.Errorf("failed to delete remote branch '%s': %s", branch, diagnostics)
+	// No `%w` here: this variant has never unwrapped to the remote sentence, and
+	// sharing the wording must not add an error chain the callers never saw.
+	return fmt.Errorf("deleted local branch '%s' but %s", branch, remoteFailure)
 }
 
 // deleteLocalBranch removes the local branch with `git branch -D` and reports
