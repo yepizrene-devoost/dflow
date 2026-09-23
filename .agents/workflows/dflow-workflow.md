@@ -78,14 +78,43 @@ Default agent behavior: propose a PR. Direct merge is explicit, never assumed.
 
 ## Issue lifecycle
 
-- The repository default branch is `develop`, so an issue closes when the work
-  that addresses it lands in **`develop`** — not `main`.
-- Close it with a GitHub closing keyword (`Closes #<n>`) in the commit or merge
-  message. A merge **without** that keyword leaves the issue open.
+- The repository default branch is `develop`, so the delivering merge lands
+  there — not on `main`. **When** that closes the issue is the trigger in
+  "Closing an issue" below; nothing else is a trigger.
+- Closing is an explicit step, not a side effect of merging. A `Closes #<n>`
+  keyword needs a pull request merged into the default branch to carry it; here
+  `develop` is an `auto` finish target merged by `dflow finish` with no PR, and
+  `git merge --no-ff --no-edit` writes the merge message itself, so the keyword
+  has no reliable carrier in this flow.
 - `main` and release branches do not close issues. The release promotion
   (`develop` → `main`) is recorded in the changelog, not in issues.
 - Issues track any work unit (feature, bug, chore, docs), not only production
   incidents.
+
+### Closing an issue
+
+Close the issue when the finished branch has no manual targets left, and only then:
+
+- **Trigger** — `dflow finish --dry-run` reports `Manual targets: none`; the
+  machine-readable equivalent is `"manual_targets": []` in `dflow finish
+  --dry-run --json`. Check it at the finish, before the branch is deleted:
+  - No manual target: close the issue as part of that finish.
+  - A manual target remains — the PR toward `main` on a `release` or `hotfix`
+    branch: the merge into `develop` does **not** close the issue. Close it when
+    the last manual target is completed, that is, when that PR merges.
+  Work a human still has to finish is not finished, which is why the issue stays
+  open until then.
+- **Labels** — remove `status:approved` ("Approved for implementation — PRs can
+  now be opened") and `status:needs-review` ("Awaiting maintainer review"); keep
+  the issue's `type:` label. There is no `status:delivered` label.
+- **Closing comment** — one comment, naming the merge commit that landed the
+  branch on `develop`: `git log --merges -1 --format=%H develop` taken right
+  after the finish, or, for a branch already merged, the merge commit whose
+  subject is `Merge branch '<branch>' into develop`. Add the review lineage when
+  the candidate went through review.
+
+Issues closed as rejected, duplicate or invalid keep their own terminal handling:
+that is a human decision. This policy covers delivered work only.
 
 ## Chained branches
 

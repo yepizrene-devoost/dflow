@@ -61,5 +61,5 @@ skill paths from the local skill registry.
 ## Source Of Truth
 
 - Treat `.agents/workflows/commit-rules.md` as the source of truth for commit-message conventions.
-- Treat `.agents/workflows/dflow-workflow.md` as the source of truth for dflow usage and merge/PR rules.
+- Treat `.agents/workflows/dflow-workflow.md` as the source of truth for dflow usage, merge/PR rules and issue closure.
 - If these rules are updated there, keep this file aligned with them.
