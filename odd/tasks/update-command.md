@@ -59,9 +59,22 @@ Closes forge issue #25 (`feat(update): add dflow update self-update command`).
      never needs a write-open) — without it, `dflow update` would have refused
      on every Unix host. Checks: `go build ./...`, `go vet ./...`,
      `gofmt -l .`, `GOOS=windows go vet`, `go test -count=1 ./cmd/selfupdate/...` all green.
-4. [ ] WU3 — command wiring (`cmd/commands/update.go`)
-   - `dflow update` with `--force`, `--check`, `--json`; human output via
-     `utils` helpers; JSON document contract; root registration; CLI tests.
+4. [x] WU3 — command wiring (`cmd/commands/update.go`)
+   - Delegated to a bounded `gentle-ai-worker`; then one controller semantics
+     correction. `UpdateCmd` with `--force`/`--check`/`--json`, six-key JSON
+     report (`current_version`, `latest_version`, `update_available`,
+     `updated`, `path`, `release_url`), `--check`+`--force` conflict guard,
+     `os.Executable()`+`EvalSymlinks` target resolution, `DFLOW_UPDATE_API_URL`
+     override, provenance warning, `EnsureWritable` before any download, temp
+     dir cleaned on all paths, spinner skipped in JSON mode. Controller
+     correction: no-provenance binaries always report an update available —
+     the comparator's string fallback ranked `"dev"` below every digit, which
+     would have shown "already up to date" and stranded the user behind a
+     `--force` (contradicting the confirmed warn-and-continue decision);
+     up-to-date test re-pinned with a stamped equal-version binary. CLI tests
+     run a copy of the built binary in a temp install dir against an httptest
+     release server (zero real network). Full `go test -count=1 ./...` green
+     (`cmd/tests` 32.3s).
 5. [ ] WU4 — docs and close-out
    - README command section update; `go build ./...`, `go vet ./...`,
      `gofmt -l .`, `go test ./...`; commit identity recorded below.
