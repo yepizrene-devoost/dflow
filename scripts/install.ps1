@@ -169,13 +169,11 @@ try {
     }
 
     $targetBinary = Join-Path $installDir 'dflow.exe'
-    if (Test-Path -LiteralPath $targetBinary) {
-        # Replace the old copy instead of overwriting in place, so a running or
-        # locked binary is surfaced as a clean failure.
-        Remove-Item -LiteralPath $targetBinary -Force
-    }
-
-    Copy-Item -LiteralPath $extractedBinary -Destination $targetBinary -Force
+    # Stage the new copy next to the target, then move it over the old one, so
+    # a failed write can never destroy the existing binary; a locked or running
+    # binary is surfaced as a clean failure by the move itself.
+    Copy-Item -LiteralPath $extractedBinary -Destination "$targetBinary.new" -Force
+    Move-Item -LiteralPath "$targetBinary.new" -Destination $targetBinary -Force
     Write-Host "==> Installed dflow $version to $targetBinary"
 }
 finally {
