@@ -4,6 +4,9 @@ project_name: dflow
 
 release:
   mode: replace
+  extra_files:
+    - glob: scripts/install.sh
+    - glob: scripts/install.ps1
 
 before:
   hooks:
