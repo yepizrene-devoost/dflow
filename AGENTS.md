@@ -52,6 +52,11 @@ skill paths from the local skill registry.
 - The ODD feature checklist lives in `odd/tasks/<feature>.md` and is committed to the repo.
 - Tick a task `[x]` as soon as it finishes, and sync the Engram mirror and the
   visible todo list — a finished task is never left unmarked.
+- Close every stage before staging a commit: no stage may stay open inside the commit that
+  contains its work, and a stage that cannot be closed is confirmed before staging. The
+  ordering rule and its single exception (a short follow-up `docs(odd)` commit that records the
+  work-unit commit SHAs) are owned by the `## ODD: close every stage before committing` section
+  of the global `~/.pi/agent/AGENTS.md`; keep this section aligned with it instead of restating it.
 
 ## Source Of Truth
 

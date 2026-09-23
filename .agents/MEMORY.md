@@ -37,6 +37,10 @@ branch types, bases, finish targets, and merge modes.
   Tracked separately from the rules work.
 - Docs separation: `CHANGELOG.md` = what changed (delta); `HISTORY.md` = release
   timeline; this file = current state.
+- Rule ownership: ODD stage closing, and the ordering that closes every stage
+  before the commit carrying its work, are owned by the global
+  `~/.pi/agent/AGENTS.md`. The task-tracking section here only points at them, so
+  the checklist and its `docs(odd)` commit-identity exception stay in one place.
 
 ## Pointers
 
