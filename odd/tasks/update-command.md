@@ -75,9 +75,13 @@ Closes forge issue #25 (`feat(update): add dflow update self-update command`).
      run a copy of the built binary in a temp install dir against an httptest
      release server (zero real network). Full `go test -count=1 ./...` green
      (`cmd/tests` 32.3s).
-5. [ ] WU4 — docs and close-out
-   - README command section update; `go build ./...`, `go vet ./...`,
-     `gofmt -l .`, `go test ./...`; commit identity recorded below.
+5. [x] WU4 — docs and close-out
+   - README: new `dflow update` section (flow, flags, provenance warning,
+     writability remedy, `DFLOW_UPDATE_API_URL`); `.agents/workflows/
+     dflow-workflow.md`: command table row. Controller-run checks on the
+     integrated tree: `go build ./...`, `go vet ./...`, `gofmt -l .` clean,
+     `go test -count=1 ./...` green (`cmd/selfupdate 0.5s`, `cmd/tests 32.9s`,
+     `cmd/utils 0.8s`).
 
 ## Work-unit commit identity on `feature/update-command`
 
@@ -86,3 +90,16 @@ Closes forge issue #25 (`feat(update): add dflow update self-update command`).
 | Unit | Commit | Subject |
 | --- | --- | --- |
 | WU1 | `e2cfe29` | `feat(update): add release discovery and checksum verification` |
+| WU2 | `d4f0094` | `feat(update): add atomic binary replacement` |
+| WU3 | `dd2f27b` | `feat(update): add the dflow update command` |
+| docs | (this commit) | `docs: document the update command` |
+
+The `docs(odd)` commit carrying this identity record and closing the last
+stage is the follow-up commit the ODD rule allows, and it is the last tracked
+write before the freeze.
+
+Declared expectation, not a verdict: a native review runs over this frozen
+candidate against `develop` (`7fafc4c`). Its outcome belongs to the native
+receipt and to Engram. Issue #25 stays open until the delivering merge into
+`develop` reports `manual_targets:[]`; the closing comment then names that
+merge commit, per the issue-closure rule.
