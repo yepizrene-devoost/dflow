@@ -16,9 +16,17 @@ import (
 // that one package instead of a hunt through the command layer.
 //
 // It reads the Go sources of cmd/commands and cmd/gitutils and fails on any
-// direct fmt.Print/fmt.Printf/fmt.Println or builtin println call. cmd/root and
-// cmd/utils are deliberately excluded: cmd/root/completion.go and the helpers
-// themselves are outside this unit's scope.
+// direct write to stdout: fmt.Print/fmt.Printf/fmt.Println, the writer forms
+// fmt.Fprint/fmt.Fprintf/fmt.Fprintln when their first argument is os.Stdout or
+// a Cobra out-writer such as cmd.OutOrStdout(), os.Stdout.Write and builtin
+// println. Cobra's out-writer defaults to stdout, so it participates in the
+// single-document contract too. cmd/root and cmd/utils are deliberately
+// excluded: cmd/root/completion.go and the helpers themselves are outside this
+// unit's scope.
+//
+// Writes explicitly targeting os.Stderr are ALLOWED on purpose: stderr is
+// outside the single-document stdout contract, so a diagnostic there cannot
+// corrupt the machine-readable output a --json caller parses from stdout.
 //
 // `go test` runs with the package directory as the working directory, so the
 // sources are reached relative to it.
@@ -66,19 +74,55 @@ func TestCommandLayerWritesGoThroughMessagesHelper(t *testing.T) {
 // directWriteName returns the forbidden call name for a direct stdout write, or
 // "" when the call is not one of the guarded forms.
 func directWriteName(call *ast.CallExpr) string {
-	if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
-		if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "fmt" {
-			switch sel.Sel.Name {
-			case "Print", "Printf", "Println":
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "println" {
+			return "println"
+		}
+		return ""
+	}
+
+	// fmt.<Name>(...) forms.
+	if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "fmt" {
+		switch sel.Sel.Name {
+		case "Print", "Printf", "Println":
+			// These write to stdout implicitly.
+			return "fmt." + sel.Sel.Name
+		case "Fprint", "Fprintf", "Fprintln":
+			// These write wherever the first argument says; only a stdout
+			// target is forbidden.
+			if len(call.Args) > 0 && writesToStdout(call.Args[0]) {
 				return "fmt." + sel.Sel.Name
 			}
 		}
 		return ""
 	}
 
-	if ident, ok := call.Fun.(*ast.Ident); ok && ident.Name == "println" {
-		return "println"
+	// <writer>.Write(...) forms, such as os.Stdout.Write or
+	// cmd.OutOrStdout().Write.
+	if sel.Sel.Name == "Write" && writesToStdout(sel.X) {
+		return "Write"
 	}
 
 	return ""
+}
+
+// writesToStdout reports whether expr names the process stdout stream rather
+// than another writer such as os.Stderr. It recognises os.Stdout and the Cobra
+// out-writer accessors (cmd.OutOrStdout()), which default to stdout.
+func writesToStdout(expr ast.Expr) bool {
+	if sel, ok := expr.(*ast.SelectorExpr); ok {
+		if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "os" && sel.Sel.Name == "Stdout" {
+			return true
+		}
+		return false
+	}
+
+	if call, ok := expr.(*ast.CallExpr); ok {
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "OutOrStdout" {
+			return true
+		}
+	}
+
+	return false
 }

@@ -196,6 +196,42 @@ func TestStatusAndFinishJSONCLI(t *testing.T) {
 	})
 }
 
+// TestJSONFlagParseFailureStaysJSON guards the "JSON in, JSON out" contract at
+// the earliest failure point. Cobra parses flags and validates args before any
+// command's PreRunE runs, so a flag-parse or arity error on a --json invocation
+// used to fall through to the human renderer. The format is now selected before
+// RootCmd.Execute, so the failure is still exactly one parseable JSON document.
+func TestJSONFlagParseFailureStaysJSON(t *testing.T) {
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_TERMINAL_PROMPT", "0")
+	t.Setenv("DFLOW_CWD", "")
+
+	binary := buildDflowCLI(t)
+
+	for _, args := range [][]string{
+		{"status", "--json", "--bogus-flag"},
+		{"status", "--json=true", "--bogus-flag"},
+		{"status", "--json", "unexpected-argument"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			// A flag-parse failure must not depend on a repository or config: the
+			// format decision comes from the raw arguments alone.
+			output, exitCode := startCLIRawOutput(t, 15*time.Second, t.TempDir(), binary, args...)
+			if exitCode == 0 {
+				t.Fatalf("%v exited 0, want non-zero\n%s", args, output)
+			}
+			assertNoHumanChrome(t, output)
+
+			doc := decodeSingleJSONDocument(t, output)
+			message, ok := doc["error"].(string)
+			if !ok || message == "" {
+				t.Fatalf("failure document has no non-empty string \"error\" key:\n%v", doc)
+			}
+		})
+	}
+}
+
 // buildDflowCLI compiles the real entry point once per test function so Cobra
 // parsing, PreRunE ordering and the exit code are all covered by the assertions.
 func buildDflowCLI(t *testing.T) string {

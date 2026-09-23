@@ -63,6 +63,16 @@ tasks with a customizable flow model.`,
 //
 // It should be called from the `main` function in main.go to start the CLI.
 func Execute() {
+	// Cobra parses flags before it runs PersistentPreRun or any command's
+	// PreRunE, so a flag-parse or arity error on a `--json` invocation would
+	// otherwise fall through to the human renderer. Pre-selecting the format
+	// from the raw arguments keeps the contract "JSON in, JSON out" with no
+	// exceptions. The commands' PreRunE declarations are unchanged: both paths
+	// set the same value, and PreRunE remains the per-command declaration.
+	if jsonRequested(os.Args[1:]) {
+		utils.SetFormat(utils.FormatJSON)
+	}
+
 	if err := RootCmd.Execute(); err != nil {
 		// Single render point: Cobra is silenced above, so the failure is
 		// reported once here and the process exits non-zero.
@@ -107,10 +117,25 @@ func shouldSkipBanner(args []string) bool {
 			return true
 		}
 
-		// A machine-readable invocation must never receive the banner. `--json`
-		// reaches this function before any command sets the output format, so the
-		// argument itself is the signal; the `--json=true` form and its boolean
-		// siblings are honoured, while an explicit `--json=false` is not.
+		// A machine-readable invocation must never receive the banner; see
+		// jsonRequested for why the raw argument is the signal here.
+		if jsonRequested([]string{arg}) {
+			return true
+		}
+	}
+	return false
+}
+
+// jsonRequested reports whether the raw process arguments request the
+// machine-readable output format.
+//
+// It reads the arguments instead of the parsed flags because those are the only
+// signal available before Cobra parses them: the banner must not reach a
+// machine-readable invocation, and a flag-parse failure on a `--json` call must
+// still answer as JSON. The `--json=true` form is honoured via the same boolean
+// parser used elsewhere, so an explicit `--json=false` is not a request.
+func jsonRequested(args []string) bool {
+	for _, arg := range args {
 		if arg == "--json" {
 			return true
 		}

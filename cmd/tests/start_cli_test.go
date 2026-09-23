@@ -185,6 +185,57 @@ func TestStartCLI(t *testing.T) {
 		}
 	})
 
+	// A non-zero exit either leaves the repository as it was, or states
+	// explicitly what it created. The base checkout and the pull happen before
+	// the new branch exists, so a failure there must restore the caller's branch.
+	t.Run("pull failure restores the original branch", func(t *testing.T) {
+		repo := setupStartRepoLocalDevelop(t)
+		saveStartCLIConfig(t, repo)
+		before := startCLICommand(t, 10*time.Second, repo, "git", "rev-parse", "HEAD")
+
+		output, exitCode := startCLIRawOutput(t, 15*time.Second, repo, binary, "start", "feat", "pre-create", "--no-push")
+		if exitCode == 0 {
+			t.Fatalf("start with a failing pull exited 0, want non-zero\n%s", output)
+		}
+		if !strings.Contains(output, "Failed to pull latest changes from 'develop'") {
+			t.Fatalf("failure message must keep the base-pull wording:\n%s", output)
+		}
+		if got := startCLICommand(t, 10*time.Second, repo, "git", "branch", "--show-current"); got != "feature/parent" {
+			t.Fatalf("current branch = %q, want the original 'feature/parent'", got)
+		}
+		if branchExists(t, repo, "feature/pre-create") {
+			t.Fatalf("a failed pull must not leave the new branch created")
+		}
+		if got := startCLICommand(t, 10*time.Second, repo, "git", "rev-parse", "HEAD"); got != before {
+			t.Fatalf("HEAD = %s, want the untouched %s", got, before)
+		}
+	})
+
+	// After the branch is created the failure must not delete it, and it must
+	// say so, so a caller that sees a non-zero exit does not retry into
+	// "already exists".
+	t.Run("push failure names the created branch", func(t *testing.T) {
+		repo := setupStartRepo(t)
+		saveStartCLIConfig(t, repo)
+		// Break only the push: the chained parent exists locally, so --from skips
+		// the base checkout and pull and reaches the push directly.
+		startCLICommand(t, 10*time.Second, repo, "git", "remote", "set-url", "origin", filepath.Join(t.TempDir(), "missing-remote.git"))
+
+		output, exitCode := startCLIRawOutput(t, 15*time.Second, repo, binary, "start", "feat", "post-create", "--from", "feature/parent", "--push")
+		if exitCode == 0 {
+			t.Fatalf("start with a failing push exited 0, want non-zero\n%s", output)
+		}
+		if !strings.Contains(output, "was created and remains") {
+			t.Fatalf("failure message must state the branch was created and remains:\n%s", output)
+		}
+		if !branchExists(t, repo, "feature/post-create") {
+			t.Fatalf("the created branch must remain after a failed push")
+		}
+		if got := startCLICommand(t, 10*time.Second, repo, "git", "branch", "--show-current"); got != "feature/post-create" {
+			t.Fatalf("current branch = %q, want 'feature/post-create'", got)
+		}
+	})
+
 	t.Run("delete without --yes", func(t *testing.T) {
 		repo := initTempGitRepo(t)
 		runGit(t, repo, "checkout", "-b", "feature/to-delete")
@@ -235,6 +286,25 @@ func saveStartCLIConfig(t *testing.T, repo string) {
 			t.Fatalf("save CLI fixture config: %v", err)
 		}
 	})
+}
+
+// setupStartRepoLocalDevelop is setupStartRepo without the develop upstream: a
+// base branch that cannot be pulled is the failure window the start command must
+// repair by restoring the caller's branch.
+func setupStartRepoLocalDevelop(t *testing.T) string {
+	t.Helper()
+
+	repoDir := initTempGitRepo(t)
+	remoteDir := initBareGitRepo(t)
+
+	runGit(t, repoDir, "checkout", "-b", "develop")
+	writeFileAndCommit(t, repoDir, "app.txt", "develop base\n", "seed develop")
+
+	runGit(t, repoDir, "remote", "add", "origin", remoteDir)
+	// Deliberately do NOT push develop: without an upstream, `git pull` fails.
+	runGit(t, repoDir, "checkout", "-b", "feature/parent")
+
+	return repoDir
 }
 
 func assertStartCLIHead(t *testing.T, repo, branch, tip string) {

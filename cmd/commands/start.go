@@ -140,22 +140,50 @@ var StartCmd = &cobra.Command{
 			return fmt.Errorf("Invalid branch name '%s': %s", fullName, reason)
 		}
 
+		// Capture the caller's branch before any checkout, so a failure that has
+		// not created the new branch can put them back where they started. The
+		// contract for a non-zero exit is: the repository is either unchanged, or
+		// the message states explicitly what was created and left behind. A
+		// failure must never silently abandon the caller on another branch.
+		originalBranch, err := gitutils.CurrentBranch()
+		if err != nil {
+			return err
+		}
+
+		restoreOriginalBranch := func(cause error) error {
+			if originalBranch == "" {
+				return cause
+			}
+			if err := gitutils.CheckoutExistingBranch(originalBranch); err != nil {
+				current, currentErr := gitutils.CurrentBranch()
+				if currentErr != nil || current == "" {
+					current = "an unknown branch"
+				}
+				// Keep the original error as the reported failure: the restore is a
+				// best-effort repair, and the warning names where the caller ended up.
+				utils.Warn("Could not restore the original branch '%s' (%v); the caller is now on '%s'.", originalBranch, err, current)
+			}
+			return cause
+		}
+
 		if fromBranch != "" {
 			if err := gitutils.CheckoutBranch(fromBranch); err != nil {
-				return err
+				return restoreOriginalBranch(err)
 			}
 		} else {
 			if err := gitutils.Checkout(base); err != nil {
-				return fmt.Errorf("Could not checkout base branch '%s'", base)
+				return restoreOriginalBranch(fmt.Errorf("Could not checkout base branch '%s'", base))
 			}
 
 			if err := gitutils.Pull(); err != nil {
-				return fmt.Errorf("Failed to pull latest changes from '%s'", base)
+				return restoreOriginalBranch(fmt.Errorf("Failed to pull latest changes from '%s'", base))
 			}
 		}
 
 		if err := gitutils.CheckoutNew(fullName); err != nil {
-			return fmt.Errorf("Failed to create branch '%s'", fullName)
+			// The new branch was not created, so the repository can still be left
+			// exactly as the caller found it.
+			return restoreOriginalBranch(fmt.Errorf("Failed to create branch '%s'", fullName))
 		}
 
 		utils.Success("Created and switched to branch '%s' from '%s'", fullName, base)
@@ -177,7 +205,11 @@ var StartCmd = &cobra.Command{
 
 		if pushBranch {
 			if err := gitutils.PushBranch(fullName); err != nil {
-				return fmt.Errorf("Failed to push branch '%s': %v", fullName, err)
+				// The branch exists now: never delete it, and say so, so a caller
+				// that sees a non-zero exit does not blindly retry into an
+				// "already exists" failure. PushBranch already names the branch and
+				// the operation, so only the consequence is added here.
+				return fmt.Errorf("%v; the branch '%s' was created and remains", err, fullName)
 			}
 		}
 

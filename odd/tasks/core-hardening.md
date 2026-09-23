@@ -104,6 +104,21 @@ decisions in each client.
    - Evidence: single-`❌` failure output, success chrome preserved, and a real
      binary regression test; see the WU5 OUTCOME under `## Evidence`.
 
+6. [x] WU6 — close the contract holes found by verification
+   - An independent verification of the committed `develop..HEAD` range refuted two
+     claims this branch made. Finding A: a non-zero exit could still leave the
+     repository mutated (a failed base pull abandoned the caller on the base branch; a
+     failed push left a newly created branch behind without saying so). Finding B: the
+     output guard was narrower than the single-stdout-document invariant it claimed.
+     Finding C: a JSON invocation could still answer in human format on a flag error.
+   - `start` now captures the caller's branch before any checkout and restores it on
+     every failure before the new branch exists; a post-creation failure keeps the
+     branch and says so. The guard now flags every stdout-targeted writer form while
+     leaving `os.Stderr` allowed. `root.Execute` pre-selects the JSON format from the
+     raw arguments so a flag-parse error is still JSON.
+   - Evidence: real-binary before/after reproductions and planted-bypass guard failures;
+     see the WU6 OUTCOME under `## Evidence`.
+
 ## Out of scope
 
 - Forge integration behind a `gh`-backed provider and a third `merge_mode: pr`.
@@ -158,6 +173,14 @@ paragraph). Added the Defect 1 regression test in `cmd/tests/start_cli_test.go`:
 `dflow start feat no-flags` with no push flags exits non-zero and `feature/no-flags` is
 absent (`git branch --list`, `git rev-parse --verify`), with the fixture branch and HEAD
 unchanged.
+
+CORRECTION (WU6, after independent verification refuted the broader reading): the
+"untouched repository" guarantee above holds only for the pre-checkout fail-fast guard. The
+same verification showed that a later failure — a failed base-branch pull, or a failed push
+after `CheckoutNew` — still exited non-zero with the repository mutated: the caller was
+abandoned on the base branch, or the new branch was left behind silently. WU6 replaces the
+over-broad claim with the honest contract: **a non-zero exit either leaves the repository as
+it was, or states explicitly what it created and left behind.** See the WU6 OUTCOME.
 Files changed: `cmd/commands/start.go`, `cmd/tests/start_cli_test.go`, `README.md`,
 `.agents/workflows/dflow-workflow.md`.
 Checks: `go build ./...` ok, `gofmt -l .` empty, `go test -count=1 ./...` green
@@ -368,3 +391,138 @@ $ dflow finish --dry-run   # merge_mode unset             # exit 1
 
 No branch was deleted and no destructive Git command was run in the scratch repositories. WU4
 is the last unit: every task in this file is now closed.
+
+### WU6 — verified contract holes
+
+OUTCOME: done. An independent verification of the committed `develop..HEAD` range refuted the
+two claims below; WU6 closes them. Two pre-existing limitations the same verification found
+stay out of scope and are tracked separately: git's own output from the checkout passthrough
+reaching the caller's stdout, and `dflow delete <current-branch> --yes` surfacing a raw git
+refusal message. The passthrough plumbing was not touched.
+
+Finding A — a non-zero exit could leave the repository mutated. `start` checked out the base
+branch and pulled before its later failure returns, so a failed pull abandoned the caller on
+the base branch, and a failed `PushBranch` left a freshly created branch behind without saying
+so. The contract is now precise and honest: **a non-zero exit either leaves the repository as
+it was, or states explicitly what it created and left behind.** `cmd/commands/start.go`
+captures the caller's branch with `gitutils.CurrentBranch()` before any checkout and
+centralizes the repair in a `restoreOriginalBranch` closure that reuses the existing
+`gitutils.CheckoutExistingBranch`. Every failure in the base-checkout/pull window restores the
+original branch before returning the unchanged error, and so does a `CheckoutNew` failure,
+which means the new branch was not created. When the restore itself fails, the original error
+is still the reported failure and a `utils.Warn` names the branch the caller is now on. The one
+post-creation error, a `PushBranch` failure, never deletes the branch and now ends its message
+with `; the branch '<name>' was created and remains`, so a caller that sees a non-zero exit
+does not blindly retry into "already exists". The successful paths, the non-interactive
+fail-fast guard (still first, before anything is touched) and the interactive skipped-push path
+(still exit 0) are unchanged.
+
+Finding B — the output guard was narrower than the invariant it claimed. `output_guard_test.go`
+flagged only `fmt.Print`/`Printf`/`Println` and builtin `println`, so `fmt.Fprintf(os.Stdout,
+...)`, `fmt.Fprintln(os.Stdout, ...)`, `os.Stdout.Write(...)` and
+`fmt.Fprintf(cmd.OutOrStdout(), ...)` all passed. The guard now also flags the writer forms
+`fmt.Fprint`/`Fprintf`/`Fprintln` when their first argument targets `os.Stdout` or a Cobra
+out-writer (`cmd.OutOrStdout()`), and `<writer>.Write(...)` on those targets. Writes explicitly
+targeting `os.Stderr` remain ALLOWED and the test documents why: stderr is outside the
+single-document stdout contract, so it cannot corrupt machine-readable output. The two existing
+`fmt.Fprintf(os.Stderr, ...)` call sites (`cmd/commands/config.go`, `cmd/commands/init.go`) are
+unchanged.
+
+Finding C — a JSON invocation could still answer in human format. Cobra parses flags and
+validates args before any `PreRunE` runs, so a flag-parse or arity error on a `--json`
+invocation fell through to the human renderer. `cmd/root/root.go` extracts the raw-argument
+`--json` detection into one `jsonRequested` helper used by both `shouldSkipBanner` and a format
+pre-selection at the top of `Execute()`, before `RootCmd.Execute()`. `--json`, `--json=true` and
+the `--json=<bool>` form are honoured; an explicit `--json=false` is not a request, matching the
+existing banner behaviour. The commands' `PreRunE` declarations are unchanged: both paths set
+the same value, and the `PreRunE` remains the per-command declaration of intent.
+
+Files changed: `cmd/commands/start.go`, `cmd/root/root.go`, `cmd/tests/output_guard_test.go`,
+`cmd/tests/start_cli_test.go`, `cmd/tests/status_cli_test.go`, `odd/tasks/core-hardening.md`.
+`cmd/gitutils/finish.go` was an allowed surface but needed no change.
+
+Checks: `gofmt -l .` empty, `go build ./...` ok, `go vet ./...` ok, `git diff --check` empty,
+`go test -count=1 ./...` green (`ok .../cmd/tests 11.750s`). New regression tests:
+`TestStartCLI/pull_failure_restores_the_original_branch`,
+`TestStartCLI/push_failure_names_the_created_branch`, and `TestJSONFlagParseFailureStaysJSON`
+(three subtests).
+
+Real-binary reproduction in scratch repositories under `$(mktemp -d)`, before (HEAD `74641ed`)
+and after this change. Before, the pull failure exited 1 and left the caller on `develop`:
+
+```
+$ dflow start feat X --no-push < /dev/null      # before
+Switched to branch 'develop'
+Pulling latest changes from origin...
+❌   Failed to pull latest changes from 'develop'
+exit=1
+$ git branch --show-current
+develop
+```
+
+After, the same invocation exits 1 and the caller is back on `feature/parent`, with the new
+branch absent:
+
+```
+$ dflow start feat X --no-push < /dev/null      # after
+Switched to branch 'develop'
+Pulling latest changes from origin...
+Switched to branch 'feature/parent'
+❌   Failed to pull latest changes from 'develop'
+exit=1
+$ git branch --show-current
+feature/parent
+$ git branch --list feature/X
+```
+
+Before, the push failure exited 1 without saying the branch existed; after, the message states
+it and the branch remains:
+
+```
+$ dflow start feat post-push --from feature/parent --push   # before
+Switched to a new branch 'feature/post-push'
+✅   Created and switched to branch 'feature/post-push' from 'feature/parent'
+Pushing branch 'feature/post-push' to origin...
+❌   Failed to push branch 'feature/post-push': failed to push branch 'feature/post-push': exit status 128
+exit=1
+
+$ dflow start feat post-push --from feature/parent --push   # after
+Switched to a new branch 'feature/post-push'
+✅   Created and switched to branch 'feature/post-push' from 'feature/parent'
+Pushing branch 'feature/post-push' to origin...
+❌   Failed to push branch 'feature/post-push': failed to push branch 'feature/post-push': exit status 128; the branch 'feature/post-push' was created and remains
+exit=1
+$ git branch --show-current
+feature/post-push
+```
+
+Guard verification: each bypass form was planted alone in a copy of the repository under
+`$(mktemp -d)` and the guard failed naming it (the real tree passes, and
+`fmt.Fprintf(os.Stderr, ...)` stays allowed):
+
+```
+../commands/zz_guard_probe.go:9:  fmt.Fprintf(...)      # fmt.Fprintf(os.Stdout, ...)
+../commands/zz_guard_probe.go:9:  fmt.Fprintln(...)     # fmt.Fprintln(os.Stdout, ...)
+../commands/zz_guard_probe.go:6:  Write(...)            # os.Stdout.Write(...)
+../commands/zz_guard_probe.go:10: fmt.Fprintf(...)      # fmt.Fprintf(cmd.OutOrStdout(), ...)
+fmt.Fprintf(os.Stderr, ...) -> guard PASSED (allowed)
+```
+
+JSON contract: every `--json` failure is one parseable document and exits 1, including the
+flag-parse and arity errors that used to render as styled text:
+
+```
+$ dflow status --json --bogus-flag   # exit 1
+{"error":"unknown flag: --bogus-flag"}
+
+$ dflow status --json=true --bogus-flag   # exit 1
+{"error":"unknown flag: --bogus-flag"}
+
+$ dflow status --json unexpected-argument   # exit 1
+{"error":"unknown command \"unexpected-argument\" for \"dflow status\""}
+
+$ dflow status --json=false --bogus-flag   # exit 1, human by design
+❌   unknown flag: --bogus-flag
+```
+
+WU6 closes the two refuted claims; the two pre-existing limitations remain tracked separately.
