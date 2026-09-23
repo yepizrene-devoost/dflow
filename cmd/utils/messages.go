@@ -26,21 +26,51 @@ func Warn(formattedMessage string, args ...interface{}) {
 	printWithIcon("⚠️", formattedMessage, args...)
 }
 
-// Internal helper with optional icon override (like Spinner.Stop).
-func printWithIcon(defaultIcon string, formattedMessage string, args ...interface{}) {
-	finalIcon := defaultIcon
-	// Si el último argumento es un string extra (ícono), úsalo
-	if len(args) > 0 {
-		if last, ok := args[len(args)-1].(string); ok && isCustomIcon(last) {
-			finalIcon = last
-			args = args[:len(args)-1] // eliminar icono de args
-		}
-	}
-	msg := fmt.Sprintf(formattedMessage, args...)
-	fmt.Printf("%-3s %s\n", finalIcon, msg)
+// Icon renders formattedMessage with an explicit leading icon, for output whose
+// icon is not the level default. The icon is a declared parameter, never
+// inferred, so a short value argument can never be mistaken for one.
+func Icon(icon string, formattedMessage string, args ...interface{}) {
+	printWithIcon(icon, formattedMessage, args...)
 }
 
-// isCustomIcon checks if the string is likely an emoji or custom icon.
-func isCustomIcon(s string) bool {
-	return len(s) > 0 && len([]rune(s)) <= 2 // Emoji típicamente es 1–2 runas
+// Plain prints the formatted message followed by a single newline, with no icon.
+//
+// Use Plain for output that is the requested result rather than commentary
+// around it: the author and email lines of `config get-author`, or the raw
+// listing from `config list`, for example. It exists so that every user-facing
+// write in the command path goes through this package, which keeps a future
+// output mode a change here instead of a hunt through the command layer.
+func Plain(formattedMessage string, args ...interface{}) {
+	if CurrentFormat() == FormatJSON {
+		return
+	}
+	fmt.Println(fmt.Sprintf(formattedMessage, args...))
+}
+
+// Prompt prints an inline input label without a trailing newline.
+//
+// Use Prompt for labels that precede a read from stdin, so the cursor stays on
+// the same line as the label. It lives here for the same reason as Plain: the
+// command path must not write to stdout directly.
+func Prompt(label string, args ...interface{}) {
+	if CurrentFormat() == FormatJSON {
+		return
+	}
+	fmt.Print(fmt.Sprintf(label, args...))
+}
+
+// printWithIcon renders one icon-prefixed line. The icon is always the one the
+// caller declared, either the level default from Error, Info, Success or Warn or
+// the explicit icon from Icon; the arguments are format values only.
+//
+// It is also the single suppression point for every icon-prefixed helper: in
+// JSON mode the document is the only thing stdout may carry, so every
+// icon-prefixed line yields to it.
+func printWithIcon(icon string, formattedMessage string, args ...interface{}) {
+	if CurrentFormat() == FormatJSON {
+		return
+	}
+
+	msg := fmt.Sprintf(formattedMessage, args...)
+	fmt.Printf("%-3s %s\n", icon, msg)
 }

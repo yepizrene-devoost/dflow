@@ -8,6 +8,7 @@ import (
 
 	"github.com/yepizrene-devoost/dflow/cmd/commands"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/flow"
 )
 
 func TestFinishMergesAutoTargetsAndSkipsManualOnes(t *testing.T) {
@@ -24,7 +25,7 @@ func TestFinishMergesAutoTargetsAndSkipsManualOnes(t *testing.T) {
 	runGit(t, repoDir, "checkout", "-b", "feature/demo")
 	writeFileAndCommit(t, repoDir, "app.txt", "feature work\n", "feature work")
 
-	cfg := &utils.Config{}
+	cfg := &flow.Config{}
 	cfg.Branches.Main = "main"
 	cfg.Branches.Develop = "develop"
 	cfg.Branches.Uat = "uat"
@@ -35,7 +36,7 @@ func TestFinishMergesAutoTargetsAndSkipsManualOnes(t *testing.T) {
 	cfg.Flow.Feature.Base = "develop"
 	cfg.Flow.Feature.FinishTargets = []string{"develop", "main"}
 	cfg.Workflow.DefaultMergeMode = "manual"
-	cfg.Workflow.BranchRules = map[string]utils.WorkflowBranchRule{
+	cfg.Workflow.BranchRules = map[string]flow.WorkflowBranchRule{
 		"develop": {MergeMode: "auto"},
 		"main":    {MergeMode: "manual"},
 	}
@@ -86,7 +87,7 @@ func TestFinishDryRunDoesNotModifyBranches(t *testing.T) {
 	runGit(t, repoDir, "checkout", "-b", "feature/demo")
 	writeFileAndCommit(t, repoDir, "app.txt", "feature work\n", "feature work")
 
-	cfg := &utils.Config{}
+	cfg := &flow.Config{}
 	cfg.Branches.Main = "main"
 	cfg.Branches.Develop = "develop"
 	cfg.Branches.Uat = "uat"
@@ -97,7 +98,7 @@ func TestFinishDryRunDoesNotModifyBranches(t *testing.T) {
 	cfg.Flow.Feature.Base = "develop"
 	cfg.Flow.Feature.FinishTargets = []string{"develop", "main"}
 	cfg.Workflow.DefaultMergeMode = "manual"
-	cfg.Workflow.BranchRules = map[string]utils.WorkflowBranchRule{
+	cfg.Workflow.BranchRules = map[string]flow.WorkflowBranchRule{
 		"develop": {MergeMode: "auto"},
 		"main":    {MergeMode: "manual"},
 	}
@@ -148,7 +149,7 @@ func TestFinishDeleteRemovesBranchWhenNoManualTargetsRemain(t *testing.T) {
 	writeFileAndCommit(t, repoDir, "app.txt", "feature work\n", "feature work")
 	runGit(t, repoDir, "push", "-u", "origin", "feature/delete-me")
 
-	cfg := &utils.Config{}
+	cfg := &flow.Config{}
 	cfg.Branches.Main = "main"
 	cfg.Branches.Develop = "develop"
 	cfg.Branches.Uat = "uat"
@@ -159,7 +160,7 @@ func TestFinishDeleteRemovesBranchWhenNoManualTargetsRemain(t *testing.T) {
 	cfg.Flow.Feature.Base = "develop"
 	cfg.Flow.Feature.FinishTargets = []string{"develop"}
 	cfg.Workflow.DefaultMergeMode = "manual"
-	cfg.Workflow.BranchRules = map[string]utils.WorkflowBranchRule{
+	cfg.Workflow.BranchRules = map[string]flow.WorkflowBranchRule{
 		"develop": {MergeMode: "auto"},
 	}
 
@@ -211,7 +212,7 @@ func TestFinishDeleteSkipsBranchRemovalWhenManualTargetsRemain(t *testing.T) {
 	writeFileAndCommit(t, repoDir, "app.txt", "feature work\n", "feature work")
 	runGit(t, repoDir, "push", "-u", "origin", "feature/keep-me")
 
-	cfg := &utils.Config{}
+	cfg := &flow.Config{}
 	cfg.Branches.Main = "main"
 	cfg.Branches.Develop = "develop"
 	cfg.Branches.Uat = "uat"
@@ -222,7 +223,7 @@ func TestFinishDeleteSkipsBranchRemovalWhenManualTargetsRemain(t *testing.T) {
 	cfg.Flow.Feature.Base = "develop"
 	cfg.Flow.Feature.FinishTargets = []string{"develop", "uat"}
 	cfg.Workflow.DefaultMergeMode = "manual"
-	cfg.Workflow.BranchRules = map[string]utils.WorkflowBranchRule{
+	cfg.Workflow.BranchRules = map[string]flow.WorkflowBranchRule{
 		"develop": {MergeMode: "auto"},
 		"uat":     {MergeMode: "manual"},
 	}

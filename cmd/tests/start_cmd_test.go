@@ -6,6 +6,7 @@ import (
 
 	"github.com/yepizrene-devoost/dflow/cmd/commands"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/flow"
 )
 
 func setupStartRepo(t *testing.T) string {
@@ -27,8 +28,8 @@ func setupStartRepo(t *testing.T) string {
 	return repoDir
 }
 
-func startTestConfig() *utils.Config {
-	cfg := &utils.Config{}
+func startTestConfig() *flow.Config {
+	cfg := &flow.Config{}
 	cfg.Branches.Main = "main"
 	cfg.Branches.Develop = "develop"
 	cfg.Branches.Uat = "uat"
@@ -39,7 +40,7 @@ func startTestConfig() *utils.Config {
 	cfg.Flow.Feature.Base = "develop"
 	cfg.Flow.Feature.FinishTargets = []string{"develop"}
 	cfg.Workflow.DefaultMergeMode = "manual"
-	cfg.Workflow.BranchRules = map[string]utils.WorkflowBranchRule{
+	cfg.Workflow.BranchRules = map[string]flow.WorkflowBranchRule{
 		"develop": {MergeMode: "auto"},
 	}
 	return cfg
@@ -103,8 +104,8 @@ func TestStartFromUnknownParentDoesNotCreateBranch(t *testing.T) {
 			_ = commands.StartCmd.Flags().Set("no-push", "false")
 		}()
 
-		if err := commands.StartCmd.RunE(commands.StartCmd, []string{"feat", "child"}); err != nil {
-			t.Fatalf("StartCmd returned error: %v", err)
+		if err := commands.StartCmd.RunE(commands.StartCmd, []string{"feat", "child"}); err == nil {
+			t.Fatalf("expected StartCmd to return an error for an unknown parent")
 		}
 
 		if branchExists(t, repoDir, "feature/child") {

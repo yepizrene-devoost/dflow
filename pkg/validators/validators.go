@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/yepizrene-devoost/dflow/cmd/utils"
 )
 
 // EnsureGitRepo returns an error if the current directory is not a Git repository.
@@ -47,14 +46,12 @@ func EnsureDflowInitialized() error {
 func WithChecks(skipDflowCheck bool, fn func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		if err := EnsureGitRepo(); err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		if !skipDflowCheck {
 			if err := EnsureDflowInitialized(); err != nil {
-				utils.Error(err.Error())
-				return nil
+				return err
 			}
 		}
 		return fn(cmd, args)

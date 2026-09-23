@@ -7,6 +7,7 @@ package root
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -33,8 +34,13 @@ tasks with a customizable flow model.`,
   dflow config set-author "Jane Doe" --email=jane@example.com
   dflow version`,
 
+	// Cobra must not print errors or usage on its own: Execute renders the
+	// failure exactly once, keeping the styled single-render contract.
+	SilenceErrors: true,
+	SilenceUsage:  true,
+
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		if shouldSkipBanner(os.Args[1:]) {
+		if !utils.IsInteractive() || shouldSkipBanner(os.Args[1:]) {
 			return
 		}
 		utils.PrintBanner()
@@ -57,8 +63,31 @@ tasks with a customizable flow model.`,
 //
 // It should be called from the `main` function in main.go to start the CLI.
 func Execute() {
+	// Cobra parses flags before it runs PersistentPreRun or any command's
+	// PreRunE, so a flag-parse or arity error on a `--json` invocation would
+	// otherwise fall through to the human renderer. Pre-selecting the format
+	// from the raw arguments keeps the contract "JSON in, JSON out" with no
+	// exceptions. The commands' PreRunE declarations are unchanged: both paths
+	// set the same value, and PreRunE remains the per-command declaration.
+	if jsonRequested(os.Args[1:]) {
+		utils.SetFormat(utils.FormatJSON)
+	}
+
 	if err := RootCmd.Execute(); err != nil {
-		// fmt.Println(err)
+		// Single render point: Cobra is silenced above, so the failure is
+		// reported once here and the process exits non-zero.
+		//
+		// In JSON mode that same failure must still be machine-readable: it
+		// becomes one {"error": ...} document on stdout, and the non-zero exit
+		// code is unchanged.
+		if utils.CurrentFormat() == utils.FormatJSON {
+			if emitErr := utils.EmitJSON(map[string]string{"error": err.Error()}); emitErr != nil {
+				fmt.Fprintf(os.Stderr, "failed to encode the error as JSON: %v\n", emitErr)
+			}
+			os.Exit(1)
+		}
+
+		utils.Error("%s", err.Error())
 		os.Exit(1)
 	}
 }
@@ -68,6 +97,7 @@ func init() {
 	RootCmd.AddCommand(commands.InitCmd)
 	RootCmd.AddCommand(commands.StartCmd)
 	RootCmd.AddCommand(commands.FinishCmd)
+	RootCmd.AddCommand(commands.StatusCmd)
 	RootCmd.AddCommand(commands.ConfigCmd)
 	RootCmd.AddCommand(commands.DeleteCmd)
 	RootCmd.AddCommand(VersionCmd)
@@ -85,6 +115,34 @@ func shouldSkipBanner(args []string) bool {
 	for _, arg := range args {
 		if strings.HasPrefix(arg, "__complete") || arg == "completion" || arg == "--help" || arg == "-h" || arg == "help" || arg == "--version" || arg == "-V" || arg == "version" || arg == "ver" {
 			return true
+		}
+
+		// A machine-readable invocation must never receive the banner; see
+		// jsonRequested for why the raw argument is the signal here.
+		if jsonRequested([]string{arg}) {
+			return true
+		}
+	}
+	return false
+}
+
+// jsonRequested reports whether the raw process arguments request the
+// machine-readable output format.
+//
+// It reads the arguments instead of the parsed flags because those are the only
+// signal available before Cobra parses them: the banner must not reach a
+// machine-readable invocation, and a flag-parse failure on a `--json` call must
+// still answer as JSON. The `--json=true` form is honoured via the same boolean
+// parser used elsewhere, so an explicit `--json=false` is not a request.
+func jsonRequested(args []string) bool {
+	for _, arg := range args {
+		if arg == "--json" {
+			return true
+		}
+		if value, ok := strings.CutPrefix(arg, "--json="); ok {
+			if enabled, err := strconv.ParseBool(value); err == nil && enabled {
+				return true
+			}
 		}
 	}
 	return false

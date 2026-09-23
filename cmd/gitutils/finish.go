@@ -106,7 +106,7 @@ func AbortMerge() error {
 // FetchOrigin fetches updates from the remote 'origin' when available.
 func FetchOrigin() error {
 	if !HasOriginRemote() {
-		utils.Info("📁   Remote 'origin' not found. Skipping fetch.")
+		utils.Icon("📁", "Remote 'origin' not found. Skipping fetch.")
 		return nil
 	}
 
@@ -115,7 +115,7 @@ func FetchOrigin() error {
 
 	cmd := exec.Command("git", "fetch", "origin", "--prune")
 	if err := cmd.Run(); err != nil {
-		spinner.Stop("Failed to fetch updates from origin.")
+		spinner.Clear()
 		return fmt.Errorf("failed to fetch origin: %w", err)
 	}
 
@@ -182,7 +182,7 @@ func PullBranch(branch string) error {
 
 	cmd := exec.Command("git", "pull", "origin", branch)
 	if err := cmd.Run(); err != nil {
-		spinner.Stop("Failed to pull branch updates.")
+		spinner.Clear()
 		return fmt.Errorf("failed to update branch %q from origin: %w", branch, err)
 	}
 
@@ -193,7 +193,7 @@ func PullBranch(branch string) error {
 // PushBranchUpdate pushes the given branch to origin without changing upstream tracking.
 func PushBranchUpdate(branch string) error {
 	if !HasOriginRemote() {
-		utils.Info("📁   Remote 'origin' not found. Skipping push for '%s'.", branch)
+		utils.Icon("📁", "Remote 'origin' not found. Skipping push for '%s'.", branch)
 		return nil
 	}
 
@@ -202,7 +202,7 @@ func PushBranchUpdate(branch string) error {
 
 	cmd := exec.Command("git", "push", "origin", branch)
 	if err := cmd.Run(); err != nil {
-		spinner.Stop("Failed to push branch updates.")
+		spinner.Clear()
 		return fmt.Errorf("failed to push branch %q: %w", branch, err)
 	}
 

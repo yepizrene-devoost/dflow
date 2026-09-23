@@ -75,7 +75,14 @@ The email can be passed with --email or entered interactively when omitted.`,
 		if len(args) > 0 {
 			name = args[0]
 		} else {
-			fmt.Print("👤 Enter author name: ")
+			if !utils.IsInteractive() {
+				return utils.NonInteractiveError(
+					"prompt for an author name",
+					`pass the name as an argument, e.g. dflow config set-author "Jane Doe"`,
+				)
+			}
+
+			utils.Prompt("👤 Enter author name: ")
 			reader := bufio.NewReader(os.Stdin)
 			name, err = reader.ReadString('\n')
 
@@ -89,7 +96,14 @@ The email can be passed with --email or entered interactively when omitted.`,
 		// get email from flag or prompt input
 		email, _ = cmd.Flags().GetString("email")
 		if email == "" {
-			fmt.Print("📧 Enter author email: ")
+			if !utils.IsInteractive() {
+				return utils.NonInteractiveError(
+					"prompt for an author email",
+					`pass --email, e.g. dflow config set-author "Jane Doe" --email=jane@example.com`,
+				)
+			}
+
+			utils.Prompt("📧 Enter author email: ")
 			reader := bufio.NewReader(os.Stdin)
 			email, err = reader.ReadString('\n')
 
@@ -130,13 +144,11 @@ configuration for this repository.`,
 		email, err2 := exec.Command("git", "config", "--get", "dflow.email").Output()
 
 		if err1 != nil || err2 != nil {
-			utils.Error("Author or email not set. Use `dflow config set-author`")
-
-			return nil
+			return fmt.Errorf("Author or email not set. Use `dflow config set-author`")
 		}
 
-		fmt.Printf("👤 Author: %s\n", strings.TrimSpace(string(author)))
-		fmt.Printf("📧 Email: %s\n", strings.TrimSpace(string(email)))
+		utils.Plain("👤 Author: %s", strings.TrimSpace(string(author)))
+		utils.Plain("📧 Email: %s", strings.TrimSpace(string(email)))
 
 		return nil
 	}),
@@ -161,7 +173,9 @@ namespace for the current repository.`,
 			return nil
 		}
 
-		fmt.Print(string(output))
+		// The raw `git config --get-regexp` output already ends with a newline;
+		// trim that one newline so Plain can own the line terminator.
+		utils.Plain("%s", strings.TrimSuffix(string(output), "\n"))
 
 		return nil
 	}),

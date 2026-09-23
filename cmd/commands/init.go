@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/yepizrene-devoost/dflow/cmd/gitutils"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/flow"
 	"github.com/yepizrene-devoost/dflow/pkg/validators"
 )
 
@@ -69,31 +70,32 @@ var InitCmd = &cobra.Command{
   This command is meant to be run once per project when setting up the dflow branching model.`,
 	Example: `  dflow init`,
 	RunE: validators.WithChecks(true, func(cmd *cobra.Command, args []string) error {
+		if !utils.IsInteractive() {
+			return fmt.Errorf("dflow init is interactive and requires a terminal")
+		}
 
 		var mainBranch, developBranch, uatBranch string
 
 		err := survey.AskOne(&survey.Input{Message: "Main branch name:", Default: "main"}, &mainBranch, survey.WithValidator(survey.Required))
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		err = survey.AskOne(&survey.Input{Message: "Development branch name:", Default: "develop"}, &developBranch, survey.WithValidator(survey.Required))
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		err = survey.AskOne(&survey.Input{Message: "UAT branch name:", Default: "uat"}, &uatBranch, survey.WithValidator(survey.Required))
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		// 🌟 merge modes explain
-		fmt.Println("\n🔧 Dflow supports two types of merge modes:")
-		fmt.Println("   - manual: you open Pull Requests and merge via your platform (e.g. GitHub, GitLab).")
-		fmt.Println("   - auto: dflow merges branches directly using Git commands (no PRs needed).")
+		utils.Plain("")
+		utils.Icon("🔧", "Dflow supports two types of merge modes:")
+		utils.Plain("   - manual: you open Pull Requests and merge via your platform (e.g. GitHub, GitLab).")
+		utils.Plain("   - auto: dflow merges branches directly using Git commands (no PRs needed).")
 
 		var mergeModeOption string
 		err = survey.AskOne(&survey.Select{
@@ -105,8 +107,7 @@ var InitCmd = &cobra.Command{
 			Default: "manual (via Pull Requests)",
 		}, &mergeModeOption)
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		var defaultMode, inverseMode string
@@ -118,7 +119,7 @@ var InitCmd = &cobra.Command{
 			inverseMode = "auto"
 		}
 
-		cfg := utils.Config{}
+		cfg := flow.Config{}
 		cfg.Branches.Main = mainBranch
 		cfg.Branches.Develop = developBranch
 		cfg.Branches.Uat = uatBranch
@@ -137,7 +138,7 @@ var InitCmd = &cobra.Command{
 		cfg.Flow.Bugfix.FinishTargets = uniqueBranchNames(uatBranch, developBranch)
 
 		cfg.Workflow.DefaultMergeMode = defaultMode
-		cfg.Workflow.BranchRules = make(map[string]utils.WorkflowBranchRule)
+		cfg.Workflow.BranchRules = make(map[string]flow.WorkflowBranchRule)
 
 		// 🎯 ask exceptions at the default mode
 		var exceptionBranches []string
@@ -149,43 +150,39 @@ var InitCmd = &cobra.Command{
 			Help:    fmt.Sprintf("Select the branches that require '%s' instead of the default '%s'", inverseMode, defaultMode),
 		}, &exceptionBranches)
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		for _, branch := range allBranches {
-			cfg.Workflow.BranchRules[branch] = utils.WorkflowBranchRule{MergeMode: defaultMode}
+			cfg.Workflow.BranchRules[branch] = flow.WorkflowBranchRule{MergeMode: defaultMode}
 		}
 
 		for _, branch := range exceptionBranches {
-			cfg.Workflow.BranchRules[branch] = utils.WorkflowBranchRule{MergeMode: inverseMode}
+			cfg.Workflow.BranchRules[branch] = flow.WorkflowBranchRule{MergeMode: inverseMode}
 		}
 
 		if err := utils.SaveConfig(&cfg); err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 		utils.Success("Created .dflow.yaml")
 
 		// 📋 print summary
-		fmt.Println("\n✅ Merge behavior summary:")
-		fmt.Printf("   Default mode: %s\n", defaultMode)
+		utils.Plain("")
+		utils.Success("Merge behavior summary:")
+		utils.Plain("   Default mode: %s", defaultMode)
 		for _, branch := range allBranches {
-			fmt.Printf("   - %s: %s\n", branch, utils.GetMergeModeForBranch(&cfg, branch))
+			utils.Plain("   - %s: %s", branch, flow.GetMergeModeForBranch(&cfg, branch))
 		}
-		fmt.Println()
+		utils.Plain("")
 
 		// 🌱 verify if base branches exists
 		if err := gitutils.CheckOrCreateBranch(mainBranch); err != nil {
-			utils.Error(err.Error())
 			return err
 		}
 		if err := gitutils.CheckOrCreateBranch(developBranch); err != nil {
-			utils.Error(err.Error())
 			return err
 		}
 		if err := gitutils.CheckOrCreateBranch(uatBranch); err != nil {
-			utils.Error(err.Error())
 			return err
 		}
 
@@ -201,26 +198,22 @@ var InitCmd = &cobra.Command{
 		}
 
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		if pushConfirm {
 			if err := gitutils.PushBranch(mainBranch); err != nil {
-				utils.Error("Failed to push '%s': %v", mainBranch, err)
-				return err
+				return fmt.Errorf("Failed to push '%s': %v", mainBranch, err)
 			}
 			if err := gitutils.PushBranch(developBranch); err != nil {
-				utils.Error("Failed to push '%s': %v", developBranch, err)
-				return err
+				return fmt.Errorf("Failed to push '%s': %v", developBranch, err)
 			}
 			if err := gitutils.PushBranch(uatBranch); err != nil {
-				utils.Error("Failed to push '%s': %v", uatBranch, err)
-				return err
+				return fmt.Errorf("Failed to push '%s': %v", uatBranch, err)
 			}
 		}
 
-		utils.Success("dflow is ready! Use `dflow start` to begin a new branch.", "🎉")
+		utils.Icon("🎉", "dflow is ready! Use `dflow start` to begin a new branch.")
 		return nil
 	}),
 }

@@ -16,9 +16,11 @@ branch types, bases, finish targets, and merge modes.
 - Layout:
   - `cmd/commands/` — user-facing subcommands (init, start, finish, delete, config).
   - `cmd/gitutils/` — low-level Git wrappers.
-  - `cmd/utils/` — config, workflow resolution, output helpers.
+  - `cmd/utils/` — config file I/O and terminal output helpers.
+  - `pkg/flow/` — pure branching domain: config schema, branch types, finish
+    planning. No I/O, no printing, no `cmd/*` dependency.
   - `pkg/validators/` — Git repo / dflow-init checks and branch-name validation.
-- Finish planning: `ResolveFinishPlan` splits targets into `auto` and `manual`.
+- Finish planning: `flow.ResolveFinishPlan` splits targets into `auto` and `manual`.
 
 ## Branch and merge model
 
