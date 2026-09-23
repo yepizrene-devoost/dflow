@@ -1,8 +1,26 @@
 # core-hardening — feature tracking
 
 Branch: `feature/core-hardening` (base: develop)
-Issues: #12 (real exit codes), plus the non-TTY defect found during exploration
+Issues: #12 (WU1), #14 (WU2), #15 (WU3), #16 (WU4)
 Status: authorized; scope is the four work units below. Forge, deploy and TUI stay out.
+
+## Issues
+
+Every finding has a tracked issue so it can be closed explicitly once its work
+lands in `develop`.
+
+| Unit | Issue | Title | State |
+| --- | --- | --- | --- |
+| WU1 | #12 | `fix(cli): return a non-zero exit code on failure` | open; fix committed, keyword predates the issue-independent work |
+| WU2 | #14 | `fix(cli): make progress output and prompts terminal-aware` | open; fix committed on this branch |
+| WU3 | #15 | `refactor: extract the branch planning core from the command layer` | open; pending |
+| WU4 | #16 | `feat(cli): expose machine-readable state and validate merge modes` | open; pending |
+
+Closure: the WU3 and WU4 work-unit commits carry `Closes #15` and `Closes #16`.
+The WU1 and WU2 fixes were committed before #14 existed, so the follow-up
+`docs(odd)` commit on this branch carries `Closes #12` and `Closes #14`; all four
+issues therefore close when this branch lands in `develop`, and none of them
+requires a manual close afterwards.
 
 ## Goal
 
