@@ -241,26 +241,34 @@ func PushBranchUpdate(branch string) error {
 // holds at an older commit is pushed. A repository without an 'origin' remote is
 // reported and skipped instead of failing a finish that can still merge its
 // local targets.
+//
+// A comparison that fails because origin is configured but unreachable is only a
+// warning: the publish is still attempted, so only a failed push fails the
+// finish.
 func PushWorkBranch(branch string) error {
 	if !HasOriginRemote() {
 		utils.Icon("📁", "Remote 'origin' not found. Skipping push for '%s'.", branch)
 		return nil
 	}
 
-	remoteRevision, err := remoteBranchRevision(branch)
-	if err != nil {
-		return err
-	}
+	// The comparison only decides between an honest no-op and a push, so its own
+	// failure is a warning, never a failed finish: the push below is the operation
+	// of record and reports its own failure. A lookup that says nothing must not
+	// turn the cheaper path into a load-bearing one.
+	remoteRevision, lookupErr := remoteBranchRevision(branch)
+	if lookupErr != nil {
+		utils.Warn("Could not compare '%s' with origin (%v); attempting the publish anyway.", branch, lookupErr)
+	} else {
+		localCmd := exec.Command("git", "rev-parse", "--verify", "refs/heads/"+branch)
+		localOutput, err := localCmd.Output()
+		if err != nil {
+			return fmt.Errorf("failed to resolve local branch '%s': %w", branch, err)
+		}
 
-	localCmd := exec.Command("git", "rev-parse", "--verify", "refs/heads/"+branch)
-	localOutput, err := localCmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to resolve local branch '%s': %w", branch, err)
-	}
-
-	if local := strings.TrimSpace(string(localOutput)); local == remoteRevision {
-		utils.Icon("✔", "Branch '%s' is already published and up to date on origin.", branch)
-		return nil
+		if local := strings.TrimSpace(string(localOutput)); local == remoteRevision {
+			utils.Icon("✔", "Branch '%s' is already published and up to date on origin.", branch)
+			return nil
+		}
 	}
 
 	spinner := utils.NewSpinner(fmt.Sprintf("Publishing '%s' to origin...", branch))
