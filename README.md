@@ -336,16 +336,19 @@ Update an existing dflow installation to the latest published release, in place.
 dflow update
 dflow update --check
 dflow update --force
+dflow update --yes
 dflow update --json
 ```
 
 - Asks the GitHub API for the newest release (no token needed), compares it with the version this binary reports, and only when it is newer downloads the archive for your platform, verifies its SHA-256 against the release's published `checksums.txt`, and swaps the binary atomically next to the running one. A failure at any step leaves the current binary untouched.
-- `--check` reports whether an update is available without downloading or replacing anything.
+- `--check` reports whether an update is available without downloading or replacing anything, including a "What's new" summary taken from the release notes.
 - `--force` reinstalls the latest release even when it is not newer (for example after a corrupted install); it cannot be combined with `--check`.
+- `--yes` skips the installation confirmation prompt; on an interactive terminal the command shows the release-notes summary and asks before downloading anything, and answering no aborts with the binary untouched (a non-interactive run keeps the old prompt-free behavior).
 - `--json` prints one machine-readable document: `current_version`, `latest_version`, `update_available`, `updated`, `path`, and `release_url`.
 - A binary with no release provenance (a plain `go build`, or `go install`) carries the `dev` marker: the command warns that its version cannot be compared and offers the update anyway; `go install`-managed binaries are usually best updated by running `go install` again.
 - The install location is resolved from the running binary itself (symlinks resolved), and the command refuses with an actionable message when that location is not writable — reinstall via the installer script, or install in a directory you own such as `~/.local/bin`.
 - Set `DFLOW_UPDATE_API_URL` to query a different GitHub API base URL (a mirror, or a local test server); it defaults to `https://api.github.com`.
+- After any command finishes, dflow prints one line on **stderr** when a newer release exists (for example `A new dflow release is available: v0.3.0 — run dflow update`). The check runs in the background, is cached for 24 hours in `$XDG_CACHE_HOME/dflow/update-check.json` (fallback `~/.cache/dflow/`), never touches stdout contracts like `--json`, never appears in machine-readable contexts (`--json`, completion, `version --revision`), is skipped for development builds (`dev` never nags), and can be turned off with `DFLOW_NO_UPDATE_CHECK=1`.
 
 ---
 

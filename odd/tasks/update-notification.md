@@ -57,7 +57,9 @@ Closes forge issue #27 (`feat(notify): surface available updates and release cha
 
 ## Tasks
 
-1. [ ] Branch, tracking, and design decisions (this document).
+1. [x] Branch, tracking, and the design decisions (this document; created with
+   `dflow start feature update-notification --no-push` before any tracked
+   write).
 2. [x] WU1 — release body + notes truncation (`cmd/selfupdate`)
    - Delegated to a bounded `gentle-ai-worker` (parallel with WU2, disjoint
      surfaces). `release.go` now decodes the release body into `Release.Body`
@@ -123,10 +125,16 @@ Closes forge issue #27 (`feat(notify): surface available updates and release cha
      maintainer instead of faked. Checks: `go build ./...`, `go vet ./...`,
      `gofmt -l .` clean, `go test -count=1 -run TestUpdateCLI ./cmd/tests/`
      green (full `./cmd/...` ran green on the worker's tree pre-WU3-merge).
-6. [ ] WU5 — docs and close-out
-   - README update section (notification, `DFLOW_NO_UPDATE_CHECK`, `--yes`),
-     `.agents/workflows/dflow-workflow.md` command table row if needed,
-     `CHANGELOG.md` Unreleased entry.
+6. [x] WU5 — docs and close-out
+   - README `dflow update` section: `--yes`, the notes-before/after flow, the
+     confirmation prompt (interactive-only, abort leaves the binary untouched)
+     and the startup notification (stderr line, 24h cache paths,
+     `DFLOW_NO_UPDATE_CHECK`, dev-marker silence). `.agents/workflows/
+     dflow-workflow.md` command row updated. `CHANGELOG.md` Unreleased gains
+     the three user-facing entries. Controller fix on the test harness:
+     `setUpCLIEnv` now pins `XDG_CACHE_HOME` to a temp dir so the suite never
+     writes the host's real cache (a gap the WU4 worker flagged, outside its
+     surfaces).
 
 ## Work-unit commit identity on `feature/update-notification`
 

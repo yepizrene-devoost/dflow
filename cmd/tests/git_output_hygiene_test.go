@@ -260,6 +260,11 @@ func TestFinishMergeFailureCarriesGitExplanation(t *testing.T) {
 
 // setUpCLIEnv pins the environment every real-binary test needs: no user or
 // system Git config, no interactive prompt, and cwd-based config loading.
+//
+// XDG_CACHE_HOME redirects the update-check cache away from the host's real
+// ~/.cache: the notification and update paths read and write that state file,
+// and a test run must never leave cache entries (or stale "latest release"
+// answers) behind on the machine running the suite.
 func setUpCLIEnv(t *testing.T) {
 	t.Helper()
 
@@ -267,4 +272,5 @@ func setUpCLIEnv(t *testing.T) {
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_TERMINAL_PROMPT", "0")
 	t.Setenv("DFLOW_CWD", "")
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 }
