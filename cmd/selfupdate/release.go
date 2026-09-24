@@ -39,6 +39,11 @@ type Release struct {
 	// HTMLURL is the GitHub release page, shown to the user so they can read
 	// the changelog before or after updating.
 	HTMLURL string
+	// Body is the raw Markdown release body — the rendered CHANGELOG.md
+	// GoReleaser publishes — with surrounding whitespace already trimmed. It is
+	// empty when GitHub returns no body. It is kept whole; deciding how much of
+	// it fits a terminal belongs to SummarizeReleaseNotes, not to parsing.
+	Body string
 
 	// assets maps an asset name to its browser_download_url. A map rather than
 	// a slice because every consumer looks an asset up by name; see AssetURL.
@@ -62,6 +67,7 @@ func (r Release) AssetURL(name string) (string, bool) {
 type releaseResponse struct {
 	TagName string          `json:"tag_name"`
 	HTMLURL string          `json:"html_url"`
+	Body    string          `json:"body"`
 	Assets  []assetResponse `json:"assets"`
 }
 
@@ -178,7 +184,11 @@ func newRelease(payload releaseResponse) (*Release, error) {
 		Tag:     tag,
 		Version: strings.TrimPrefix(tag, "v"),
 		HTMLURL: payload.HTMLURL,
-		assets:  assets,
+		// Trim only the body's outer whitespace: inner blank lines and each
+		// line's own indentation are the summarizer's concern. An absent body
+		// stays the empty string rather than becoming a placeholder.
+		Body:   strings.TrimSpace(payload.Body),
+		assets: assets,
 	}, nil
 }
 
