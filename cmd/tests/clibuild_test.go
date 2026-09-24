@@ -65,6 +65,15 @@ type cliBuild struct {
 	err    error
 }
 
+// dflowBinaryName is the platform-correct file name for a built dflow binary.
+func dflowBinaryName() string {
+	name := "dflow"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	return name
+}
+
 // sharedBuildDir creates the one directory every memoized build lives in, and
 // returns the same path to every caller.
 func sharedBuildDir() (string, error) {
@@ -109,11 +118,7 @@ func runSharedBuild(ldflags string) (binary, output string, err error) {
 	if err != nil {
 		return "", "", fmt.Errorf("resolve the repository root: %w", err)
 	}
-	name := "dflow"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
-	}
-	binary = filepath.Join(configDir, name)
+	binary = filepath.Join(configDir, dflowBinaryName())
 
 	args := []string{"build"}
 	if ldflags != "" {
@@ -159,22 +164,16 @@ func sharedDflowCLI(t *testing.T, ldflags string) string {
 	if entry.err != nil {
 		t.Fatalf("build the shared dflow binary (ldflags %q): %v\n%s", ldflags, entry.err, entry.output)
 	}
-
-	name := "dflow"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
-	}
-	target := filepath.Join(t.TempDir(), name)
+	target := filepath.Join(t.TempDir(), dflowBinaryName())
 
 	data, err := os.ReadFile(entry.binary)
 	if err != nil {
 		t.Fatalf("read the shared dflow binary %s: %v", entry.binary, err)
 	}
+	// WriteFile applies 0o755 at creation, which keeps the copy executable;
+	// the file is fresh in a t.TempDir(), so no follow-up chmod is needed.
 	if err := os.WriteFile(target, data, 0o755); err != nil {
 		t.Fatalf("copy the shared dflow binary to %s: %v", target, err)
-	}
-	if err := os.Chmod(target, 0o755); err != nil {
-		t.Fatalf("mark %s executable: %v", target, err)
 	}
 	return target
 }
