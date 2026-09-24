@@ -29,11 +29,20 @@ build-all:
 	GOOS=darwin  GOARCH=amd64 go build -ldflags="-X main.version=$(VERSION)" -o $(BIN_DIR)/$(BINARY_NAME)-darwin .
 	GOOS=windows GOARCH=amd64 go build -ldflags="-X main.version=$(VERSION)" -o $(BIN_DIR)/$(BINARY_NAME).exe .
 
-# 🚀 Release with GoReleaser + .env token
-.PHONY: release
-release:
+# 🚀 Release with GoReleaser + .env token. The GitHub release body is only the
+# latest version's section of CHANGELOG.md, extracted to RELEASE_NOTES.md (the
+# dflow update --check digest renders the release body, so old sections do not
+# belong in it).
+.PHONY: release release-notes
+release: release-notes
 	@echo "🚀 Running GoReleaser with .env"
-	@set -a; . ./.env; set +a; goreleaser release --clean --release-notes=CHANGELOG.md
+	@set -a; . ./.env; set +a; goreleaser release --clean --release-notes=RELEASE_NOTES.md
+
+# 📝 Extract the latest version section from CHANGELOG.md into RELEASE_NOTES.md
+# (generated, gitignored, never committed).
+release-notes:
+	@awk '/^## 📦/{if (found) exit; found=1} found' CHANGELOG.md > RELEASE_NOTES.md
+	@echo "📝 RELEASE_NOTES.md written from the latest CHANGELOG.md section (generated, never committed)."
 
 # 📥 Install local build to $GOPATH/bin with version injected
 .PHONY: install

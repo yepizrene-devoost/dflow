@@ -7,6 +7,20 @@ changes in each release, see [`CHANGELOG.md`](./CHANGELOG.md).
 
 ---
 
+## 📦 v0.3.0 – Self-Update, Installers & CLI Contracts
+
+**Tag:** [`v0.3.0`](https://github.com/yepizrene-devoost/dflow/releases/tag/v0.3.0)  
+**Date:** 2026-09-24
+
+**Highlights:**
+
+- `dflow update` self-updates the binary with checksum verification, a release-notes digest, and an interactive confirmation.
+- POSIX and Windows installer scripts ship as release assets.
+- Terminal-aware output, machine-readable JSON contracts, and non-zero exit codes on failure.
+- `dflow start --from` for chained/stacked branches with non-interactive push choices.
+
+---
+
 ## 📦 v0.2.0 – Finish Automation, Versioning & Flow Documentation
 
 **Tag:** [`v0.2.0`](https://github.com/yepizrene-devoost/dflow/releases/tag/v0.2.0)  
