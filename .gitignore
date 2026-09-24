@@ -3,3 +3,6 @@ dist/
 .env
 # Local Pi runtime state
 .atl/
+
+# Generated changelog draft (make changelog) — curated into CHANGELOG.md, never committed
+CHANGELOG.draft.md

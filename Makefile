@@ -52,14 +52,18 @@ test:
 lint:
 	GOCACHE=/tmp/dflow-gocache GOLANGCI_LINT_CACHE=/tmp/dflow-golangci-lint-cache golangci-lint run ./...
 
-# 📝 Generate changelog from last tag
+# 📝 Generate the changelog draft from Conventional Commits with git-cliff.
+# The draft is curated by hand into CHANGELOG.md (see RELEASING.md, step 3)
+# and never committed.
 .PHONY: changelog
 changelog:
-	@echo "⚠️  CHANGELOG.md is maintained manually for each release."
-	@echo "📝 Generating CHANGELOG.draft.md from commits..."
-	@echo "# Changelog Draft\n" > CHANGELOG.draft.md
-	@git log $$(git describe --tags --abbrev=0)..HEAD --pretty=format:"- %s" >> CHANGELOG.draft.md
-	@echo "\n✅ Done. Review CHANGELOG.draft.md and copy only the notes you need into CHANGELOG.md"
+	@command -v git-cliff >/dev/null 2>&1 || { \
+		echo "❌  git-cliff is not installed. Install it first: https://git-cliff.org/docs/installation"; \
+		exit 1; \
+	}
+	@echo "📝 Generating CHANGELOG.draft.md from Conventional Commits..."
+	@git cliff --unreleased --config cliff.toml -o CHANGELOG.draft.md
+	@echo "✅ Draft ready. Curate it into CHANGELOG.md, then discard it: it is never committed."
 
 # 🧹 Clean compiled binaries
 .PHONY: clean

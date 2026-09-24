@@ -1,0 +1,49 @@
+# git-cliff configuration — dflow changelog draft generator
+#
+# Model: generated + curated. `make changelog` renders CHANGELOG.draft.md from
+# the Conventional Commits the repository already enforces, and a human curates
+# that draft into CHANGELOG.md for each release (see RELEASING.md, step 3).
+# The draft deliberately over-includes: this file only filters the bookkeeping
+# noise (merge commits, ODD task records, pure documentation commits) that never
+# belongs in release notes.
+
+[changelog]
+# The draft carries no header or footer: the curated CHANGELOG.md owns the
+# framing, the draft is raw material.
+header = ""
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}\
+### {{ group | upper_first }}
+
+{% for commit in commits %}\
+- {{ commit.message | upper_first }}{% if commit.scope %} ({{ commit.scope }}){% endif %}
+{% endfor %}
+{% endfor %}\
+"""
+trim = true
+footer = ""
+
+[git]
+# Merge commits ("Merge branch '...' into develop") are not conventional
+# commits, so they are filtered out with the rest of the noise below.
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+# A breaking change is never silently dropped by a later parser rule.
+protect_breaking_commits = true
+tag_pattern = "v[0-9].*"
+sort_commits = "oldest"
+
+commit_parsers = [
+  { message = "^feat", group = "Added" },
+  { message = "^fix", group = "Fixed" },
+  { message = "^perf", group = "Performance" },
+  # ODD task bookkeeping and documentation commits never reach release notes.
+  { message = "^docs\\(odd\\)", skip = true },
+  { message = "^docs", skip = true },
+  # Everything else a release curator might want to promote stays visible
+  # under Internal; the curated document usually leaves it out.
+  { message = "^refactor", group = "Internal" },
+  { message = "^test", group = "Internal" },
+  { message = "^chore", group = "Internal" },
+]
