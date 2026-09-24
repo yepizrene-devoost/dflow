@@ -20,7 +20,7 @@ configuration lives in `.dflow.yaml`; this file explains how to read and apply i
 | `dflow finish --no-push` | Merge the current branch into its configured `auto` targets without publishing the work branch |
 | `dflow status [--json]` | Report branch, detected type, resolved targets and Git state |
 | `dflow delete <branch> [--yes]` | Delete a branch locally and remotely; idempotent, it deletes whichever copy still exists |
-| `dflow update [--check] [--force] [--json]` | Update the dflow binary itself to the latest published release, verified and swapped atomically |
+| `dflow update [--check] [--force] [--yes] [--json]` | Update the dflow binary itself to the latest published release, verified and swapped atomically; shows the release notes and, on a TTY, asks before replacing |
 | `dflow config set-author "Name" --email ...` | Store local `dflow.author` / `dflow.email` |
 | `dflow completion [install]` | Generate shell completions |
 | `dflow version` | Show the CLI version |

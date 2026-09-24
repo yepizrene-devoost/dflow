@@ -40,10 +40,20 @@ tasks with a customizable flow model.`,
 	SilenceUsage:  true,
 
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		if !utils.IsInteractive() || shouldSkipBanner(os.Args[1:]) {
-			return
+		// The banner needs a terminal; the update notice does not, so the probe
+		// is armed outside this guard. A piped run still gets the notice on
+		// stderr, which is exactly the caller that most wants to hear about a
+		// newer release.
+		if utils.IsInteractive() && !shouldSkipBanner(os.Args[1:]) {
+			utils.PrintBanner()
 		}
-		utils.PrintBanner()
+		maybeStartUpdateProbe(cmd)
+	},
+
+	// PersistentPostRun is where the notice renders: after the command's own
+	// output and never on the error path, which has already exited by then.
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		renderPendingUpdateNotice()
 	},
 
 	Run: func(cmd *cobra.Command, args []string) {

@@ -226,6 +226,200 @@ func TestUpdateCLIWarnsWithoutReleaseProvenance(t *testing.T) {
 	})
 }
 
+// TestUpdateCLICheckHumanShowsReleaseNotes pins the read-only report a user
+// actually reads: when the served release carries a changelog body, --check in
+// human mode shows a "what's new" section with the summarized lines, and the
+// release page stays the last line so it is one link away from the full notes.
+func TestUpdateCLICheckHumanShowsReleaseNotes(t *testing.T) {
+	setUpCLIEnv(t)
+	// Keep the command's best-effort cache refresh out of the host's own cache.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	body := "## What's changed\n\n- surface the update notification\n- summarize the release notes\n"
+	server := updateNotesStartReleaseServer(t, "v9.9.9", []byte("payload"), body)
+	t.Setenv("DFLOW_UPDATE_API_URL", server.URL)
+
+	binary := buildDflowCLIWithMarker(t, "v0.1.0")
+
+	output, exitCode := startCLIRawOutput(t, time.Minute, t.TempDir(), binary, "update", "--check")
+	if exitCode != 0 {
+		t.Fatalf("update --check exited %d, want 0\n%s", exitCode, output)
+	}
+	if !strings.Contains(output, "what's new in v9.9.9:") {
+		t.Fatalf("human check output must open a notes summary for the newer release, got:\n%s", output)
+	}
+	if !strings.Contains(output, "- surface the update notification") {
+		t.Fatalf("the notes summary must carry the release body's content lines, got:\n%s", output)
+	}
+	if !strings.Contains(output, "release notes: "+server.URL) {
+		t.Fatalf("the release page line must still close the report, got:\n%s", output)
+	}
+}
+
+// TestUpdateCLIJSONKeepsSixKeysWithReleaseBody is the JSON contract pin for the
+// new notes: a body is prose for a terminal, and publishing it as a field would
+// both change the document shape and ship a truncated artifact as data.
+func TestUpdateCLIJSONKeepsSixKeysWithReleaseBody(t *testing.T) {
+	setUpCLIEnv(t)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	body := "## What's changed\n\n- surface the update notification\n"
+	server := updateNotesStartReleaseServer(t, "v9.9.9", []byte("payload"), body)
+	t.Setenv("DFLOW_UPDATE_API_URL", server.URL)
+
+	binary := buildDflowCLIWithMarker(t, "v0.1.0")
+
+	output, exitCode := startCLIRawOutput(t, time.Minute, t.TempDir(), binary, "update", "--check", "--json")
+	if exitCode != 0 {
+		t.Fatalf("update --check --json exited %d, want 0\n%s", exitCode, output)
+	}
+	assertNoHumanChrome(t, output)
+
+	doc := decodeSingleJSONDocument(t, output)
+	if len(doc) != 6 {
+		t.Fatalf("check document has %d keys, want exactly 6 even when the release has a body:\n%v", len(doc), doc)
+	}
+	if strings.Contains(output, "what's new") {
+		t.Fatalf("the machine-readable document must carry no notes summary, got:\n%s", output)
+	}
+}
+
+// TestUpdateCLIYesJSONCompletesSwap proves --yes parses and never conflicts
+// with the machine-readable path: the swap happens, the six-key document is
+// emitted, and nothing was asked along the way.
+func TestUpdateCLIYesJSONCompletesSwap(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the Windows release archive is a zip; the zip path is covered by the cmd/selfupdate tests")
+	}
+
+	setUpCLIEnv(t)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	payload := []byte("#!/bin/sh\necho the-updated-dflow\n")
+	server := updateNotesStartReleaseServer(t, "v9.9.9", payload, "## What's changed\n\n- surface the update notification\n")
+	t.Setenv("DFLOW_UPDATE_API_URL", server.URL)
+
+	source := buildDflowCLIWithMarker(t, "v0.1.0")
+
+	installDir := t.TempDir()
+	installed := filepath.Join(installDir, "dflow")
+	copyExecutable(t, source, installed)
+
+	output, exitCode := startCLIRawOutput(t, time.Minute, installDir, installed, "update", "--yes", "--json")
+	if exitCode != 0 {
+		t.Fatalf("update --yes --json exited %d, want 0\n%s", exitCode, output)
+	}
+	assertNoHumanChrome(t, output)
+
+	doc := decodeSingleJSONDocument(t, output)
+	if len(doc) != 6 {
+		t.Fatalf("update document has %d keys, want exactly 6:\n%v", len(doc), doc)
+	}
+	if doc["updated"] != true {
+		t.Fatalf("updated = %#v, want true: --yes must not stop the swap", doc["updated"])
+	}
+	if after := readFileBytes(t, installed); !bytes.Equal(after, payload) {
+		t.Fatalf("the installed binary was not replaced with the release payload:\ngot  %q\nwant %q", after, payload)
+	}
+}
+
+// TestUpdateCLINonInteractiveInstallWithoutYesInstalls pins the decision that
+// keeps scripts working: with no terminal on either stream there is nobody to
+// answer a confirmation, so the command proceeds without one and still shows
+// the notes on both sides of the swap.
+func TestUpdateCLINonInteractiveInstallWithoutYesInstalls(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the Windows release archive is a zip; the zip path is covered by the cmd/selfupdate tests")
+	}
+
+	setUpCLIEnv(t)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	payload := []byte("#!/bin/sh\necho the-updated-dflow\n")
+	body := "## What's changed\n\n- surface the update notification\n"
+	server := updateNotesStartReleaseServer(t, "v9.9.9", payload, body)
+	t.Setenv("DFLOW_UPDATE_API_URL", server.URL)
+
+	source := buildDflowCLIWithMarker(t, "v0.1.0")
+
+	installDir := t.TempDir()
+	installed := filepath.Join(installDir, "dflow")
+	copyExecutable(t, source, installed)
+
+	// startCLIRawOutput runs the binary with a nil stdin, so neither stream is a
+	// terminal and the confirmation prompt must never appear.
+	output, exitCode := startCLIRawOutput(t, time.Minute, installDir, installed, "update")
+	if exitCode != 0 {
+		t.Fatalf("non-interactive update exited %d, want 0\n%s", exitCode, output)
+	}
+	if strings.Contains(output, "Install dflow") {
+		t.Fatalf("a non-interactive run must never prompt, got:\n%s", output)
+	}
+	if !strings.Contains(output, "what's new in v9.9.9:") {
+		t.Fatalf("the notes summary must be shown before the download, got:\n%s", output)
+	}
+	// Before the swap and after the swap: the summary is shown twice.
+	if count := strings.Count(output, "what's new in v9.9.9:"); count != 2 {
+		t.Fatalf("the notes summary appeared %d times, want 2 (before the download and after the swap):\n%s", count, output)
+	}
+	if after := readFileBytes(t, installed); !bytes.Equal(after, payload) {
+		t.Fatalf("the installed binary was not replaced with the release payload:\ngot  %q\nwant %q", after, payload)
+	}
+	// The after-swap order is binary line, summary, release page, so the full
+	// changelog URL is the last thing the user sees.
+	releaseURL := server.URL + "/repos/yepizrene-devoost/dflow/releases/tag/v9.9.9"
+	if !strings.HasSuffix(strings.TrimSpace(output), "release notes: "+releaseURL) {
+		t.Fatalf("the release page must close the post-install report, got:\n%s", output)
+	}
+}
+
+// updateNotesStartReleaseServer is the body-aware sibling of
+// startFakeReleaseServer: the same fabricate-everything release server, with the
+// GitHub `body` field populated so the notes summary has something to render.
+//
+// It is a separate helper rather than a parameter on startFakeReleaseServer
+// because that server is shared by the other update tests and its signature is
+// frozen; every route below mirrors it byte for byte apart from the body.
+func updateNotesStartReleaseServer(t *testing.T, tag string, binaryPayload []byte, body string) *httptest.Server {
+	t.Helper()
+
+	archiveName, err := selfupdate.ArchiveName(runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		t.Skipf("the test host %s/%s has no dflow release asset naming: %v", runtime.GOOS, runtime.GOARCH, err)
+	}
+	archive := buildReleaseArchive(t, archiveName, binaryPayload)
+	checksumsName := selfupdate.ChecksumsName(tag)
+	checksums := []byte(fmt.Sprintf("%s  %s\n", sha256Hex(archive), archiveName))
+
+	mux := http.NewServeMux()
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	archiveURL := server.URL + "/assets/" + archiveName
+	checksumsURL := server.URL + "/assets/" + checksumsName
+
+	mux.HandleFunc("/repos/yepizrene-devoost/dflow/releases/latest", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"tag_name": tag,
+			"html_url": server.URL + "/repos/yepizrene-devoost/dflow/releases/tag/" + tag,
+			"body":     body,
+			"assets": []map[string]string{
+				{"name": archiveName, "browser_download_url": archiveURL},
+				{"name": checksumsName, "browser_download_url": checksumsURL},
+			},
+		})
+	})
+	mux.HandleFunc("/assets/"+archiveName, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(archive)
+	})
+	mux.HandleFunc("/assets/"+checksumsName, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(checksums)
+	})
+
+	return server
+}
+
 // buildDflowCLIWithMarker compiles the real entry point with a release version
 // marker injected through the linker, the way .goreleaser.yaml and the Makefile
 // stamp a release build. The version comparison is only meaningful for a binary

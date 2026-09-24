@@ -8,6 +8,9 @@
 - Documentation and tests were updated to reflect the new workflow defaults.
 
 ### Added
+- After any dflow command finishes, one line on `stderr` announces a newer published release (`A new dflow release is available: vX.Y.Z — run dflow update`). The check runs in the background with a short timeout, is cached for 24 hours in `$XDG_CACHE_HOME/dflow/update-check.json` (fallback `~/.cache/dflow/`), never touches stdout contracts (`--json`, completion, `version --revision`), is skipped for development builds, and can be disabled with `DFLOW_NO_UPDATE_CHECK=1`.
+- `dflow update --check` now includes a "What's new" summary taken from the release body, rendered as a terminal-friendly digest (section headings marked with `▸`, list items with `•`, the body's own title dropped) and truncated with the full release URL.
+- `dflow update` now shows the release-notes summary before downloading anything and, on an interactive terminal, asks for confirmation (`--yes` skips it); answering no aborts with exit 0 and the binary untouched, non-interactive runs keep the previous prompt-free behavior, and after a successful swap the summary and the full release URL are shown again.
 - `dflow finish` now publishes the work branch to `origin` before merging, so a `manual` target can be promoted through a pull request without a manual `git push`; publishing is idempotent (a branch `origin` already holds at the same commit is left untouched) and `dflow finish --no-push` keeps the branch local.
 - `dflow finish --delete` to remove finished branches locally and remotely after a successful finish when no manual targets remain.
 - `dflow version` now reports the commit the binary was installed from next to the channel/version marker, suffixed `-dirty` when the build tree had uncommitted changes.

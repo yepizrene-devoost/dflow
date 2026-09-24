@@ -1,6 +1,9 @@
 package utils
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+)
 
 // Error prints a message with a red cross (❌) prefix.
 // Used to display fatal or important errors to the user.
@@ -45,6 +48,26 @@ func Plain(formattedMessage string, args ...interface{}) {
 		return
 	}
 	fmt.Println(fmt.Sprintf(formattedMessage, args...))
+}
+
+// Notice prints one unadorned line to stderr, with no icon.
+//
+// Use Notice for out-of-band information about the run as a whole rather than a
+// result of the command the user asked for: the startup "a new release is
+// available" line, for example. It writes to stderr, never stdout, because
+// stdout is the command's result stream and may carry a machine-readable
+// document; an advisory appended there would corrupt that contract or shift
+// field positions for a script that reads it. stderr is exactly the stream a
+// caller can ignore without losing the result.
+//
+// It shares Plain's JSON suppression for the same reason every other helper
+// does: a machine-readable run gets exactly its document and nothing else, and
+// a notice on stderr would still be noise a wrapper has to filter.
+func Notice(formattedMessage string, args ...interface{}) {
+	if CurrentFormat() == FormatJSON {
+		return
+	}
+	fmt.Fprintln(os.Stderr, fmt.Sprintf(formattedMessage, args...))
 }
 
 // Prompt prints an inline input label without a trailing newline.

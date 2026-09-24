@@ -108,6 +108,58 @@ func TestNewReleaseNormalizesTags(t *testing.T) {
 	}
 }
 
+// TestLatestReleaseDecodesTheReleaseBody pins the new body decode: the rendered
+// changelog GitHub returns must reach Release.Body, and its surrounding
+// whitespace (GitHub commonly wraps it in blank lines) must not leak into the
+// summary built from it.
+func TestLatestReleaseDecodesTheReleaseBody(t *testing.T) {
+	const changelog = "## What's new\n\n- fixed a bug"
+
+	client := newTestReleaseClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"tag_name": "v0.3.0",
+			"body":     "\n\n" + changelog + "\n\n",
+		})
+	})
+
+	release, err := client.LatestRelease()
+	if err != nil {
+		t.Fatalf("LatestRelease() error = %v, want nil", err)
+	}
+	if release.Body != changelog {
+		t.Fatalf("Body = %q, want %q", release.Body, changelog)
+	}
+}
+
+// TestNewReleaseNormalizesTheBody keeps the body normalization honest at the
+// boundary the summarizer relies on: the whole body's surrounding whitespace is
+// trimmed once, and a body GitHub omits (or sends blank) stays empty rather
+// than turning into a placeholder.
+func TestNewReleaseNormalizesTheBody(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "trims surrounding whitespace", body: "\n\n## Notes\n- one\n\n", want: "## Notes\n- one"},
+		{name: "empty stays empty", body: "", want: ""},
+		{name: "whitespace-only becomes empty", body: "\n   \t\n", want: ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			release, err := newRelease(releaseResponse{TagName: "v0.3.0", Body: tc.body})
+			if err != nil {
+				t.Fatalf("newRelease(body %q) error = %v, want nil", tc.body, err)
+			}
+			if release.Body != tc.want {
+				t.Fatalf("Body = %q, want %q", release.Body, tc.want)
+			}
+		})
+	}
+}
+
 // TestNewReleaseRejectsAnEmptyTag guards the one malformed payload worth
 // failing on: without a tag there is no version to compare, so a silent success
 // would surface later as a nonsensical "0.0.0" update.
