@@ -142,10 +142,20 @@ Closes forge issue #27 (`feat(notify): surface available updates and release cha
 
 | Unit | Commit | Subject |
 | --- | --- | --- |
-| WU1 | (this commit) | `feat(update): surface the release body and a terminal notes summary` |
-| WU2 | (this commit) | `feat(update): add the cached update check and background probe` |
-| WU3 | (this commit) | `feat(notify): announce newer releases on stderr after a command` |
-| WU4 | (this commit) | `feat(update): confirm the install after showing the release notes` |
+| WU1 | `c6535bc` | `feat(update): surface the release body and a terminal notes summary` |
+| WU2 | `3c5a956` | `feat(update): add the cached update check and background probe` |
+| WU4 | `0b6deeb` | `feat(update): confirm the install after showing the release notes` |
+| WU3 | `0d52b3e` | `feat(notify): announce newer releases on stderr after a command` |
+| docs | `d338c27` | `docs: document the update notification and release notes surfacing` |
+| docs(odd) | (this commit) | `docs(odd): record update-notification work-unit identity and close the feature` |
+
+## Declared review expectation
+
+The review candidate is the tip of `feature/update-notification` (base
+`develop` at `57f0fb2`): every stage above is closed, `go build ./...`,
+`go vet ./...`, `gofmt -l .` and `go test -count=1 ./...` ran green on this
+exact tree. The review verdict is not recorded here; the native review receipt
+and Engram are the record, and the tree stays untouched after approval.
 | WU5 | — | — |
 
 ## Review history on this branch
