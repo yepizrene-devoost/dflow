@@ -6,3 +6,5 @@ dist/
 
 # Generated changelog draft (make changelog) — curated into CHANGELOG.md, never committed
 CHANGELOG.draft.md
+# Generated release body (make release) — latest CHANGELOG.md section, never committed
+RELEASE_NOTES.md
