@@ -90,11 +90,23 @@ Closes forge issue #27 (`feat(notify): surface available updates and release cha
 4. [ ] WU3 — startup notification wiring (`cmd/root`)
    - PreRun launches the probe; PostRun renders the one-line stderr notice
      under the suppression matrix and the double-render guard; CLI tests.
-5. [ ] WU4 — notes in `update --check` and the update flow (`cmd/commands`)
-   - `--check` human report gains a "What's new" summary; the install flow
-     shows notes, prompts (interactive only, `--yes` to skip) before
-     `installLatest`, and repeats the summary with the full URL after the swap;
-     cache refresh on both paths; CLI tests.
+5. [x] WU4 — notes in `update --check` and the update flow (`cmd/commands`)
+   - Delegated to a bounded `gentle-ai-worker` (parallel with WU3, disjoint
+     surfaces). `update.go`: `--yes`/`-y` flag; human-only
+     `reportNotesSummary` (summary lines only when the body is non-empty);
+     `--check` human report appends the summary before the release-URL line;
+     `confirmUpdateInstall` runs summary → guard → `--yes` → `survey.Confirm`
+     (Default yes) strictly before `installLatest`, so an abort (printed as
+     "update aborted", exit 0) costs zero downloaded bytes; non-interactive
+     and JSON paths proceed with no prompt; post-swap order is binary line,
+     summary, full URL; best-effort `RecordUpdateCheck` right after
+     `LatestRelease()` keeps the startup probe quiet 24h; Long/Example
+     updated. JSON contract untouched (6 keys, pinned by a new test with a
+     body present). Known gap: the interactive accept/decline branches are
+     not exercised (the harness never runs a PTY); deviation flagged for the
+     maintainer instead of faked. Checks: `go build ./...`, `go vet ./...`,
+     `gofmt -l .` clean, `go test -count=1 -run TestUpdateCLI ./cmd/tests/`
+     green (full `./cmd/...` ran green on the worker's tree pre-WU3-merge).
 6. [ ] WU5 — docs and close-out
    - README update section (notification, `DFLOW_NO_UPDATE_CHECK`, `--yes`),
      `.agents/workflows/dflow-workflow.md` command table row if needed,
@@ -109,7 +121,7 @@ Closes forge issue #27 (`feat(notify): surface available updates and release cha
 | WU1 | (this commit) | `feat(update): surface the release body and a terminal notes summary` |
 | WU2 | (this commit) | `feat(update): add the cached update check and background probe` |
 | WU3 | — | — |
-| WU4 | — | — |
+| WU4 | (this commit) | `feat(update): confirm the install after showing the release notes` |
 | WU5 | — | — |
 
 ## Review history on this branch

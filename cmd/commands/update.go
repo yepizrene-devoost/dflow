@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
 	"github.com/yepizrene-devoost/dflow/cmd/selfupdate"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
@@ -51,11 +53,21 @@ host platform, verifies it against the release's published SHA-256 checksums,
 extracts the new binary and swaps it into place next to the running one. A
 failure at any step leaves the current binary untouched.
 
+The release notes are summarized before anything is downloaded, so the decision
+to install is made with the changelog in view, and the same summary is shown
+again after the swap next to the full release page. When the command runs on a
+terminal it asks for confirmation before downloading; the default answer is yes
+and --yes skips the question. A run whose input or output is not a terminal (a
+script or a pipe) is never prompted and installs as it always has.
+
 Pass --check to report whether an update is available without downloading or
 replacing anything. Pass --force to reinstall the latest release even when it is
 not newer than the installed one (for example, after a corrupted install).
---check and --force cannot be combined. Pass --json for one machine-readable
-document instead; in that mode stdout carries the document and nothing else.
+--check and --force cannot be combined. An explicit check also refreshes the
+update-check cache, which keeps the background startup notice quiet for the next
+24 hours. Pass --json for one machine-readable document instead; in that mode
+stdout carries a single six-key document and nothing else, with no prompt and no
+notes summary.
 
 The update is driven by the release the repository publishes, not by this
 checkout: a binary built or installed with tools you manage yourself (a plain
@@ -71,6 +83,7 @@ The updater needs no authentication: dflow's releases are public. The trade-off
 is GitHub's unauthenticated rate limit (60 requests per hour per IP), which the
 command reports as an actionable error when it is hit.`,
 	Example: `  dflow update
+  dflow update --yes
   dflow update --check
   dflow update --force
   dflow update --json`,
@@ -101,6 +114,10 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	checkOnly, err := cmd.Flags().GetBool("check")
+	if err != nil {
+		return err
+	}
+	yes, err := cmd.Flags().GetBool("yes")
 	if err != nil {
 		return err
 	}
@@ -135,6 +152,16 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// This command just learned the latest release from GitHub, so record it:
+	// the background startup notice reuses a cache younger than 24 hours, and an
+	// explicit check is the freshest answer there is. The refresh is best-effort
+	// on purpose — it is bookkeeping for a courtesy notice, so neither a machine
+	// with no resolvable cache path nor a failed write may affect the check or
+	// the update the user actually asked for.
+	if cachePath, pathErr := selfupdate.UpdateCheckCachePath(); pathErr == nil {
+		_ = selfupdate.RecordUpdateCheck(cachePath, latest, time.Now())
+	}
+
 	// A binary without release provenance has no version to compare, so the
 	// comparison is bypassed rather than handed to the comparator's string
 	// fallback: "dev" sorts below every digit, which would make a dev build
@@ -152,7 +179,7 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		if utils.CurrentFormat() == utils.FormatJSON {
 			return utils.EmitJSON(report)
 		}
-		reportHumanCheck(report)
+		reportHumanCheck(report, latest)
 		return nil
 	}
 
@@ -161,6 +188,14 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 			return utils.EmitJSON(report)
 		}
 		utils.Success("dflow %s is already up to date (%s)", utils.GetVersion(), latest.Tag)
+		return nil
+	}
+
+	proceed, err := confirmUpdateInstall(yes, current, target, latest)
+	if err != nil {
+		return err
+	}
+	if !proceed {
 		return nil
 	}
 
@@ -176,18 +211,78 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return utils.EmitJSON(report)
 	}
 	utils.Info("binary: %s", target)
+	reportNotesSummary(latest)
 	reportHumanReleaseURL(report.ReleaseURL)
 	return nil
 }
 
+// confirmUpdateInstall reports what the update would install and, on a
+// terminal, asks before a single byte is downloaded. It returns whether the
+// install should proceed; a decline is a successful command, not an error.
+//
+// The ordering is the point: the summary is printed here, before installLatest
+// runs, so a user who declines has spent no bandwidth and the running binary is
+// untouched.
+func confirmUpdateInstall(yes bool, current, target string, latest *selfupdate.Release) (bool, error) {
+	// The notes go through the shared output layer, which suppresses them in
+	// JSON mode, so the machine-readable document never gains human chrome.
+	reportNotesSummary(latest)
+
+	// A machine-readable run and a non-interactive one both keep the historical
+	// piped behaviour: no question is asked, and the install proceeds. A prompt
+	// would corrupt the JSON document on stdout, and with no terminal there is
+	// nobody to answer one — scripting `dflow update` must keep working exactly
+	// as it did before this prompt existed.
+	if utils.CurrentFormat() == utils.FormatJSON || !utils.IsInteractive() {
+		return true, nil
+	}
+
+	if yes {
+		return true, nil
+	}
+
+	var confirmed bool
+	if err := survey.AskOne(&survey.Confirm{
+		Message: fmt.Sprintf("Install dflow %s and replace %s?", latest.Tag, target),
+		Default: true,
+	}, &confirmed); err != nil {
+		// A prompt that could not even be answered is a real failure, not a
+		// decline: treating it as "no" would silently skip a requested update.
+		return false, err
+	}
+	if !confirmed {
+		utils.Info("update aborted: dflow %s stays installed", current)
+		return false, nil
+	}
+	return true, nil
+}
+
+// reportNotesSummary prints the short, terminal-sized list of release-note
+// lines for the release being offered. An empty body (GitHub has no changelog
+// for this release) prints nothing at all, because an empty header would
+// promise a section that has no content.
+func reportNotesSummary(latest *selfupdate.Release) {
+	lines := selfupdate.SummarizeReleaseNotes(latest.Body)
+	if len(lines) == 0 {
+		return
+	}
+	utils.Info("what's new in %s:", latest.Tag)
+	for _, line := range lines {
+		utils.Plain("  %s", line)
+	}
+}
+
 // reportHumanCheck renders the read-only report. It names both versions, the
-// verdict, and the release page so a user can read the changelog before
-// deciding to update.
-func reportHumanCheck(report updateReport) {
+// verdict, what the newer release changes, and the release page, so a user can
+// decide with the changelog in view.
+func reportHumanCheck(report updateReport, latest *selfupdate.Release) {
 	utils.Info("current version: %s", report.CurrentVersion)
 	utils.Info("latest release: %s", report.LatestVersion)
 	if report.UpdateAvailable {
 		utils.Info("an update is available: run `dflow update` to install %s", report.LatestVersion)
+		// Only an available update has "what's new" to offer: for the release the
+		// binary already runs, its own notes would be noise.
+		reportNotesSummary(latest)
 	} else {
 		utils.Info("no update available: %s is already the latest release", report.CurrentVersion)
 	}
@@ -361,5 +456,6 @@ func (s installSteps) run() error {
 func init() {
 	UpdateCmd.Flags().Bool("force", false, "Reinstall the latest release even when it is not newer than the installed one")
 	UpdateCmd.Flags().Bool("check", false, "Report whether an update is available without downloading or replacing anything")
+	UpdateCmd.Flags().BoolP("yes", "y", false, "Skip the installation confirmation prompt")
 	UpdateCmd.Flags().Bool("json", false, "Print the report as a single JSON document on stdout")
 }
