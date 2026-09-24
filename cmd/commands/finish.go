@@ -1,11 +1,13 @@
 package commands
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/yepizrene-devoost/dflow/cmd/gitutils"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/flow"
 	"github.com/yepizrene-devoost/dflow/pkg/validators"
 )
 
@@ -19,6 +21,12 @@ var FinishCmd = &cobra.Command{
 Before running any merge, dflow requires a clean working tree and verifies that
 no merge is already in progress.
 
+Before merging, dflow publishes the current work branch to origin. A failed
+merge then still leaves the branch on the remote, and a manual target can be
+promoted through a pull request without a manual Git command. The publish is
+idempotent: a branch origin already holds at this exact commit is left
+untouched. Use --no-push to keep the branch local.
+
 For each target branch configured with merge_mode=auto, dflow will:
   - fetch updates from origin
   - checkout and sync the target branch
@@ -30,51 +38,106 @@ Instead, dflow reports them so the team can complete them through the usual
 pull request or manual review flow.
 
 After all automatic merges succeed, dflow switches back to the configured base
-branch for the finished work type. The source branch is not deleted automatically.
+branch for the finished work type. The source branch is not deleted automatically
+unless you explicitly pass --delete and no manual targets remain.
 
 Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`,
 	Example: `  dflow finish
   dflow finish --dry-run
-  dflow finish
-  # Merges only auto targets and returns to the configured base branch`,
+  dflow finish --delete
+  dflow finish --no-push
+  # Merges auto targets, returns to the configured base branch, and deletes the source branch when no manual targets remain`,
 	Args: cobra.NoArgs,
+	// The format is decided before the WithChecks wrapper inside RunE runs, so a
+	// pre-handler failure is reported in the requested format. --json only makes
+	// sense for a plan preview: a mutating finish has no JSON report, so the
+	// combination is rejected here before anything is loaded or touched.
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		jsonOutput, err := cmd.Flags().GetBool("json")
+		if err != nil {
+			return err
+		}
+		if !jsonOutput {
+			return nil
+		}
+
+		// Set the format first: a caller that passed --json must receive the
+		// rejection as a JSON document, not as styled text.
+		utils.SetFormat(utils.FormatJSON)
+
+		dryRun, err := cmd.Flags().GetBool("dry-run")
+		if err != nil {
+			return err
+		}
+		if !dryRun {
+			return fmt.Errorf("--json requires --dry-run: a mutating finish has no JSON report, so --json would only hide the plan. Run `dflow finish --dry-run --json`")
+		}
+
+		return nil
+	},
 	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
 		dryRun, err := cmd.Flags().GetBool("dry-run")
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
+		}
+		deleteBranch, err := cmd.Flags().GetBool("delete")
+		if err != nil {
+			return err
+		}
+		noPush, err := cmd.Flags().GetBool("no-push")
+		if err != nil {
+			return err
 		}
 
+		publishWorkBranch := !noPush
 		if err := gitutils.EnsureWorkingTreeClean(); err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		if gitutils.MergeInProgress() {
-			utils.Error("A merge is already in progress. Resolve or abort it before running `dflow finish`.")
-			return nil
+			return fmt.Errorf("A merge is already in progress. Resolve or abort it before running `dflow finish`.")
 		}
 
 		cfg, err := utils.LoadConfig()
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		currentBranch, err := gitutils.CurrentBranch()
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
-		plan, err := utils.ResolveFinishPlan(cfg, currentBranch)
+		plan, err := flow.ResolveFinishPlan(cfg, currentBranch)
 		if err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		autoTargets := plan.AutoTargets()
 		manualTargets := plan.ManualTargets()
+
+		returnBranch := plan.Base
+		if returnBranch == "" {
+			returnBranch = plan.CurrentBranch
+		}
+
+		// In JSON mode the resolved plan is the only thing stdout carries, so it
+		// is emitted before any human line. It is only reachable with --dry-run
+		// (enforced in PreRunE), so this path never fetches, merges or pushes.
+		if utils.CurrentFormat() == utils.FormatJSON {
+			return utils.EmitJSON(finishPlanReport{
+				CurrentBranch:     plan.CurrentBranch,
+				BranchType:        string(plan.BranchType),
+				Base:              plan.Base,
+				ReturnBranch:      returnBranch,
+				Targets:           targetViews(plan.Targets),
+				AutoTargets:       nonNilStrings(autoTargets),
+				ManualTargets:     nonNilStrings(manualTargets),
+				DeleteRequested:   deleteBranch,
+				PublishWorkBranch: publishWorkBranch,
+				DryRun:            dryRun,
+			})
+		}
 
 		utils.Info("Finishing branch '%s' (%s)", plan.CurrentBranch, plan.BranchType)
 		utils.Info("Auto targets: %s", formatBranchList(autoTargets))
@@ -85,19 +148,45 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 			if len(manualTargets) > 0 {
 				utils.Info("Manual follow-up required for: %s", strings.Join(manualTargets, ", "))
 			}
-			return nil
-		}
+			// No merge to do here, but still a publish: a manual target is completed
+			// through a pull request, and a pull request cannot be opened until the
+			// branch exists on origin.
+			if dryRun {
+				if publishWorkBranch {
+					utils.Info("Would publish '%s' to origin.", plan.CurrentBranch)
+				} else {
+					utils.Info("%s", skipPublishMessage(plan.CurrentBranch))
+				}
+				return nil
+			}
 
-		returnBranch := plan.Base
-		if returnBranch == "" {
-			returnBranch = plan.CurrentBranch
+			if !publishWorkBranch {
+				// The dry-run variant of this path says why nothing is published; the
+				// mutating one owes the caller the same sentence.
+				utils.Info("%s", skipPublishMessage(plan.CurrentBranch))
+				return nil
+			}
+
+			return gitutils.PushWorkBranch(plan.CurrentBranch)
 		}
 
 		if dryRun {
 			utils.Info("Dry run enabled. No branches will be checked out, merged, or pushed.")
 			utils.Info("Would return to branch: %s", returnBranch)
+			if publishWorkBranch {
+				utils.Info("Would publish '%s' to origin before merging.", plan.CurrentBranch)
+			} else {
+				utils.Info("%s", skipPublishMessage(plan.CurrentBranch))
+			}
 			for _, target := range autoTargets {
 				utils.Info("Would merge '%s' into '%s' and push the target branch.", plan.CurrentBranch, target)
+			}
+			if deleteBranch {
+				if len(manualTargets) == 0 {
+					utils.Info("Would delete '%s' locally and remotely after a successful finish.", plan.CurrentBranch)
+				} else {
+					utils.Warn("Would skip deleting '%s' because manual follow-up is still required.", plan.CurrentBranch)
+				}
 			}
 			if len(manualTargets) > 0 {
 				utils.Warn("Manual follow-up still required for: %s", strings.Join(manualTargets, ", "))
@@ -106,8 +195,15 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 		}
 
 		if err := gitutils.FetchOrigin(); err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
+		}
+
+		// The publish comes before the first merge so a merge that fails still
+		// leaves the candidate on origin.
+		if publishWorkBranch {
+			if err := gitutils.PushWorkBranch(plan.CurrentBranch); err != nil {
+				return err
+			}
 		}
 
 		var mergedTargets []string
@@ -124,23 +220,19 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 			utils.Info("Processing auto target '%s'...", target)
 
 			if err := gitutils.PullBranch(target); err != nil {
-				utils.Error(err.Error())
-				return nil
+				return err
 			}
 
 			if err := gitutils.MergeBranchIntoCurrent(plan.CurrentBranch); err != nil {
 				if gitutils.MergeInProgress() {
-					utils.Error("Merge conflict while merging '%s' into '%s'. Resolve or abort the merge on '%s' and try again.", plan.CurrentBranch, target, target)
-					return nil
+					return fmt.Errorf("Merge conflict while merging '%s' into '%s'. Resolve or abort the merge on '%s' and try again.", plan.CurrentBranch, target, target)
 				}
 
-				utils.Error(err.Error())
-				return nil
+				return err
 			}
 
 			if err := gitutils.PushBranchUpdate(target); err != nil {
-				utils.Error(err.Error())
-				return nil
+				return err
 			}
 
 			mergedTargets = append(mergedTargets, target)
@@ -156,6 +248,17 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 		if len(manualTargets) > 0 {
 			utils.Warn("Manual follow-up still required for: %s", strings.Join(manualTargets, ", "))
 		}
+		if deleteBranch {
+			if len(manualTargets) > 0 {
+				utils.Warn("Skipping delete for '%s' because manual follow-up is still required.", plan.CurrentBranch)
+				return nil
+			}
+
+			if err := gitutils.Delete(plan.CurrentBranch); err != nil {
+				return err
+			}
+			utils.Success("Deleted finished branch '%s'", plan.CurrentBranch)
+		}
 
 		return nil
 	}),
@@ -168,6 +271,50 @@ func formatBranchList(branches []string) string {
 	return strings.Join(branches, ", ")
 }
 
+// skipPublishMessage is the one sentence dflow prints wherever --no-push stops a
+// publish, so the paths that print it cannot drift apart in what they claim.
+func skipPublishMessage(branch string) string {
+	return fmt.Sprintf("Skipping publish of '%s' because --no-push was given.", branch)
+}
+
+// finishPlanReport is the machine-readable preview of `finish --dry-run --json`.
+//
+// It mirrors the human dry-run report: the branch being finished, where it
+// would land, its targets with their effective merge modes, whether a delete
+// was requested, and whether the plan includes publishing the work branch. Field
+// order is the document order encoding/json produces.
+type finishPlanReport struct {
+	CurrentBranch   string       `json:"current_branch"`
+	BranchType      string       `json:"branch_type"`
+	Base            string       `json:"base"`
+	ReturnBranch    string       `json:"return_branch"`
+	Targets         []targetView `json:"targets"`
+	AutoTargets     []string     `json:"auto_targets"`
+	ManualTargets   []string     `json:"manual_targets"`
+	DeleteRequested bool         `json:"delete_requested"`
+	// PublishWorkBranch reports whether the plan includes publishing the work
+	// branch, the same class of answer as DeleteRequested: it is the plan's
+	// publish step, not a capability guarantee, and a run without an 'origin'
+	// remote still skips it like every other push in the plan.
+	PublishWorkBranch bool `json:"publish_work_branch"`
+	// DryRun reports the actual --dry-run flag value rather than a literal, so
+	// the field cannot lie if the reachability constraint that makes --json
+	// require --dry-run ever changes.
+	DryRun bool `json:"dry_run"`
+}
+
+// nonNilStrings returns a non-nil empty slice for a nil input, so an empty
+// target list marshals as `[]` rather than `null`.
+func nonNilStrings(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
+}
+
 func init() {
 	FinishCmd.Flags().Bool("dry-run", false, "Show the finish plan without performing any merge or push")
+	FinishCmd.Flags().Bool("delete", false, "Delete the finished branch locally and remotely after a successful finish when no manual targets remain")
+	FinishCmd.Flags().Bool("no-push", false, "Skip publishing the work branch to origin; only the auto targets are pushed")
+	FinishCmd.Flags().Bool("json", false, "Print the --dry-run plan as a single JSON document on stdout; requires --dry-run")
 }

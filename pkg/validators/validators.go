@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/yepizrene-devoost/dflow/cmd/utils"
 )
 
 // EnsureGitRepo returns an error if the current directory is not a Git repository.
@@ -34,6 +33,17 @@ func EnsureDflowInitialized() error {
 	return nil
 }
 
+// EnsureDflowNotInitialized returns an error if `.dflow.yaml` already exists in the current directory.
+//
+// This check lets `dflow init` refuse to regenerate the hand-edited project
+// contract unless the caller explicitly opts in with `--force`.
+func EnsureDflowNotInitialized() error {
+	if _, err := os.Stat(".dflow.yaml"); err == nil {
+		return errors.New("this project is already initialized with .dflow.yaml; use --force to regenerate it")
+	}
+	return nil
+}
+
 // WithChecks wraps a Cobra command handler function (`RunE`) with repository and config validations.
 //
 // If `skipDflowCheck` is false, it verifies that `.dflow.yaml` exists.
@@ -47,14 +57,12 @@ func EnsureDflowInitialized() error {
 func WithChecks(skipDflowCheck bool, fn func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		if err := EnsureGitRepo(); err != nil {
-			utils.Error(err.Error())
-			return nil
+			return err
 		}
 
 		if !skipDflowCheck {
 			if err := EnsureDflowInitialized(); err != nil {
-				utils.Error(err.Error())
-				return nil
+				return err
 			}
 		}
 		return fn(cmd, args)

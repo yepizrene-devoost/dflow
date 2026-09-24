@@ -3,72 +3,21 @@
 // It includes helpers for:
 //
 //   - Reading and writing the .dflow.yaml configuration file
-//   - Determining merge behavior based on branch rules
 //   - Console output formatting (e.g., colors, emojis, status messages)
 //   - Signal handling for graceful termination (e.g., Ctrl+C)
+//
+// The branching domain itself — the configuration schema, branch types and
+// finish planning — lives in the pure `pkg/flow` package; this package only
+// performs the file I/O around it.
 package utils
 
 import (
 	"fmt"
 	"os"
-	"slices"
 
+	"github.com/yepizrene-devoost/dflow/pkg/flow"
 	"gopkg.in/yaml.v3"
 )
-
-// Config represents the dflow configuration structure,
-// typically stored in a .dflow.yaml file at the project root.
-//
-// It includes branching information, flow rules, and merge behavior.
-type Config struct {
-	Branches struct {
-		Main     string `yaml:"main"`
-		Develop  string `yaml:"develop"`
-		Uat      string `yaml:"uat"`
-		Features string `yaml:"features"`
-		Releases string `yaml:"releases"`
-		Hotfixes string `yaml:"hotfixes"`
-		Bugfixes string `yaml:"bugfixes"`
-	} `yaml:"branches"`
-
-	Flow     FlowConfig     `yaml:"flow"`
-	Workflow WorkflowConfig `yaml:"workflow"`
-}
-
-// BranchFlowRule describes how one logical branch type behaves inside the flow.
-//
-// Base is the source branch used when creating a new working branch.
-// FinishTargets lists the destination branches that should receive the work
-// when the branch is finished.
-type BranchFlowRule struct {
-	Base          string   `yaml:"base"`
-	FinishTargets []string `yaml:"finish_targets"`
-}
-
-// FlowConfig stores the configured branch creation and finish rules.
-//
-// It accepts both the legacy flat format (`feature_base`, `feature_merge`, etc.)
-// and the new nested format (`feature.base`, `feature.finish_targets`, ...).
-type FlowConfig struct {
-	Feature BranchFlowRule `yaml:"feature"`
-	Release BranchFlowRule `yaml:"release"`
-	Hotfix  BranchFlowRule `yaml:"hotfix"`
-	Bugfix  BranchFlowRule `yaml:"bugfix"`
-}
-
-// WorkflowBranchRule stores the merge strategy for one primary branch.
-type WorkflowBranchRule struct {
-	MergeMode string `yaml:"merge_mode"`
-}
-
-// WorkflowConfig stores merge behavior defaults and explicit branch rules.
-//
-// It accepts both the legacy format where `branch_rules` is `map[string]string`
-// and the new explicit format where each branch stores its own settings object.
-type WorkflowConfig struct {
-	DefaultMergeMode string                        `yaml:"default_merge_mode,omitempty"`
-	BranchRules      map[string]WorkflowBranchRule `yaml:"branch_rules"`
-}
 
 const bannerToConfig = `
 #
@@ -84,8 +33,8 @@ const bannerToConfig = `
 
 // LoadConfig reads and parses the .dflow.yaml configuration file
 // from the current working directory (or DFLOW_CWD if set).
-// Returns a populated Config struct or an error.
-func LoadConfig() (*Config, error) {
+// Returns a populated flow.Config struct or an error.
+func LoadConfig() (*flow.Config, error) {
 	dir := os.Getenv("DFLOW_CWD")
 	if dir == "" {
 		dir, _ = os.Getwd()
@@ -98,7 +47,7 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("failed to read .dflow.yaml: %w", err)
 	}
 
-	var cfg Config
+	var cfg flow.Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("error parsing .dflow.yaml: %v", err)
 	}
@@ -106,12 +55,12 @@ func LoadConfig() (*Config, error) {
 	return &cfg, nil
 }
 
-// SaveConfig writes the given Config struct to a .dflow.yaml file
+// SaveConfig writes the given flow.Config struct to a .dflow.yaml file
 // in the current working directory (or DFLOW_CWD if set).
 //
 // The file will be overwritten if it already exists.
 // A banner header is included for identification.
-func SaveConfig(cfg *Config) error {
+func SaveConfig(cfg *flow.Config) error {
 	yamlData, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("error generating YAML: %v", err)
@@ -131,156 +80,4 @@ func SaveConfig(cfg *Config) error {
 	}
 
 	return nil
-}
-
-func (f *FlowConfig) UnmarshalYAML(value *yaml.Node) error {
-	type branchAlias BranchFlowRule
-	type flowAlias struct {
-		Feature branchAlias `yaml:"feature"`
-		Release branchAlias `yaml:"release"`
-		Hotfix  branchAlias `yaml:"hotfix"`
-		Bugfix  branchAlias `yaml:"bugfix"`
-
-		FeatureBase  string `yaml:"feature_base"`
-		FeatureMerge string `yaml:"feature_merge"`
-		ReleaseBase  string `yaml:"release_base"`
-		HotfixBase   string `yaml:"hotfix_base"`
-		BugfixBase   string `yaml:"bugfix_base"`
-	}
-
-	var raw flowAlias
-	if err := value.Decode(&raw); err != nil {
-		return err
-	}
-
-	f.Feature = BranchFlowRule(raw.Feature)
-	f.Release = BranchFlowRule(raw.Release)
-	f.Hotfix = BranchFlowRule(raw.Hotfix)
-	f.Bugfix = BranchFlowRule(raw.Bugfix)
-
-	if f.Feature.Base == "" {
-		f.Feature.Base = raw.FeatureBase
-	}
-	if len(f.Feature.FinishTargets) == 0 && raw.FeatureMerge != "" {
-		f.Feature.FinishTargets = []string{raw.FeatureMerge}
-	}
-
-	if f.Release.Base == "" {
-		f.Release.Base = raw.ReleaseBase
-	}
-	if len(f.Release.FinishTargets) == 0 && raw.ReleaseBase != "" {
-		f.Release.FinishTargets = []string{raw.ReleaseBase}
-	}
-
-	if f.Hotfix.Base == "" {
-		f.Hotfix.Base = raw.HotfixBase
-	}
-	if len(f.Hotfix.FinishTargets) == 0 && raw.HotfixBase != "" {
-		f.Hotfix.FinishTargets = []string{raw.HotfixBase}
-	}
-
-	if f.Bugfix.Base == "" {
-		f.Bugfix.Base = raw.BugfixBase
-	}
-	if len(f.Bugfix.FinishTargets) == 0 && raw.BugfixBase != "" {
-		f.Bugfix.FinishTargets = []string{raw.BugfixBase}
-	}
-
-	f.Feature.FinishTargets = uniqueStrings(f.Feature.FinishTargets)
-	f.Release.FinishTargets = uniqueStrings(f.Release.FinishTargets)
-	f.Hotfix.FinishTargets = uniqueStrings(f.Hotfix.FinishTargets)
-	f.Bugfix.FinishTargets = uniqueStrings(f.Bugfix.FinishTargets)
-
-	return nil
-}
-
-func (f FlowConfig) MarshalYAML() (interface{}, error) {
-	type flowAlias struct {
-		Feature BranchFlowRule `yaml:"feature"`
-		Release BranchFlowRule `yaml:"release"`
-		Hotfix  BranchFlowRule `yaml:"hotfix"`
-		Bugfix  BranchFlowRule `yaml:"bugfix"`
-	}
-
-	return flowAlias{
-		Feature: BranchFlowRule{
-			Base:          f.Feature.Base,
-			FinishTargets: uniqueStrings(f.Feature.FinishTargets),
-		},
-		Release: BranchFlowRule{
-			Base:          f.Release.Base,
-			FinishTargets: uniqueStrings(f.Release.FinishTargets),
-		},
-		Hotfix: BranchFlowRule{
-			Base:          f.Hotfix.Base,
-			FinishTargets: uniqueStrings(f.Hotfix.FinishTargets),
-		},
-		Bugfix: BranchFlowRule{
-			Base:          f.Bugfix.Base,
-			FinishTargets: uniqueStrings(f.Bugfix.FinishTargets),
-		},
-	}, nil
-}
-
-func (w *WorkflowConfig) UnmarshalYAML(value *yaml.Node) error {
-	type workflowAlias struct {
-		DefaultMergeMode string                 `yaml:"default_merge_mode"`
-		BranchRules      map[string]interface{} `yaml:"branch_rules"`
-	}
-
-	var raw workflowAlias
-	if err := value.Decode(&raw); err != nil {
-		return err
-	}
-
-	w.DefaultMergeMode = raw.DefaultMergeMode
-	w.BranchRules = make(map[string]WorkflowBranchRule, len(raw.BranchRules))
-
-	for branch, ruleValue := range raw.BranchRules {
-		switch typed := ruleValue.(type) {
-		case string:
-			w.BranchRules[branch] = WorkflowBranchRule{MergeMode: typed}
-		case map[string]interface{}:
-			if mergeMode, ok := typed["merge_mode"].(string); ok {
-				w.BranchRules[branch] = WorkflowBranchRule{MergeMode: mergeMode}
-			}
-		}
-	}
-
-	return nil
-}
-
-func (w WorkflowConfig) MarshalYAML() (interface{}, error) {
-	type workflowAlias struct {
-		DefaultMergeMode string                        `yaml:"default_merge_mode,omitempty"`
-		BranchRules      map[string]WorkflowBranchRule `yaml:"branch_rules"`
-	}
-
-	return workflowAlias{
-		DefaultMergeMode: w.DefaultMergeMode,
-		BranchRules:      w.BranchRules,
-	}, nil
-}
-
-// GetMergeModeForBranch returns the merge mode ("auto" or "manual")
-// for the given branch, based on the .dflow.yaml configuration.
-//
-// This is used by dflow to decide whether to create a Pull Request or
-// merge directly from the CLI, depending on branch-specific rules.
-func GetMergeModeForBranch(cfg *Config, branch string) string {
-	if mode, ok := cfg.Workflow.BranchRules[branch]; ok {
-		return mode.MergeMode
-	}
-	return cfg.Workflow.DefaultMergeMode
-}
-
-func uniqueStrings(values []string) []string {
-	var unique []string
-	for _, value := range values {
-		if value == "" || slices.Contains(unique, value) {
-			continue
-		}
-		unique = append(unique, value)
-	}
-	return unique
 }

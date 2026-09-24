@@ -1,0 +1,47 @@
+name: Bug report
+description: Report a bug or unexpected behavior in dflow
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Reproducible details speed up the fix.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+      placeholder: "Describe what you expected and what actually happened..."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Ordered steps to reproduce the bug.
+      placeholder: "1. Run `dflow start feat demo`\n2. ..."
+      render: bash
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen instead.
+  - type: input
+    id: version
+    attributes:
+      label: dflow version
+      placeholder: "Output of `dflow version`, e.g. v1.2.0"
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "OS and `git --version`, e.g. macOS 14, git 2.43"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / output
+      description: Command output or error messages, if any.
+      render: shell

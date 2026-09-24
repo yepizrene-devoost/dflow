@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/yepizrene-devoost/dflow/cmd/gitutils"
@@ -164,6 +165,85 @@ func TestPullBranchCreatesLocalTrackingBranchWhenOnlyRemoteExists(t *testing.T) 
 
 		if !gitutils.HasUpstream("develop") {
 			t.Fatalf("expected recreated develop branch to track origin")
+		}
+	})
+}
+
+func TestCheckoutBranch(t *testing.T) {
+	repoDir := initTempGitRepo(t)
+	remoteDir := initBareGitRepo(t)
+
+	runGit(t, repoDir, "checkout", "-b", "develop")
+	writeFileAndCommit(t, repoDir, "develop.txt", "develop\n", "seed develop")
+	runGit(t, repoDir, "remote", "add", "origin", remoteDir)
+	runGit(t, repoDir, "push", "-u", "origin", "main")
+	runGit(t, repoDir, "push", "-u", "origin", "develop")
+
+	withWorkingDir(t, repoDir, func() {
+		if err := gitutils.CheckoutBranch("develop"); err != nil {
+			t.Fatalf("CheckoutBranch returned error for local branch: %v", err)
+		}
+		branch, err := gitutils.CurrentBranch()
+		if err != nil || branch != "develop" {
+			t.Fatalf("expected checkout to develop, got %q (err %v)", branch, err)
+		}
+
+		if err := gitutils.CheckoutBranch("missing"); err == nil {
+			t.Fatalf("expected CheckoutBranch to fail for missing branch")
+		}
+
+		runGit(t, repoDir, "checkout", "main")
+		runGit(t, repoDir, "branch", "-D", "develop")
+
+		if err := gitutils.CheckoutBranch("develop"); err != nil {
+			t.Fatalf("CheckoutBranch returned error for remote-only branch: %v", err)
+		}
+		if !gitutils.BranchExists("develop") {
+			t.Fatalf("expected CheckoutBranch to recreate develop from origin")
+		}
+	})
+}
+
+// TestCheckoutBranchSurfacesARemoteLookupFailure guards the CheckoutBranch call
+// site: when git ls-remote cannot check origin, that lookup failure must surface
+// instead of the misleading "does not exist locally nor on 'origin'".
+//
+// origin points at a path that does not exist, so the failure is deterministic
+// and offline.
+func TestCheckoutBranchSurfacesARemoteLookupFailure(t *testing.T) {
+	repoDir := initTempGitRepo(t)
+	runGit(t, repoDir, "remote", "add", "origin", filepath.Join(t.TempDir(), "missing-remote"))
+
+	withWorkingDir(t, repoDir, func() {
+		err := gitutils.CheckoutBranch("feature/example")
+		if err == nil {
+			t.Fatalf("expected CheckoutBranch to fail when origin cannot be reached")
+		}
+		if !strings.Contains(err.Error(), "failed to check remote branch") {
+			t.Fatalf("the lookup failure must surface, got: %v", err)
+		}
+		if strings.Contains(err.Error(), "does not exist locally nor on 'origin'") {
+			t.Fatalf("a failed lookup must not be reported as an absent branch, got: %v", err)
+		}
+	})
+}
+
+// TestPullBranchSurfacesARemoteLookupFailure guards the second finish.go call
+// site. The branch exists locally, so CheckoutBranch returns early and the
+// lookup runs inside PullBranch itself; its failure must be returned instead of
+// being reported as an absent remote branch to skip.
+func TestPullBranchSurfacesARemoteLookupFailure(t *testing.T) {
+	repoDir := initTempGitRepo(t)
+	runGit(t, repoDir, "branch", "feature/example")
+	runGit(t, repoDir, "remote", "add", "origin", filepath.Join(t.TempDir(), "missing-remote"))
+
+	withWorkingDir(t, repoDir, func() {
+		err := gitutils.PullBranch("feature/example")
+		if err == nil {
+			t.Fatalf("expected PullBranch to fail when origin cannot be reached")
+		}
+		if !strings.Contains(err.Error(), "failed to check remote branch") {
+			t.Fatalf("the lookup failure must surface, got: %v", err)
 		}
 	})
 }

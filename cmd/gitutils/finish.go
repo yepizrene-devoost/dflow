@@ -3,7 +3,6 @@ package gitutils
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 
@@ -41,11 +40,13 @@ func CheckoutExistingBranch(branch string) error {
 }
 
 // CheckoutTrackingBranch creates a local branch that tracks origin/<branch>.
+//
+// Git's own output is captured rather than wired to the CLI's streams, and
+// `--quiet` keeps a successful switch silent at the source so its status advice
+// never reaches the caller's stdout.
 func CheckoutTrackingBranch(branch string) error {
-	cmd := exec.Command("git", "checkout", "--track", "-b", branch, "origin/"+branch)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	cmd := exec.Command("git", "checkout", "--quiet", "--track", "-b", branch, "origin/"+branch)
+	if err := runCapturingGit(cmd); err != nil {
 		return fmt.Errorf("failed to create tracking branch %q from origin/%s: %w", branch, branch, err)
 	}
 	return nil
@@ -82,22 +83,23 @@ func MergeInProgress() bool {
 }
 
 // MergeBranchIntoCurrent merges the source branch into the current branch.
+//
+// Git's own output is captured rather than wired to the CLI's streams, so a
+// conflict reports what Git found instead of only its exit status.
 func MergeBranchIntoCurrent(sourceBranch string) error {
 	cmd := exec.Command("git", "merge", "--no-ff", "--no-edit", sourceBranch)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := runCapturingGit(cmd); err != nil {
 		return fmt.Errorf("failed to merge branch %q into current branch: %w", sourceBranch, err)
 	}
 	return nil
 }
 
 // AbortMerge aborts an in-progress merge.
+//
+// Git's own output is captured rather than wired to the CLI's streams.
 func AbortMerge() error {
 	cmd := exec.Command("git", "merge", "--abort")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := runCapturingGit(cmd); err != nil {
 		return fmt.Errorf("failed to abort merge: %w", err)
 	}
 	return nil
@@ -106,7 +108,7 @@ func AbortMerge() error {
 // FetchOrigin fetches updates from the remote 'origin' when available.
 func FetchOrigin() error {
 	if !HasOriginRemote() {
-		utils.Info("📁   Remote 'origin' not found. Skipping fetch.")
+		utils.Icon("📁", "Remote 'origin' not found. Skipping fetch.")
 		return nil
 	}
 
@@ -115,7 +117,7 @@ func FetchOrigin() error {
 
 	cmd := exec.Command("git", "fetch", "origin", "--prune")
 	if err := cmd.Run(); err != nil {
-		spinner.Stop("Failed to fetch updates from origin.")
+		spinner.Clear()
 		return fmt.Errorf("failed to fetch origin: %w", err)
 	}
 
@@ -129,18 +131,47 @@ func HasUpstream(branch string) bool {
 	return cmd.Run() == nil
 }
 
+// CheckoutBranch switches to an existing branch without pulling or merging.
+//
+// When the branch exists locally, it is checked out directly with no network
+// access. When it exists only on origin, it is fetched and checked out as a
+// tracking branch. This is the checkout-only counterpart of PullBranch, used
+// when branching off a source branch that must not be updated.
+//
+// The remote is resolved before the fetch, so a lookup that cannot reach origin
+// returns its own error instead of reporting the branch as absent.
+func CheckoutBranch(branch string) error {
+	if BranchExists(branch) {
+		return CheckoutExistingBranch(branch)
+	}
+
+	if !HasOriginRemote() {
+		return fmt.Errorf("branch %q does not exist locally and no 'origin' remote is configured", branch)
+	}
+
+	// The fetch exists only to materialize origin/<branch> for the tracking
+	// checkout, so existence is resolved first: a lookup that cannot check origin
+	// must surface as its own error, not be reduced to "absent".
+	remoteExisted, err := RemoteBranchExists(branch)
+	if err != nil {
+		return err
+	}
+
+	if err := FetchOrigin(); err != nil {
+		return err
+	}
+
+	if !remoteExisted {
+		return fmt.Errorf("branch %q does not exist locally nor on 'origin'", branch)
+	}
+
+	return CheckoutTrackingBranch(branch)
+}
+
 // PullBranch checks out the given branch and updates it from origin when possible.
 func PullBranch(branch string) error {
-	if BranchExists(branch) {
-		if err := CheckoutExistingBranch(branch); err != nil {
-			return err
-		}
-	} else if HasOriginRemote() && RemoteBranchExists(branch) {
-		if err := CheckoutTrackingBranch(branch); err != nil {
-			return err
-		}
-	} else {
-		return fmt.Errorf("branch %q does not exist locally or on origin", branch)
+	if err := CheckoutBranch(branch); err != nil {
+		return err
 	}
 
 	if !HasOriginRemote() {
@@ -154,7 +185,11 @@ func PullBranch(branch string) error {
 		return nil
 	}
 
-	if !RemoteBranchExists(branch) {
+	remoteExisted, err := RemoteBranchExists(branch)
+	if err != nil {
+		return err
+	}
+	if !remoteExisted {
 		utils.Info("Remote branch '%s' does not exist. Skipping pull for this target.", branch)
 		return nil
 	}
@@ -164,7 +199,7 @@ func PullBranch(branch string) error {
 
 	cmd := exec.Command("git", "pull", "origin", branch)
 	if err := cmd.Run(); err != nil {
-		spinner.Stop("Failed to pull branch updates.")
+		spinner.Clear()
 		return fmt.Errorf("failed to update branch %q from origin: %w", branch, err)
 	}
 
@@ -175,7 +210,7 @@ func PullBranch(branch string) error {
 // PushBranchUpdate pushes the given branch to origin without changing upstream tracking.
 func PushBranchUpdate(branch string) error {
 	if !HasOriginRemote() {
-		utils.Info("📁   Remote 'origin' not found. Skipping push for '%s'.", branch)
+		utils.Icon("📁", "Remote 'origin' not found. Skipping push for '%s'.", branch)
 		return nil
 	}
 
@@ -184,10 +219,67 @@ func PushBranchUpdate(branch string) error {
 
 	cmd := exec.Command("git", "push", "origin", branch)
 	if err := cmd.Run(); err != nil {
-		spinner.Stop("Failed to push branch updates.")
+		spinner.Clear()
 		return fmt.Errorf("failed to push branch %q: %w", branch, err)
 	}
 
 	spinner.Stop(fmt.Sprintf("Pushed updates for '%s'.", branch), "🚀")
+	return nil
+}
+
+// PushWorkBranch publishes the work branch to origin and sets its upstream.
+//
+// `dflow finish` publishes the branch before merging because a manual target is
+// completed through a pull request and a pull request cannot be opened until the
+// branch exists on origin; for an auto target the published branch is the backup
+// of the work the merge depends on.
+//
+// Publishing is idempotent on identity, not on existence: the remote commit for
+// the branch is compared with the local one, so a branch origin already holds at
+// this exact commit is left untouched and reported as up to date instead of
+// claiming a push that did not happen, while a branch origin does not have or
+// holds at an older commit is pushed. A repository without an 'origin' remote is
+// reported and skipped instead of failing a finish that can still merge its
+// local targets.
+//
+// A comparison that fails because origin is configured but unreachable is only a
+// warning: the publish is still attempted, so only a failed push fails the
+// finish.
+func PushWorkBranch(branch string) error {
+	if !HasOriginRemote() {
+		utils.Icon("📁", "Remote 'origin' not found. Skipping push for '%s'.", branch)
+		return nil
+	}
+
+	// The comparison only decides between an honest no-op and a push, so its own
+	// failure is a warning, never a failed finish: the push below is the operation
+	// of record and reports its own failure. A lookup that says nothing must not
+	// turn the cheaper path into a load-bearing one.
+	remoteRevision, lookupErr := remoteBranchRevision(branch)
+	if lookupErr != nil {
+		utils.Warn("Could not compare '%s' with origin (%v); attempting the publish anyway.", branch, lookupErr)
+	} else {
+		localCmd := exec.Command("git", "rev-parse", "--verify", "refs/heads/"+branch)
+		localOutput, err := localCmd.Output()
+		if err != nil {
+			return fmt.Errorf("failed to resolve local branch '%s': %w", branch, err)
+		}
+
+		if local := strings.TrimSpace(string(localOutput)); local == remoteRevision {
+			utils.Icon("✔", "Branch '%s' is already published and up to date on origin.", branch)
+			return nil
+		}
+	}
+
+	spinner := utils.NewSpinner(fmt.Sprintf("Publishing '%s' to origin...", branch))
+	spinner.Start()
+
+	cmd := exec.Command("git", "push", "-u", "origin", branch)
+	if err := cmd.Run(); err != nil {
+		spinner.Clear()
+		return fmt.Errorf("failed to push branch '%s': %w", branch, err)
+	}
+
+	spinner.Stop(fmt.Sprintf("Published '%s' to origin.", branch), "🚀")
 	return nil
 }

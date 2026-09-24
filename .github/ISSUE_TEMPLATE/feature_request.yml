@@ -1,0 +1,35 @@
+name: Feature request
+description: Propose a new feature or enhancement for dflow
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature for dflow. The more context, the better.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What limitation or missing capability are you hitting today?
+      placeholder: "dflow can't create a branch based on another work branch..."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe what you'd like dflow to do.
+      placeholder: "Add --from <branch> to `dflow start` so a new branch can be based on an existing work branch."
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you considered and why they don't fit.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Diagrams, links, or anything else that helps reviewers.

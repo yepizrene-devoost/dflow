@@ -11,6 +11,7 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
 	"github.com/yepizrene-devoost/dflow/cmd/gitutils"
+	"github.com/yepizrene-devoost/dflow/cmd/utils"
 )
 
 // DeleteCmd deletes a Git branch locally and remotely using the dflow CLI.
@@ -18,8 +19,7 @@ import (
 // This command requires the exact name of the branch to delete. It will:
 //
 //  1. Ask for confirmation before proceeding
-//  2. Delete the local branch
-//  3. Delete the corresponding remote branch from origin (if it exists)
+//  2. Delete whichever copy exists, locally and on origin
 //
 // Example usage:
 //
@@ -32,26 +32,38 @@ var DeleteCmd = &cobra.Command{
 	Long: `Delete a branch created with dflow from your local repository and, if it
 exists, from the 'origin' remote as well.
 
-The command asks for confirmation before deleting anything and skips the remote
-step automatically when the branch does not exist on origin.`,
+The command asks for confirmation before deleting anything and is idempotent: it
+deletes whichever copy still exists and reports a copy that is already gone as
+absent instead of failing. It fails when the branch exists in neither place, when
+a configured 'origin' cannot be reached, or when deleting a copy that does exist
+failed.`,
 	Example: `  dflow delete feature/login-form
   dflow delete bugfix/payment-timeout`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		branch := args[0]
-		var confirm bool
-		err := survey.AskOne(&survey.Confirm{
-			Message: fmt.Sprintf("Are you sure you want to delete branch '%s' locally and remotely?", branch),
-			Default: false,
-		}, &confirm)
-		if err != nil {
-			fmt.Println("⚠️  Deletion cancelled.")
-			return nil
-		}
 
-		if !confirm {
-			fmt.Println("🚫 Operation aborted by user.")
-			return nil
+		yes, _ := cmd.Flags().GetBool("yes")
+		if !yes {
+			if !utils.IsInteractive() {
+				return utils.NonInteractiveError(
+					fmt.Sprintf("confirm deletion of '%s'", branch),
+					"pass --yes to delete it",
+				)
+			}
+
+			var confirm bool
+			if err := survey.AskOne(&survey.Confirm{
+				Message: fmt.Sprintf("Are you sure you want to delete branch '%s' locally and remotely?", branch),
+				Default: false,
+			}, &confirm); err != nil {
+				return err
+			}
+
+			if !confirm {
+				utils.Icon("🚫", "Operation aborted by user.")
+				return nil
+			}
 		}
 
 		return gitutils.Delete(branch)
@@ -59,6 +71,8 @@ step automatically when the branch does not exist on origin.`,
 }
 
 func init() {
+	DeleteCmd.Flags().BoolP("yes", "y", false, "delete without asking for confirmation")
+
 	DeleteCmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		branches := gitutils.GetLocalBranches()
 		return branches, cobra.ShellCompDirectiveNoFileComp

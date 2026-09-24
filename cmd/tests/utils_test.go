@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/flow"
 )
 
 // TestSaveAndLoadConfig verifies that the dflow configuration can be saved
@@ -14,10 +15,9 @@ import (
 // is created and that loaded values match the original configuration.
 func TestSaveAndLoadConfig(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.Setenv("DFLOW_CWD", tmpDir)
-	defer os.Unsetenv("DFLOW_CWD")
+	t.Setenv("DFLOW_CWD", tmpDir)
 
-	original := &utils.Config{}
+	original := &flow.Config{}
 	original.Branches.Main = "main"
 	original.Branches.Develop = "develop"
 	original.Branches.Uat = "uat"
@@ -26,17 +26,17 @@ func TestSaveAndLoadConfig(t *testing.T) {
 	original.Branches.Hotfixes = "hotfix/"
 	original.Branches.Bugfixes = "bugfix/"
 
-	original.Flow.Feature.Base = "uat"
-	original.Flow.Feature.FinishTargets = []string{"develop"}
+	original.Flow.Feature.Base = "develop"
+	original.Flow.Feature.FinishTargets = []string{"develop", "uat"}
 	original.Flow.Release.Base = "uat"
 	original.Flow.Release.FinishTargets = []string{"main", "develop"}
 	original.Flow.Hotfix.Base = "main"
-	original.Flow.Hotfix.FinishTargets = []string{"main", "develop"}
+	original.Flow.Hotfix.FinishTargets = []string{"main", "develop", "uat"}
 	original.Flow.Bugfix.Base = "uat"
-	original.Flow.Bugfix.FinishTargets = []string{"uat"}
+	original.Flow.Bugfix.FinishTargets = []string{"uat", "develop"}
 
 	original.Workflow.DefaultMergeMode = "manual"
-	original.Workflow.BranchRules = map[string]utils.WorkflowBranchRule{
+	original.Workflow.BranchRules = map[string]flow.WorkflowBranchRule{
 		"main":    {MergeMode: "manual"},
 		"develop": {MergeMode: "auto"},
 		"uat":     {MergeMode: "auto"},
@@ -65,19 +65,22 @@ func TestSaveAndLoadConfig(t *testing.T) {
 		t.Errorf("expected release base 'uat', got '%s'", loaded.Flow.Release.Base)
 	}
 
-	if len(loaded.Flow.Hotfix.FinishTargets) != 2 {
-		t.Fatalf("expected 2 hotfix targets, got %d", len(loaded.Flow.Hotfix.FinishTargets))
+	if len(loaded.Flow.Feature.FinishTargets) != 2 {
+		t.Fatalf("expected 2 feature targets, got %d", len(loaded.Flow.Feature.FinishTargets))
 	}
 
-	if utils.GetMergeModeForBranch(loaded, "develop") != "auto" {
-		t.Errorf("expected develop merge mode 'auto', got '%s'", utils.GetMergeModeForBranch(loaded, "develop"))
+	if len(loaded.Flow.Hotfix.FinishTargets) != 3 {
+		t.Fatalf("expected 3 hotfix targets, got %d", len(loaded.Flow.Hotfix.FinishTargets))
+	}
+
+	if flow.GetMergeModeForBranch(loaded, "develop") != "auto" {
+		t.Errorf("expected develop merge mode 'auto', got '%s'", flow.GetMergeModeForBranch(loaded, "develop"))
 	}
 }
 
 func TestLoadLegacyConfigFormat(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.Setenv("DFLOW_CWD", tmpDir)
-	defer os.Unsetenv("DFLOW_CWD")
+	t.Setenv("DFLOW_CWD", tmpDir)
 
 	legacyConfig := `
 branches:
@@ -111,15 +114,15 @@ workflow:
 	}
 
 	if loaded.Flow.Feature.Base != "uat" {
-		t.Errorf("expected feature base 'uat', got '%s'", loaded.Flow.Feature.Base)
+		t.Errorf("expected legacy feature base 'uat', got '%s'", loaded.Flow.Feature.Base)
 	}
 
 	if len(loaded.Flow.Feature.FinishTargets) != 1 || loaded.Flow.Feature.FinishTargets[0] != "develop" {
 		t.Fatalf("expected feature finish target 'develop', got %v", loaded.Flow.Feature.FinishTargets)
 	}
 
-	if utils.GetMergeModeForBranch(loaded, "main") != "manual" {
-		t.Errorf("expected main merge mode 'manual', got '%s'", utils.GetMergeModeForBranch(loaded, "main"))
+	if flow.GetMergeModeForBranch(loaded, "main") != "manual" {
+		t.Errorf("expected main merge mode 'manual', got '%s'", flow.GetMergeModeForBranch(loaded, "main"))
 	}
 
 	saved, err := os.ReadFile(configPath)
