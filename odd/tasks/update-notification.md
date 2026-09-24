@@ -135,6 +135,21 @@ Closes forge issue #27 (`feat(notify): surface available updates and release cha
      `setUpCLIEnv` now pins `XDG_CACHE_HOME` to a temp dir so the suite never
      writes the host's real cache (a gap the WU4 worker flagged, outside its
      surfaces).
+7. [x] WU7 — terminal-friendly release-notes rendering (reopen: maintainer
+   request from a live smoke test, approved in session before merge)
+   - Delegated to a bounded `gentle-ai-worker`. `SummarizeReleaseNotes` now
+     returns terminal-shaped lines: the body's H1 title is dropped as redundant
+     (formatting, not truncation — never triggers the ellipsis), `##`/`###`
+     headings render as `▸ text`, `-` bullets render as `•` with indentation
+     preserved, backticks kept, no ANSI. The 15-line/1200-rune caps count the
+     final rendered strings. Table tests updated plus focused boundary cases
+     (H1-only body without ellipsis, exact-cap, cap counting the marker,
+     non-bullet dashes untouched). The worker's report round was partially
+     consumed by an RDD reminder in its own session; the controller verified
+     the diff and semantics directly before commit. Live smoke test against
+     the real v0.2.0 release body confirms the rendering. Checks: `go build
+     ./...`, `go vet ./...`, `gofmt -l .` clean, `go test -count=1
+     ./cmd/selfupdate/...` green.
 
 ## Work-unit commit identity on `feature/update-notification`
 
@@ -147,17 +162,23 @@ Closes forge issue #27 (`feat(notify): surface available updates and release cha
 | WU4 | `0b6deeb` | `feat(update): confirm the install after showing the release notes` |
 | WU3 | `0d52b3e` | `feat(notify): announce newer releases on stderr after a command` |
 | docs | `d338c27` | `docs: document the update notification and release notes surfacing` |
-| docs(odd) | (this commit) | `docs(odd): record update-notification work-unit identity and close the feature` |
+| docs(odd) | `ae254fa` | `docs(odd): record update-notification work-unit identity and close the feature` |
+| WU7 | (this commit) | `refactor(update): render the release notes digest for the terminal` |
 
 ## Declared review expectation
 
 The review candidate is the tip of `feature/update-notification` (base
-`develop` at `57f0fb2`): every stage above is closed, `go build ./...`,
-`go vet ./...`, `gofmt -l .` and `go test -count=1 ./...` ran green on this
-exact tree. The review verdict is not recorded here; the native review receipt
-and Engram are the record, and the tree stays untouched after approval.
-| WU5 | — | — |
+`develop` at `57f0fb2`), now reopened by WU7: every stage above is closed,
+`go build ./...`, `go vet ./...`, `gofmt -l .` and `go test -count=1 ./...`
+ran green on this exact tree. The review verdict is not recorded here; the
+native review receipt and Engram are the record, and the tree stays untouched
+after approval.
 
 ## Review history on this branch
 
-(none yet)
+- `review-a2fdbe31d299b39a` (base `develop` `57f0fb2`, candidate `ae254fa`,
+  2253 lines, 4 lenses): APPROVED, authority burned. 4 informational
+  suggestions (R2-001..003, R3-interactive-prompt-coverage) recorded for
+  follow-up work, never re-opened that review.
+- The current tip (WU7 rendering) is its own candidate and awaits its own
+  review; the expectation above is its declaration.

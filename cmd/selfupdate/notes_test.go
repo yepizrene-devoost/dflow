@@ -21,9 +21,9 @@ func TestSummarizeReleaseNotes(t *testing.T) {
 		{name: "empty body", body: "", wantNil: true},
 		{name: "whitespace-only body", body: "   \n\t\n\r\n", wantNil: true},
 		{
-			name: "short body passes through",
+			name: "drops the title and renders the bullets",
 			body: "# v0.3.0\n\n- fixed a bug\n- added a feature",
-			want: []string{"# v0.3.0", "- fixed a bug", "- added a feature"},
+			want: []string{"• fixed a bug", "• added a feature"},
 		},
 		{
 			name: "collapses blank lines",
@@ -41,9 +41,9 @@ func TestSummarizeReleaseNotes(t *testing.T) {
 			want: []string{"first", "second"},
 		},
 		{
-			name: "preserves leading indentation",
+			name: "preserves bullet indentation",
 			body: "- top\n  - nested\n    - deeper",
-			want: []string{"- top", "  - nested", "    - deeper"},
+			want: []string{"• top", "  • nested", "    • deeper"},
 		},
 	}
 
@@ -61,6 +61,158 @@ func TestSummarizeReleaseNotes(t *testing.T) {
 				t.Fatalf("SummarizeReleaseNotes(%q) = %#v, want %#v", tc.body, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestSummarizeReleaseNotesRendersTerminalShapedLines pins the Markdown-to-
+// terminal rendering: the redundant top title disappears, headings lose their
+// hashes behind a marker, bullets swap their dash while keeping indentation, and
+// everything else — inline code included — passes through untouched.
+func TestSummarizeReleaseNotesRendersTerminalShapedLines(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want []string
+	}{
+		{
+			name: "h2 heading",
+			body: "## 📦 v0.2.0 – Finish Automation",
+			want: []string{"▸ 📦 v0.2.0 – Finish Automation"},
+		},
+		{
+			name: "h3 heading",
+			body: "### Added",
+			want: []string{"▸ Added"},
+		},
+		{
+			name: "deeper heading keeps one marker",
+			body: "#### Fixed",
+			want: []string{"▸ Fixed"},
+		},
+		{
+			name: "indented heading is detected and renders at the marker",
+			body: "  ## Added",
+			want: []string{"▸ Added"},
+		},
+		{
+			name: "heading and bullets together",
+			body: "## 📦 v0.2.0\n### Added\n- `dflow finish` command",
+			want: []string{"▸ 📦 v0.2.0", "▸ Added", "• `dflow finish` command"},
+		},
+		{
+			name: "indented bullet keeps its indentation",
+			body: "- top\n  - nested",
+			want: []string{"• top", "  • nested"},
+		},
+		{
+			name: "dash without a space is not a bullet",
+			body: "---text",
+			want: []string{"---text"},
+		},
+		{
+			name: "inline code keeps its backticks",
+			body: "Run `dflow update --check` first.",
+			want: []string{"Run `dflow update --check` first."},
+		},
+		{
+			name: "plain text passes through",
+			body: "A release with no markup at all.",
+			want: []string{"A release with no markup at all."},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := SummarizeReleaseNotes(tc.body)
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("SummarizeReleaseNotes(%q) = %#v, want %#v", tc.body, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestSummarizeReleaseNotesRendersARealReleaseBody pins the whole contract
+// against the shape GoReleaser actually publishes, the one a maintainer saw
+// rendered as raw markup: the duplicated top title, the version heading, the
+// section headings and the bullet list.
+func TestSummarizeReleaseNotesRendersARealReleaseBody(t *testing.T) {
+	body := "# Changelog\n" +
+		"\n" +
+		"## 📦 v0.2.0 – Finish Automation\n" +
+		"\n" +
+		"### Added\n" +
+		"\n" +
+		"- `dflow finish` command to close a feature branch\n" +
+		"- `dflow update` command to install the latest release\n" +
+		"\n" +
+		"### Fixed\n" +
+		"\n" +
+		"- keep the current binary when a download fails\n"
+
+	got := SummarizeReleaseNotes(body)
+
+	want := []string{
+		"▸ 📦 v0.2.0 – Finish Automation",
+		"▸ Added",
+		"• `dflow finish` command to close a feature branch",
+		"• `dflow update` command to install the latest release",
+		"▸ Fixed",
+		"• keep the current binary when a download fails",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("SummarizeReleaseNotes(release body) = %#v, want %#v", got, want)
+	}
+}
+
+// TestSummarizeReleaseNotesDropsTheH1Title pins the top-title rule together
+// with its bookkeeping consequence: the dropped title is formatting, not
+// truncation, so a body that fits entirely must render without an ellipsis even
+// though a line was removed.
+func TestSummarizeReleaseNotesDropsTheH1Title(t *testing.T) {
+	body := "# Changelog\n\n### Added\n\n- `dflow finish` command\n"
+
+	got := SummarizeReleaseNotes(body)
+
+	want := []string{"▸ Added", "• `dflow finish` command"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("SummarizeReleaseNotes(%q) = %#v, want %#v", body, got, want)
+	}
+	if slices.Contains(got, "…") {
+		t.Fatalf("summary = %#v, want no ellipsis: dropping the title is formatting, not truncation", got)
+	}
+}
+
+// TestSummarizeReleaseNotesKeepsNilReservedForBlankBodies pins what an
+// all-formatting body returns. Rendering removes the only line, but the body was
+// not blank, so nil keeps meaning exactly "blank body" and callers can tell the
+// two cases apart.
+func TestSummarizeReleaseNotesKeepsNilReservedForBlankBodies(t *testing.T) {
+	got := SummarizeReleaseNotes("# Changelog")
+
+	if got == nil {
+		t.Fatal("SummarizeReleaseNotes(\"# Changelog\") = nil, want an empty, non-nil summary")
+	}
+	if len(got) != 0 {
+		t.Fatalf("SummarizeReleaseNotes(\"# Changelog\") = %#v, want no lines", got)
+	}
+}
+
+// TestSummarizeReleaseNotesCapsTheRenderedLine fixes the order of rendering and
+// measuring: the character bound counts the returned string, so a heading's
+// marker is part of the budget. A heading rendering to exactly the cap fits, and
+// one rune more clips the whole body behind the ellipsis.
+func TestSummarizeReleaseNotesCapsTheRenderedLine(t *testing.T) {
+	// "▸ " is two runes, so maxReleaseNotesChars-2 runes of heading text render to
+	// exactly the cap.
+	fits := "## " + strings.Repeat("x", maxReleaseNotesChars-2)
+	wantFits := "▸ " + strings.Repeat("x", maxReleaseNotesChars-2)
+	if got := SummarizeReleaseNotes(fits); len(got) != 1 || got[0] != wantFits {
+		t.Fatalf("a heading rendering to exactly the cap = %#v, want it kept as %q", got, wantFits)
+	}
+
+	clips := "## " + strings.Repeat("x", maxReleaseNotesChars-1)
+	if got := SummarizeReleaseNotes(clips); len(got) != 1 || got[0] != "…" {
+		t.Fatalf("a heading rendering past the cap = %#v, want [\"…\"]", got)
 	}
 }
 
