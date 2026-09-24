@@ -87,9 +87,25 @@ Closes forge issue #27 (`feat(notify): surface available updates and release cha
      both cache path and override. Checks on the work tree: `go build ./...`,
      `go vet ./...`, `gofmt -l .` clean, `go test -count=1
      ./cmd/selfupdate/...` green.
-4. [ ] WU3 — startup notification wiring (`cmd/root`)
-   - PreRun launches the probe; PostRun renders the one-line stderr notice
-     under the suppression matrix and the double-render guard; CLI tests.
+4. [x] WU3 — startup notification wiring (`cmd/root`)
+   - Delegated to a bounded `gentle-ai-worker` (parallel with W4, disjoint
+     surfaces). New `cmd/root/updatenotify.go` owning the whole notification:
+     eligibility gates (JSON, raw-args banner-skip list, `DFLOW_NO_UPDATE_CHECK`,
+     the `update` command itself, dev provenance), a cap-1 buffered channel
+     handoff, fresh-cache answers without network (synthetic release from
+     state) and otherwise a background probe that best-effort records the
+     check, and a `PersistentPostRun` renderer bounded by a 150ms grace that
+     discards a late result until the next run. New `utils.Notice` writes one
+     plain icon-free line to stderr, JSON-suppressed. Controller-accepted
+     deviations: a second atomic flag (`updateProbeArmed`) so suppressed runs
+     skip the grace wait; the probe arms outside the banner's interactive
+     guard so piped runs (the audience for the notice) get it, preserving the
+     exact banner condition; the once-guard is consumed on every result read,
+     not only on render. E2E proves exact stderr line, stdout purity, ordering
+     after output, cache reuse (second run: notice, zero server requests),
+     env opt-out and dev-marker silence. Checks on the combined tree: `go
+     build ./...`, `go vet ./...`, `gofmt -l .` clean, `go test -count=1
+     ./cmd/...` green.
 5. [x] WU4 — notes in `update --check` and the update flow (`cmd/commands`)
    - Delegated to a bounded `gentle-ai-worker` (parallel with WU3, disjoint
      surfaces). `update.go`: `--yes`/`-y` flag; human-only
@@ -120,7 +136,7 @@ Closes forge issue #27 (`feat(notify): surface available updates and release cha
 | --- | --- | --- |
 | WU1 | (this commit) | `feat(update): surface the release body and a terminal notes summary` |
 | WU2 | (this commit) | `feat(update): add the cached update check and background probe` |
-| WU3 | — | — |
+| WU3 | (this commit) | `feat(notify): announce newer releases on stderr after a command` |
 | WU4 | (this commit) | `feat(update): confirm the install after showing the release notes` |
 | WU5 | — | — |
 
