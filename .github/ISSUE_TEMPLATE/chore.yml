@@ -1,0 +1,37 @@
+name: Chore
+description: Track maintenance, tooling, or release work that ships no user-facing feature
+title: "[Chore]: "
+labels: ["type:chore"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For maintenance, tooling, and release work. Keep it outcome-oriented: what is wrong or missing today, and what done looks like.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is wrong, missing, or manual today?
+      placeholder: "`CHANGELOG.md` is maintained by hand, so each release requires reconstructing what changed from the Git history..."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should be done? A short ordered list works well.
+      placeholder: |
+        - add a `cliff.toml`
+        - wire generation into the release flow in `RELEASING.md`
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you considered and why they don't fit.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links to related issues, decisions, or prior art.
