@@ -71,10 +71,22 @@ Closes forge issue #27 (`feat(notify): surface available updates and release cha
      work tree: `go build ./...`, `go vet ./...`, `gofmt -l .` clean,
      `go test -count=1 ./cmd/selfupdate/...` green alongside WU2's in-flight
      untracked files.
-3. [ ] WU2 — update-check cache and probe (`cmd/selfupdate`)
-   - `check.go`: cache path resolution, JSON state read/write (best-effort),
-     24h freshness, background probe with its own short timeout, injectable
-     base URL and clock for tests.
+3. [x] WU2 — update-check cache and probe (`cmd/selfupdate`)
+   - Delegated to a bounded `gentle-ai-worker` (parallel with WU1, disjoint
+     surfaces). New `check.go`: `UpdateCheckState` (`last_checked`,
+     `latest_version`, `release_url`), `UpdateCheckCachePath`
+     (`$XDG_CACHE_HOME` → `$HOME/.cache`, one injectable `lookupEnv` seam),
+     atomic state write (temp file + rename, `ReadUpdateCheckState` treats a
+     missing file as first run), `updateCheckTTL` 24h with strict freshness,
+     `ShouldProbeUpdate`/`RecordUpdateCheck` orchestration,
+     `ResolveBaseURL()` honoring `DFLOW_UPDATE_API_URL`, and
+     `ProbeLatestRelease` on a dedicated 2s client reusing
+     `NewReleaseClientWithBaseURL`. Controller-accepted deviations: a blank
+     `baseURL` falls back to `ResolveBaseURL()` instead of requesting the
+     empty string, and env indirection is a single `lookupEnv` var covering
+     both cache path and override. Checks on the work tree: `go build ./...`,
+     `go vet ./...`, `gofmt -l .` clean, `go test -count=1
+     ./cmd/selfupdate/...` green.
 4. [ ] WU3 — startup notification wiring (`cmd/root`)
    - PreRun launches the probe; PostRun renders the one-line stderr notice
      under the suppression matrix and the double-render guard; CLI tests.
@@ -95,7 +107,7 @@ Closes forge issue #27 (`feat(notify): surface available updates and release cha
 | Unit | Commit | Subject |
 | --- | --- | --- |
 | WU1 | (this commit) | `feat(update): surface the release body and a terminal notes summary` |
-| WU2 | — | — |
+| WU2 | (this commit) | `feat(update): add the cached update check and background probe` |
 | WU3 | — | — |
 | WU4 | — | — |
 | WU5 | — | — |
