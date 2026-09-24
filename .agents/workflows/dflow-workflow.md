@@ -147,7 +147,8 @@ When a stacked parent merges, rebase each child with
 
 ## JSON output is a contract
 
-`dflow status --json` and `dflow finish --dry-run --json` are contracts for
+`dflow status --json`, `dflow finish --dry-run --json` and `dflow update --json`
+are contracts for
 scripts and agents: stdout carries exactly one JSON document and nothing else —
 no banner, no icons, no progress lines — and a failure still exits non-zero with
 the reason in an `{"error": ...}` document. Parse it with a JSON parser, never by
