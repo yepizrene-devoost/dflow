@@ -71,6 +71,13 @@ type assetResponse struct {
 	BrowserDownloadURL string `json:"browser_download_url"`
 }
 
+// defaultHTTPClient builds the client every production path shares: no
+// package-level instance, because this package commits to no global mutable
+// state, and a fresh client per constructor call costs nothing.
+func defaultHTTPClient() *http.Client {
+	return &http.Client{Timeout: defaultHTTPTimeout}
+}
+
 // ReleaseClient queries GitHub for dflow's latest release. Its base URL and
 // `http.Client` are injected rather than hard-coded so tests can drive it
 // against an `httptest` server without touching the real network.
@@ -79,29 +86,36 @@ type ReleaseClient struct {
 	httpClient *http.Client
 }
 
-// NewReleaseClient returns a client for the public GitHub API with a sane
-// request timeout. It is the production constructor; use
+// NewReleaseClient returns a client for the public GitHub API with the shared
+// default timeout. It is the production constructor; use
 // NewReleaseClientWithBaseURL when the endpoint must be substituted.
 func NewReleaseClient() *ReleaseClient {
-	return NewReleaseClientWithBaseURL(DefaultBaseURL, &http.Client{Timeout: defaultHTTPTimeout})
+	return NewReleaseClientWithBaseURL(DefaultBaseURL, defaultHTTPClient())
 }
 
 // NewReleaseClientWithBaseURL returns a client that talks to baseURL over
 // httpClient. A trailing slash on baseURL is tolerated so a caller can write
 // either "https://api.github.com" or "https://api.github.com/".
 //
-// A nil httpClient falls back to the default timeout-bearing client, which
-// keeps a caller from accidentally constructing a client that can hang
+// A nil httpClient falls back to the shared default timeout-bearing client,
+// which keeps a caller from accidentally constructing a client that can hang
 // forever.
 func NewReleaseClientWithBaseURL(baseURL string, httpClient *http.Client) *ReleaseClient {
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: defaultHTTPTimeout}
+		httpClient = defaultHTTPClient()
 	}
 	return &ReleaseClient{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		httpClient: httpClient,
 	}
 }
+
+// defaultHTTPClient builds the one client shape every production path uses:
+// no shared instance, because an http.Client is safe for concurrent use but a
+// package-level one would be mutable global state, which this package commits
+// to none of. The timeout bounds one release lookup: without it a stalled
+// connection would hang `dflow update` forever, and a user who reached for a
+// check wants a prompt answer far more than a complete one.
 
 // LatestRelease fetches and parses the newest published release.
 //

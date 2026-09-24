@@ -112,18 +112,9 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--check and --force cannot be combined: --check only reports and never replaces the binary, so --force has nothing to force")
 	}
 
-	target, resolveErr := resolveTargetBinary()
-	if target == "" {
-		// Without a path there is nothing to update and nothing to install into;
-		// continuing would fail later inside EnsureWritable with a message that
-		// names an empty path. The executable lookup is the one resolution step
-		// whose failure is fatal.
-		return fmt.Errorf("could not locate the running dflow binary: %w", resolveErr)
-	}
-	if resolveErr != nil {
-		// The raw path is still the binary we were started from, so the update
-		// proceeds there; only the failed symlink resolution is noted.
-		utils.Warn("could not resolve the full path of the running dflow binary (%v); continuing with %s", resolveErr, target)
+	target, err := resolveUpdateTarget()
+	if err != nil {
+		return err
 	}
 
 	// The version marker is the half of the version string that identifies the
@@ -230,6 +221,27 @@ func resolveTargetBinary() (string, error) {
 		return executable, err
 	}
 	return resolved, nil
+}
+
+// resolveUpdateTarget owns the whole policy for turning the raw executable
+// lookup into the target the update installs into, so runUpdate reads one line
+// instead of interleaving a fatal branch with a warning branch:
+//
+//   - no path at all is fatal: there is nothing to update and nothing to
+//     install into, and continuing would fail later inside EnsureWritable with
+//     a message that names an empty path;
+//   - a path that could not be symlink-resolved is still the binary the process
+//     was started from, so the update proceeds there and only the failed
+//     resolution is noted.
+func resolveUpdateTarget() (string, error) {
+	target, resolveErr := resolveTargetBinary()
+	if target == "" {
+		return "", fmt.Errorf("could not locate the running dflow binary: %w", resolveErr)
+	}
+	if resolveErr != nil {
+		utils.Warn("could not resolve the full path of the running dflow binary (%v); continuing with %s", resolveErr, target)
+	}
+	return target, nil
 }
 
 // updateBaseURL returns the GitHub API base URL to query, honouring the

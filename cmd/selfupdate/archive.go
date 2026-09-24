@@ -92,9 +92,12 @@ func extractBinaryFromTarGz(archivePath, destPath, goos string) error {
 			return err
 		}
 
-		// Directories, symlinks and every other special entry are skipped: only
-		// a regular file can be the binary we install.
-		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
+		// Directories, symlinks and every other special entry are skipped, and so
+		// is the pre-POSIX regular-file marker (archive/tar's deprecated
+		// TypeRegA, byte 0x00): GoReleaser always emits the canonical TypeReg, and
+		// accepting only that one type keeps the binary check strict instead of
+		// guessing what a legacy archive meant.
+		if header.Typeflag != tar.TypeReg {
 			continue
 		}
 		if !isBinaryEntry(header.Name, goos) {

@@ -92,35 +92,25 @@ Closes forge issue #25 (`feat(update): add dflow update self-update command`).
 | WU1 | `e2cfe29` | `feat(update): add release discovery and checksum verification` |
 | WU2 | `d4f0094` | `feat(update): add atomic binary replacement` |
 | WU3 | `dd2f27b` | `feat(update): add the dflow update command` |
-| docs | (this commit) | `docs: document the update command` |
+| docs | `77242c5` | `docs: document the update command` |
+| docs(odd) | `1f5f430` | `docs(odd): record update-command work-unit identity and close the feature` |
+| advisories | `7c953e2` | `fix(update): address review advisories` |
+| readability | (this commit) | `refactor(update): apply review readability suggestions` |
 
-The `docs(odd)` commit carrying this identity record and closing the last
-stage is the follow-up commit the ODD rule allows, and it is the last tracked
-write before the freeze.
+## Review history on this branch
 
-Declared expectation, not a verdict: a native review runs over this frozen
-candidate against `develop` (`7fafc4c`). Its outcome belongs to the native
-receipt and to Engram. Issue #25 stays open until the delivering merge into
-`develop` reports `manual_targets:[]`; the closing comment then names that
-merge commit, per the issue-closure rule.
+- `review-800bb3cd4fbfe455` (base `develop` `7fafc4c`, 3028 lines): APPROVED,
+  authority burned. 3 informational advisories → fixed in `7c953e2`.
+- `review-d5c4607fb86a1e3b` (delta base `1f5f430`, 86 lines): ESCALATED to a
+  terminal stop — the reliability lens labeled the new empty-target guard
+  BLOCKER with unknown causality while its own claim described the fix
+  favorably. Nothing quarantines that authority shape today (abandon, reclaim
+  and recover all refused; diagnosis captured at
+  `/tmp/gentle-ai-authority-diagnosis-800bb3cd-d5c4607f.json`); a START over
+  the same target is blocked while it holds authority.
+- `review-1c064bc2a04dd948` (full branch, 3090 lines): APPROVED, authority
+  burned. 3 new readability suggestions (R2-001..003) → fixed in this commit
+  round, per the maintainer's no-open-findings directive.
 
-## Review 1 outcome and advisory closure
-
-Review `review-800bb3cd4fbfe455` (tier high, 4/4 lenses) closed **approved**;
-the authority was acknowledged and burned. Three informational advisories were
-reported, and the user directed that none stay open as follow-ups:
-
-- `R1-checksum-origin` (SUGGESTION, `checksum.go:26-53`): the trust boundary is
-  now explicit in the `VerifyChecksum` doc — the checksums file shares the
-  archive's origin, so the check detects corrupted transfers but trusts the
-  release infrastructure itself, and with no signatures in this flow it is the
-  strongest guarantee available.
-- `R2-downloadVerifyInstall-params` (SUGGESTION, `update.go:305-317`): the
-  seven positional strings became the `installSteps` struct with a `run`
-  method; same-typed argument swaps no longer compile.
-- `R2-resolve-fallback` (WARNING, `update.go:115-120`): a failed
-  `os.Executable` lookup is now fatal with a clear error (an empty target used
-  to fall through to `EnsureWritable` and a confusing message); only a failed
-  symlink resolution continues on the raw path, with its warning.
-
-## Work-unit commit identity on `feature/update-command` (advisory fixes)
+This document's own update rides the readability commit; the next `docs(odd)`
+close-out (if any) is the last tracked write before the next freeze.
