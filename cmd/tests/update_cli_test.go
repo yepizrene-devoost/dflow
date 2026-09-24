@@ -248,7 +248,7 @@ func TestUpdateCLICheckHumanShowsReleaseNotes(t *testing.T) {
 	if !strings.Contains(output, "what's new in v9.9.9:") {
 		t.Fatalf("human check output must open a notes summary for the newer release, got:\n%s", output)
 	}
-	if !strings.Contains(output, "- surface the update notification") {
+	if !strings.Contains(output, "• surface the update notification") {
 		t.Fatalf("the notes summary must carry the release body's content lines, got:\n%s", output)
 	}
 	if !strings.Contains(output, "release notes: "+server.URL) {
