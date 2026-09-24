@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -249,22 +247,14 @@ func TestJSONFlagParseFailureStaysJSON(t *testing.T) {
 	}
 }
 
-// buildDflowCLI compiles the real entry point once per test function so Cobra
-// parsing, PreRunE ordering and the exit code are all covered by the assertions.
+// buildDflowCLI returns the real entry point as a fresh copy of the package's
+// shared, memoized plain build (no linker flag, so the binary reports the
+// literal "dev" marker), so Cobra parsing, PreRunE ordering and the exit code
+// are all covered by the assertions without paying a compile per test.
 func buildDflowCLI(t *testing.T) string {
 	t.Helper()
 
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	name := "dflow"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
-	}
-	binary := filepath.Join(t.TempDir(), name)
-	startCLICommand(t, 2*time.Minute, root, "go", "build", "-o", binary, ".")
-	return binary
+	return sharedDflowCLI(t, "")
 }
 
 // statusTestConfig is a realistic two-target config: develop merges directly and

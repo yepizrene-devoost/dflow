@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -19,16 +18,7 @@ func TestStartCLI(t *testing.T) {
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_TERMINAL_PROMPT", "0")
 
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	name := "dflow"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
-	}
-	binary := filepath.Join(t.TempDir(), name)
-	startCLICommand(t, 2*time.Minute, root, "go", "build", "-o", binary, ".")
+	binary := buildDflowCLI(t)
 
 	for _, flag := range []string{"--push", "--no-push"} {
 		t.Run(flag, func(t *testing.T) {

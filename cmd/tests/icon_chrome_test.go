@@ -2,8 +2,6 @@ package tests
 
 import (
 	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -32,7 +30,7 @@ func TestFailurePathRendersOneErrorIconAndNoSuccessChrome(t *testing.T) {
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_TERMINAL_PROMPT", "0")
 
-	binary := buildCLIBinaryForIconChromeTest(t)
+	binary := buildDflowCLI(t)
 
 	t.Run("failing delete", func(t *testing.T) {
 		repo := initTempGitRepo(t)
@@ -101,7 +99,7 @@ func TestShortValueArgumentRendersAsValue(t *testing.T) {
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_TERMINAL_PROMPT", "0")
 
-	binary := buildCLIBinaryForIconChromeTest(t)
+	binary := buildDflowCLI(t)
 
 	repo := initTempGitRepo(t)
 	// `x` is the whole point: one rune is what the removed heuristic mistook
@@ -124,25 +122,6 @@ func TestShortValueArgumentRendersAsValue(t *testing.T) {
 	if strings.Contains(output, "%!") {
 		t.Fatalf("output carries an unrendered format verb:\n%s", output)
 	}
-}
-
-// buildCLIBinaryForIconChromeTest builds the real entry point outside the
-// repository so the assertions observe the shipped binary and its exit code.
-func buildCLIBinaryForIconChromeTest(t *testing.T) string {
-	t.Helper()
-
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	name := "dflow"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
-	}
-	binary := filepath.Join(t.TempDir(), name)
-	startCLICommand(t, 2*time.Minute, root, "go", "build", "-o", binary, ".")
-
-	return binary
 }
 
 // hasFailureWord reports whether a rendered line describes a failed operation.

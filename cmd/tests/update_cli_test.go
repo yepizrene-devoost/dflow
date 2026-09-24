@@ -420,26 +420,17 @@ func updateNotesStartReleaseServer(t *testing.T, tag string, binaryPayload []byt
 	return server
 }
 
-// buildDflowCLIWithMarker compiles the real entry point with a release version
+// buildDflowCLIWithMarker returns a fresh copy of the package's shared,
+// memoized build of the real entry point, compiled with a release version
 // marker injected through the linker, the way .goreleaser.yaml and the Makefile
 // stamp a release build. The version comparison is only meaningful for a binary
 // that carries one, so the tests that exercise "is the release newer?" need a
 // stamped binary; the provenance-warning test uses buildDflowCLI's plain "dev"
-// build instead.
+// build instead. One build is memoized and shared per distinct marker.
 func buildDflowCLIWithMarker(t *testing.T, marker string) string {
 	t.Helper()
 
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
-	name := "dflow"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
-	}
-	binary := filepath.Join(t.TempDir(), name)
-	startCLICommand(t, 2*time.Minute, root, "go", "build", "-ldflags", "-X main.version="+marker, "-o", binary, ".")
-	return binary
+	return sharedDflowCLI(t, "-X main.version="+marker)
 }
 
 // startFakeReleaseServer serves the GitHub release endpoint and both release
