@@ -2,6 +2,18 @@
 
 Repository instructions for coding agents working in this project.
 
+## Session Start
+
+- At the beginning of every session in this repository, before the first
+  substantive reply, recover the working state:
+  1. Read the recent memory context (`mem_context`, project `dflow`) and the
+     latest session summary — that is where the previous session recorded
+     decisions, discoveries and pending steps.
+  2. List the open backlog: `gh issue list --state open`.
+- Open the conversation with one line on where the last session left off and
+  the current backlog, then ask what to pick up. Do not start work without
+  that anchor.
+
 ## Commit Messages
 
 - Follow the commit convention defined in `.agents/workflows/commit-rules.md`.
