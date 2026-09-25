@@ -160,6 +160,11 @@ func expandHome(dir string) (string, error) {
 // dflow's own artifact and a stale copy is a bug rather than a local edit to
 // protect.
 //
+// A rewrite preserves the mode of the file it replaces: because writeFileAtomic
+// always applies the mode it is handed, a SKILL.md a user installed by hand with
+// mode 0600 must not be widened to 0644 on every refresh. A file that does not
+// exist yet has no prior mode to honor and is created at 0644.
+//
 // The write is atomic: content goes to a temporary file beside the target and
 // moves into place with one rename, so an interrupted run can never leave a
 // truncated SKILL.md behind — a reader sees either the previous file or the whole
@@ -178,10 +183,17 @@ func InstallSkill(dir string, content []byte) (bool, string, error) {
 		return false, path, fmt.Errorf("read the installed skill file %s: %w", path, readErr)
 	}
 
+	mode := os.FileMode(0644)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		return false, path, fmt.Errorf("stat the installed skill file %s: %w", path, err)
+	}
+
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return false, path, fmt.Errorf("create the skill directory %s: %w", filepath.Dir(path), err)
 	}
-	if err := writeFileAtomic(path, content, 0644); err != nil {
+	if err := writeFileAtomic(path, content, mode); err != nil {
 		return false, path, err
 	}
 	return true, path, nil
