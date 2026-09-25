@@ -110,11 +110,60 @@ The create-failure path added by the correction has no direct test: reaching it
 requires a permission failure, since `os.ReadFile` on a path with a regular-file
 parent returns `ENOTDIR`, which `os.IsNotExist` does not classify as not-exist.
 Verified by inspection.
-2. [ ] WU2 — CLI reference wiring (`cmd/commands/agent.go` default path,
+2. [x] WU2 — CLI reference wiring (`cmd/commands/agent.go` default path,
        `cmd/commands/init.go` rewired onto the shared writer,
        `cmd/tests/agent_cli_test.go`): `--agents` selection; `AGENTS.md` always
        ensured; `CLAUDE.md` only when present or explicitly requested. `init`
        stops carrying its own private copy of the reference logic.
+       Tests first — all ten pins observed failing before any source write, then
+       green; three triangulation subtests added after green (their pre-
+       implementation failures were the already-observed `unknown flag: --agents`
+       and are recorded as such rather than claimed as a second RED).
+       Parent verification: exact scope (two modified files, one new test file),
+       `pkg/agent` untouched, `gofmt`/`go vet` clean, the focused pins green on
+       the parent's own runs plus a `-count=6` stability probe, and the whole
+       suite run on LINUX in a container — see below.
+
+### WU2 decisions and the interactive-test cost
+
+- **`--json` is now strictly read-only**, and the `--force` existence check moved
+  under the write path. Before this, `dflow agent --json` failed with
+  "already exists" whenever the document was present: a read-only render mode
+  refusing to render. The JSON grew a `references` array (`file`, `agents`,
+  `create`) and deliberately carries no `changed` field, because whether a
+  reference file would change cannot be known without writing it.
+- **`explicit := spec != ""`, not `Changed("agents")`.** The flag's own contract
+  says `""` is auto, so an explicit `--agents ""` must mean what an absent flag
+  means; under `Changed` it would have become a named "every agent" selection and
+  created a `CLAUDE.md` nobody asked for. Pinned by a subtest.
+- **`init` prints "<file> already references the dflow workflow"** when the
+  reference is already current, instead of today's unconditional "Updated". The
+  changed case (a normal first run) is byte-identical to the old wording; only
+  the no-op case stopped claiming a write it did not make.
+- **The two `init` pins need a pseudo-terminal**, because `dflow init` refuses to
+  run without a terminal and its survey blocks on cursor-position queries no
+  `script(1)` answers by itself. This is the first pty driver in the repository,
+  and it is the one part of WU2 with a real maintenance cost: the answers are
+  triggered by prompt text (rewording a survey prompt breaks the pins), the host
+  must provide `script(1)` or the pins `t.Skip` silently, and replies are paced
+  50 ms apart because survey's cursor reader discards a second report that lands
+  in the same read. It is reactive rather than time-driven, and bounded by a
+  60 s timeout that fails with the captured transcript instead of hanging.
+
+### WU2 Linux verification (the announced risk, closed with evidence)
+
+The first handoff declared the util-linux `script` invocation UNVERIFIED, and CI
+runs on `ubuntu-latest`, so the unverified branch would have been exercised for
+the first time in CI. Verified instead by running it on Linux in a container
+(`golang:1.21-bookworm`, util-linux `script 2.38.1`):
+
+- `go test ./cmd/tests/ -run TestInitCLI -count=2 -v` — both pins PASS on both
+  runs, no skip, `ok ... 6.284s`.
+- `go test ./... -count=1` — every package green on Linux, `cmd/tests` in 61.3 s.
+
+The remaining accepted costs are the ones listed above (prompt-wording coupling,
+the `t.Skip` coverage gap on hosts without `script(1)`, and the 50 ms reply gap);
+none of them is a delivery risk for this repository's CI any more.
 3. [ ] WU3 — skill install (`pkg/agent/install.go`, `install_test.go`,
        `cmd/commands/agent.go`): `--install` and `--local`, per-agent skill
        placement, idempotent rewrite, `--json` reporting of every written path.
@@ -128,6 +177,23 @@ Verified by inspection.
 - Review declaration: this commit is the frozen candidate for the native RDD
   review of work unit 1; the expected outcome is an ordinary review over the
   diff against `2944582` (develop at branch time).
+- Commit SHA: `5812032` feat(agent): add the multi-agent discovery registry and
+  reference writer.
+- Review outcome: APPROVED — lineage `review-90b610c3e69e4f91`, tier `medium`,
+  one consolidated lens (`review-reliability`), 1267 changed lines against a
+  correction budget of 200 (unused; the auto-mode defect was found by parent
+  verification before the review started and fixed inside the same candidate).
+  Authority burned (consumed revision
+  `sha256:2ad8ca070b871a44b01602496c92979443ba4fc3a8d1bebb7bc6b9d942ab416a`).
+  Neither envelope the provider returned carried findings or advisories; no
+  stronger claim about their absence is available.
+
+## Work-unit commit identity (WU2)
+
+- Review declaration: this commit is the frozen candidate for the native RDD
+  review of work unit 2; the expected outcome is an ordinary review over the
+  diff against `2944582` (develop at branch time), which this time also carries
+  the WU1 identity record above.
 - Commit SHA and review outcome: recorded in the next work-unit commit, never
   pre-written here.
 

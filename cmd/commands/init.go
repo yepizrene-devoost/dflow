@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
@@ -258,12 +257,13 @@ var InitCmd = &cobra.Command{
 			}
 			utils.Success("Generated agent workflow: %s", agentPath)
 
-			// ensure AGENTS.md references the workflow file
-			agentsRef := "## dflow Workflow\nRead `" + agentPath + "` for branch types, merge rules, and finish flow.\n"
-			if err := ensureAgentsMdReference(agentsRef); err != nil {
-				utils.Warn("Could not update AGENTS.md: %v", err)
-			} else {
-				utils.Success("Updated AGENTS.md with dflow workflow reference")
+			// Wire the same reference `dflow agent` writes, in auto mode: init never
+			// asked which agents this project uses, so every registry agent is
+			// selected with explicit == false, and CLAUDE.md is therefore maintained
+			// only when the project already has one.
+			plan := agent.PlanInstructionTargets(agent.Agents(), instructionFileExists, false)
+			if err := writeInstructionReferences(plan, agentPath); err != nil {
+				utils.Warn("Could not update instruction references: %v", err)
 			}
 		}
 
@@ -274,33 +274,6 @@ var InitCmd = &cobra.Command{
 
 func init() {
 	InitCmd.Flags().Bool("force", false, "Regenerate .dflow.yaml even if the project is already initialized")
-}
-
-// ensureAgentsMdReference appends a section to AGENTS.md if it does not already
-// contain the dflow workflow reference. If AGENTS.md does not exist, it is created.
-func ensureAgentsMdReference(ref string) error {
-	path := "AGENTS.md"
-
-	var existing []byte
-	if data, err := os.ReadFile(path); err == nil {
-		existing = data
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-
-	if existing != nil && strings.Contains(string(existing), "dflow.md") {
-		return nil // already present
-	}
-
-	var content []byte
-	if len(existing) > 0 {
-		content = append(existing, '\n')
-		content = append(content, []byte(ref)...)
-	} else {
-		content = []byte(ref)
-	}
-
-	return os.WriteFile(path, content, 0644)
 }
 
 func uniqueBranchNames(branches ...string) []string {
