@@ -171,7 +171,28 @@ terminal.
 dflow init --force
 ```
 
-### `dflow start <type> <name>`
+After creating `.dflow.yaml`, `init` asks whether to generate an agent workflow
+file (`.agents/workflows/dflow.md`) and add a reference to `AGENTS.md`. The
+workflow file is derived from your config so it cannot drift.
+
+### `dflow agent`
+
+Generate an agent workflow file from your `.dflow.yaml` configuration.
+
+```bash
+dflow agent
+````
+
+- Renders branch types, prefixes, bases, finish targets, and merge rules from `.dflow.yaml`
+- Writes to `.agents/workflows/dflow.md` by default
+- Includes static sections: commands, commit conventions, issue lifecycle, JSON contract
+- Never overwrites an existing file unless `--force` is passed
+- Supports `--path` to choose a different output location
+- Supports `--json` to print the path and rendered document on stdout without writing
+
+```bash
+dflow agent --path docs/AGENT.md
+```
 
 Start a new work branch based on your workflow config.
 
@@ -470,7 +491,8 @@ dflow finish
 
 ## ✨ Features
 
-- ✅ Interactive `init` wizard
+- ✅ Interactive `init` wizard with agent workflow generation
+- ✅ `dflow agent` — derive agent-facing workflow from `.dflow.yaml`
 - ✅ Customizable prefixes, base branches, finish targets, and merge rules
 - ✅ Support for hybrid workflows (direct merge + PR)
 - ✅ Git-aware config, validation, and branch safety checks

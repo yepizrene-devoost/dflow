@@ -111,6 +111,7 @@ func init() {
 	RootCmd.AddCommand(commands.ConfigCmd)
 	RootCmd.AddCommand(commands.DeleteCmd)
 	RootCmd.AddCommand(commands.UpdateCmd)
+	RootCmd.AddCommand(commands.AgentCmd)
 	RootCmd.AddCommand(VersionCmd)
 	RootCmd.PersistentFlags().BoolVarP(&showVersion, "version", "V", false, "Show the current dflow version")
 

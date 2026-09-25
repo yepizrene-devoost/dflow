@@ -8,12 +8,15 @@ package commands
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
 	"github.com/yepizrene-devoost/dflow/cmd/gitutils"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/agent"
 	"github.com/yepizrene-devoost/dflow/pkg/flow"
 	"github.com/yepizrene-devoost/dflow/pkg/validators"
 )
@@ -233,6 +236,37 @@ var InitCmd = &cobra.Command{
 			}
 		}
 
+		// 📝 generate agent workflow file
+		var generateAgent bool
+		if err := survey.AskOne(&survey.Confirm{
+			Message: "Generate an agent workflow file for AI coding assistants?",
+			Default: true,
+		}, &generateAgent); err != nil {
+			fmt.Fprintf(os.Stderr, "Prompt failed: %v\n", err)
+			os.Exit(1)
+		}
+
+		if generateAgent {
+			doc := agent.GenerateAgentDoc(&cfg)
+			agentPath := ".agents/workflows/dflow.md"
+
+			if err := os.MkdirAll(filepath.Dir(agentPath), 0755); err != nil {
+				return fmt.Errorf("failed to create agent workflow directory: %w", err)
+			}
+			if err := os.WriteFile(agentPath, doc, 0644); err != nil {
+				return fmt.Errorf("failed to write agent workflow: %w", err)
+			}
+			utils.Success("Generated agent workflow: %s", agentPath)
+
+			// ensure AGENTS.md references the workflow file
+			agentsRef := "## dflow Workflow\nRead `" + agentPath + "` for branch types, merge rules, and finish flow.\n"
+			if err := ensureAgentsMdReference(agentsRef); err != nil {
+				utils.Warn("Could not update AGENTS.md: %v", err)
+			} else {
+				utils.Success("Updated AGENTS.md with dflow workflow reference")
+			}
+		}
+
 		utils.Icon("🎉", "dflow is ready! Use `dflow start` to begin a new branch.")
 		return nil
 	}),
@@ -240,6 +274,33 @@ var InitCmd = &cobra.Command{
 
 func init() {
 	InitCmd.Flags().Bool("force", false, "Regenerate .dflow.yaml even if the project is already initialized")
+}
+
+// ensureAgentsMdReference appends a section to AGENTS.md if it does not already
+// contain the dflow workflow reference. If AGENTS.md does not exist, it is created.
+func ensureAgentsMdReference(ref string) error {
+	path := "AGENTS.md"
+
+	var existing []byte
+	if data, err := os.ReadFile(path); err == nil {
+		existing = data
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	if existing != nil && strings.Contains(string(existing), "dflow.md") {
+		return nil // already present
+	}
+
+	var content []byte
+	if len(existing) > 0 {
+		content = append(existing, '\n')
+		content = append(content, []byte(ref)...)
+	} else {
+		content = []byte(ref)
+	}
+
+	return os.WriteFile(path, content, 0644)
 }
 
 func uniqueBranchNames(branches ...string) []string {
