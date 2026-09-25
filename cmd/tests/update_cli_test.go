@@ -256,6 +256,78 @@ func TestUpdateCLICheckHumanShowsReleaseNotes(t *testing.T) {
 	}
 }
 
+// TestUpdateCLICheckHumanOmitsNotesWhenReleaseBodyIsEmpty pins the degradation
+// the maintainer accepted: when the published release body is empty, the reader
+// gets no "what's new" section at all. The report must stay well-formed — the
+// version lines and the verdict are still printed, and the release-page line
+// closes the report immediately after the verdict, with no empty heading and no
+// blank line where the missing section would have gone.
+func TestUpdateCLICheckHumanOmitsNotesWhenReleaseBodyIsEmpty(t *testing.T) {
+	setUpCLIEnv(t)
+	// Keep the command's best-effort cache refresh out of the host's own cache.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	server := updateNotesStartReleaseServer(t, "v9.9.9", []byte("payload"), "")
+	t.Setenv("DFLOW_UPDATE_API_URL", server.URL)
+
+	binary := buildDflowCLIWithMarker(t, "v0.1.0")
+
+	output, exitCode := startCLIRawOutput(t, time.Minute, t.TempDir(), binary, "update", "--check")
+	if exitCode != 0 {
+		t.Fatalf("update --check exited %d, want 0\n%s", exitCode, output)
+	}
+
+	// The existing contract is untouched: both versions are named and the newer
+	// release is still reported as available.
+	if !strings.Contains(output, "current version: v0.1.0") {
+		t.Fatalf("the report must still name the current version, got:\n%s", output)
+	}
+	if !strings.Contains(output, "latest release: v9.9.9") {
+		t.Fatalf("the report must still name the latest release, got:\n%s", output)
+	}
+	if !strings.Contains(output, "an update is available: run `dflow update` to install v9.9.9") {
+		t.Fatalf("an empty release body must not cost the reader the update verdict, got:\n%s", output)
+	}
+
+	// No empty heading, and no dangling separator: the release-page line comes
+	// directly after the verdict with nothing in between.
+	if strings.Contains(output, "what's new") {
+		t.Fatalf("an empty release body must not open a what's-new section, got:\n%s", output)
+	}
+
+	// Split on the line separator and drop only the single trailing newline, so
+	// any extra blank line remains visible to the check below.
+	lines := strings.Split(output, "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	verdict := -1
+	for i, line := range lines {
+		if strings.Contains(line, "an update is available") {
+			verdict = i
+			break
+		}
+	}
+	if verdict == -1 {
+		t.Fatalf("could not find the update verdict line in:\n%s", output)
+	}
+	if verdict == len(lines)-1 {
+		t.Fatalf("the verdict line is the last line; the release-page line is missing from:\n%s", output)
+	}
+	if !strings.Contains(lines[verdict+1], "release notes: "+server.URL) {
+		t.Fatalf("the release-page line must follow the verdict directly, with no dangling section between them; line %d = %q in:\n%s", verdict+1, lines[verdict+1], output)
+	}
+	if verdict+1 != len(lines)-1 {
+		t.Fatalf("the release-page line must close the report, but %d line(s) follow it in:\n%s", len(lines)-1-(verdict+1), output)
+	}
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			t.Fatalf("line %d is blank; an omitted notes section must not leave a gap in:\n%s", i, output)
+		}
+	}
+}
+
 // TestUpdateCLIJSONKeepsSixKeysWithReleaseBody is the JSON contract pin for the
 // new notes: a body is prose for a terminal, and publishing it as a field would
 // both change the document shape and ship a truncated artifact as data.
