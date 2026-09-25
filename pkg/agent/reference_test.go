@@ -3,6 +3,7 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -163,6 +164,55 @@ func TestEnsureInstructionReferenceReplacesChangedBlockRange(t *testing.T) {
 	want := "before\n" + newBlock + "after\n"
 	if got := readFile(t, path); got != want {
 		t.Errorf("replaced file =\n%q\nwant\n%q", got, want)
+	}
+}
+
+// The overwrite path replaces the file rather than truncating it in place: a
+// reader must never observe a half-written AGENTS.md, which is what an
+// interrupted in-place rewrite leaves behind. A rename hands the target the
+// temporary file's identity, so the inode changes; truncating and rewriting the
+// same file would keep it.
+//
+// The check is POSIX-only because inode numbers are.
+func TestEnsureInstructionReferenceReplacesTheFileRatherThanTruncatingIt(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("inode numbers are a POSIX filesystem detail")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "AGENTS.md")
+	// A delimited block naming another workflow path is what makes the replacement
+	// range differ, which is the branch that overwrites the file.
+	writeFile(t, path, "before\n"+ReferenceBlock("old/path.md")+"after\n")
+
+	before := inodeOf(t, path)
+	changed, err := EnsureInstructionReference(path, testWorkflowPath)
+	if err != nil {
+		t.Fatalf("EnsureInstructionReference() error: %v", err)
+	}
+	if !changed {
+		t.Fatal("changed = false, want true when the block content differs")
+	}
+
+	if after := inodeOf(t, path); before == after {
+		t.Errorf("the instruction file kept inode %d, so it was rewritten in place instead of being replaced atomically", before)
+	}
+
+	want := "before\n" + referenceBlockPin(testWorkflowPath) + "after\n"
+	if got := readFile(t, path); got != want {
+		t.Errorf("replaced file =\n%q\nwant\n%q", got, want)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read %s: %v", dir, err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	if len(names) != 1 || names[0] != "AGENTS.md" {
+		t.Fatalf("%s holds %v, want exactly [AGENTS.md]", dir, names)
 	}
 }
 

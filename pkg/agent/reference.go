@@ -123,21 +123,28 @@ func appendReference(content, block string) string {
 }
 
 // createInstructionFile creates path and its parents, then writes the block.
+//
+// The create goes through the same atomic replacement as the overwrite: an
+// interrupted create must not leave a truncated file either.
 func createInstructionFile(path, block string) error {
 	if dir := filepath.Dir(path); dir != "" {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("create instruction directory %s: %w", dir, err)
 		}
 	}
-	if err := os.WriteFile(path, []byte(block), 0644); err != nil {
+	if err := writeFileAtomic(path, []byte(block), 0644); err != nil {
 		return fmt.Errorf("write instruction file %s: %w", path, err)
 	}
 	return nil
 }
 
 // writeInstructionFile overwrites path with content at mode 0644.
+//
+// The overwrite goes through the same atomic replacement the skill installer
+// uses, so an interrupted run leaves the previous file whole rather than a
+// truncated one.
 func writeInstructionFile(path, content string) error {
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+	if err := writeFileAtomic(path, []byte(content), 0644); err != nil {
 		return fmt.Errorf("write instruction file %s: %w", path, err)
 	}
 	return nil
