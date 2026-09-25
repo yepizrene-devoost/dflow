@@ -197,6 +197,54 @@ func TestSummarizeReleaseNotesKeepsNilReservedForBlankBodies(t *testing.T) {
 	}
 }
 
+// TestSummarizeReleaseNotesDistinguishesBlankFromNothingRenderable makes the
+// load-bearing nil rule legible in one place: nil means exactly "blank body",
+// while a non-blank body whose every line was formatting returns an empty,
+// non-nil slice. The two are different answers — the first says there are no
+// release notes, the second says there was a body with nothing to show — so this
+// test checks nil-ness itself rather than comparing lengths, which would let a
+// nil slice and an empty slice pass as the same thing.
+//
+// The last case is the one the existing tests did not reach: a blank-looking
+// body whose whitespace-only lines surround a real title. Those blank runs are
+// skipped, but the title is non-blank content, so the body is not blank and the
+// answer must stay non-nil.
+func TestSummarizeReleaseNotesDistinguishesBlankFromNothingRenderable(t *testing.T) {
+	cases := []struct {
+		name    string
+		body    string
+		wantNil bool
+	}{
+		{name: "genuinely empty body", body: "", wantNil: true},
+		{name: "whitespace-only body", body: " \n\t\n   \n", wantNil: true},
+		{name: "body that is only the title line", body: "# Changelog", wantNil: false},
+		{
+			name:    "title wrapped in blank runs is still a non-blank body",
+			body:    "\n   \n# Changelog\n\t\n\n",
+			wantNil: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := SummarizeReleaseNotes(tc.body)
+
+			if tc.wantNil {
+				if got != nil {
+					t.Fatalf("SummarizeReleaseNotes(%q) = %#v, want nil: a blank body has no release notes", tc.body, got)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatalf("SummarizeReleaseNotes(%q) = nil, want an empty, non-nil summary: the body was not blank", tc.body)
+			}
+			if len(got) != 0 {
+				t.Fatalf("SummarizeReleaseNotes(%q) = %#v, want no renderable lines", tc.body, got)
+			}
+		})
+	}
+}
+
 // TestSummarizeReleaseNotesCapsTheRenderedLine fixes the order of rendering and
 // measuring: the character bound counts the returned string, so a heading's
 // marker is part of the budget. A heading rendering to exactly the cap fits, and

@@ -1,0 +1,96 @@
+# Release checks: one job, read-only, no publishing.
+#
+# go.yml only builds and tests, so a broken .goreleaser.yaml or a CHANGELOG.md
+# that cannot yield a release body is first seen by a human running
+# `make release` locally. This job runs that same release-path validation in
+# CI without publishing anything: it validates the GoReleaser configuration and
+# asserts the changelog contract the release body depends on. It never runs
+# `goreleaser release`.
+#
+# Triggers and action versions mirror .github/workflows/go.yml.
+
+name: Release checks
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GoReleaser
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          # Install the binary only; this workflow never runs a release.
+          install-only: true
+          # Pinned on purpose so an upstream release cannot change this job's
+          # result on its own. To bump: set `version:` below to the new stable
+          # GoReleaser tag from
+          # https://github.com/goreleaser/goreleaser/releases, then re-run. The
+          # action itself is pinned separately by its `@v7` major tag.
+          version: 'v2.18.2'
+
+      # .goreleaser.yaml is deliberately kept deprecation-free so this step is a
+      # real gate: `goreleaser check` exits non-zero on any deprecated key. The
+      # three keys migrated for that reason are `snapshot.version_template`,
+      # `archives[].formats` and `archives[].format_overrides[].formats`. Never
+      # reinstate `name_template`/`format`, and never add `|| true` or
+      # `continue-on-error` to this step.
+      - name: Validate release configuration
+        run: goreleaser check
+
+      - name: Assert changelog contract
+        run: |
+          # The published release body is built from the newest "## 📦" section
+          # of CHANGELOG.md, so assert that this section exists, that its third
+          # field is a semantic version (vMAJOR.MINOR.PATCH, optional
+          # pre-release suffix), and that it has content below its heading.
+          # "Content" here means any non-blank line.
+          #
+          # Portability: POSIX awk only. No interval expressions (BSD awk lacks
+          # them) and no GNU-only flags. Default field splitting is used on
+          # purpose: the Makefile reads the same heading with `awk '{print $3}'`,
+          # so CI and the publishing path must not diverge (POSIX character
+          # classes in a custom FS regex are not portable across awk builds).
+          awk '
+            /^## 📦/ {
+              if (found) {
+                # Section closed: stop counting content past this point.
+                closed = 1
+                next
+              }
+              found = 1
+              heading = $0
+              heading_line = NR
+              version = $3
+              if (version !~ /^v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*(-[0-9A-Za-z.]+)?$/) {
+                bad_version = 1
+              }
+              next
+            }
+            found && !closed && !body && NF > 0 { body = 1 }
+            END {
+              if (!found) {
+                print "::error file=CHANGELOG.md::CHANGELOG.md has no \"## 📦\" version section"
+                exit 1
+              }
+              if (bad_version) {
+                printf "::error file=CHANGELOG.md,line=%d::newest release section heading has no semantic version as its third field: %s\n", heading_line, heading
+                exit 1
+              }
+              if (!body) {
+                printf "::error file=CHANGELOG.md,line=%d::newest release section has no content below its heading: %s\n", heading_line, heading
+                exit 1
+              }
+              printf "CHANGELOG contract OK: %s\n", heading
+            }
+          ' CHANGELOG.md
