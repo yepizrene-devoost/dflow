@@ -7,6 +7,20 @@ changes in each release, see [`CHANGELOG.md`](./CHANGELOG.md).
 
 ---
 
+## 📦 v0.4.0 – Multi-Agent Install, Legible Digests & Release Safeguards
+
+**Tag:** [`v0.4.0`](https://github.com/yepizrene-devoost/dflow/releases/tag/v0.4.0)  
+**Date:** 2026-09-25
+
+**Highlights:**
+
+- `dflow agent` derives a workflow document from `.dflow.yaml` and installs it as a discoverable skill for several AI coding agents.
+- One generated document serves several agents: `AGENTS.md` for pi, codex and opencode, one `SKILL.md` in the project's shared `.agents/skills` root when the skill is installed locally, and `CLAUDE.md` only when Claude is named or the file already exists.
+- The `dflow update` report and its "What's new" digest are sized for a terminal: one shared text measure, an airier list, and bold section headings.
+- The release path fails fast on a stale changelog, a missing tag or a token-less `.env` instead of publishing an empty release body.
+
+---
+
 ## 📦 v0.3.0 – Self-Update, Installers & CLI Contracts
 
 **Tag:** [`v0.3.0`](https://github.com/yepizrene-devoost/dflow/releases/tag/v0.3.0)  
