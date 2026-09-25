@@ -229,6 +229,15 @@ Design:
       `TestUpdateCLICheckHumanKeepsADigestPastTheRemovedLineCap`.
 - [x] T20: full verification — `go test ./...` green, `go vet` clean, `gofmt`
       clean; work-unit commit below; RDD review declared in the identity section.
+
+## Work-unit commit identity (WU5)
+
+- `573b6d8` feat(update): air the digest list and cap it by characters alone
+  (WU5; generalized separator rule, physical-line cap removed, 4000-char cap as
+  the only flood guard)
+- Review declaration: `573b6d8` is the frozen candidate for the native RDD
+  review of work unit 5; expected outcome is an ordinary review over the diff
+  against `b33ce11`.
 - `806d4e9` feat(update): wrap the report on one shared text measure instead of
   clamping (WU4; renderer width param, clamp removed, caps 40 lines / 4000
   chars, icon measure ceiling 100, heading class decided before rendering)
