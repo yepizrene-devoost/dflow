@@ -39,6 +39,10 @@ branch types, bases, finish targets, and merge modes.
   Tracked separately from the rules work.
 - Docs separation: `CHANGELOG.md` = what changed (delta); `HISTORY.md` = release
   timeline; this file = current state.
+- Closure confirmations are deterministic and standalone: closing an issue,
+  merging, pushing or publishing always gets its own explicit yes — never
+  inferred from tentative phrasing or bundled into another approval. See the
+  "Closure and External-Action Confirmations" section in `AGENTS.md`.
 - Rule ownership: ODD stage closing, and the ordering that closes every stage
   before the commit carrying its work, are owned by the global
   `~/.pi/agent/AGENTS.md`. The task-tracking section here only points at them, so
