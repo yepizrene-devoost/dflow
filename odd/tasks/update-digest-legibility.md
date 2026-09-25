@@ -239,6 +239,15 @@ Design:
   review of work unit 5; expected outcome is an ordinary review over the diff
   against `b33ce11`.
 
+## Work-unit commit identity (WU6)
+
+- `9d6e07b` feat(update): bold the digest section headings on a terminal (WU6;
+  `IsReleaseNotesHeading` predicate, `utils.PlainBold` with `stdoutIsTTY` seam,
+  caller wiring, no-ANSI piped pin)
+- Review declaration: `9d6e07b` is the frozen candidate for the native RDD
+  review of work unit 6; expected outcome is an ordinary review over the diff
+  against `8cbf929`.
+
 ## Work unit 6: bold section headings (TTY-gated)
 
 Final polish before delivery: the `▸ ` section headings should carry visual
