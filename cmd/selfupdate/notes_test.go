@@ -142,7 +142,7 @@ func TestSummarizeReleaseNotesRendersTerminalShapedLines(t *testing.T) {
 // against the shape GoReleaser actually publishes, the one a maintainer saw
 // rendered as raw markup: the duplicated top title and the release's own version
 // heading are both gone, while the section headings and the bullet list still
-// render.
+// render, separated into blocks by one blank line per later heading.
 //
 // The version heading is the legibility fix from issue #30: the command already
 // prints "what's new in v0.2.0:" from the release tag, so rendering
@@ -168,6 +168,9 @@ func TestSummarizeReleaseNotesRendersARealReleaseBody(t *testing.T) {
 		"▸ Added",
 		"• `dflow finish` command to close a feature branch",
 		"• `dflow update` command to install the latest release",
+		// The blank line before the second heading is the presentation fix: it
+		// keeps the Added block from running straight into the Fixed block.
+		"",
 		"▸ Fixed",
 		"• keep the current binary when a download fails",
 	}
@@ -178,6 +181,194 @@ func TestSummarizeReleaseNotesRendersARealReleaseBody(t *testing.T) {
 		if strings.Contains(line, "📦") {
 			t.Fatalf("summary = %#v, want the release's own version heading dropped: it repeats the version the command already printed", got)
 		}
+	}
+}
+
+// TestSummarizeReleaseNotesSeparatesSectionsWithBlankLines pins the presentation
+// fix from the maintainer's follow-up on issue #30: a real multi-section body
+// read as a wall of text, because each "▸ " block and the bullets under it ran
+// straight into the next. Once the summary has kept something, every following
+// section heading is preceded by one empty-string line, so the reader sees where
+// one section ends and the next begins.
+//
+// The first heading gets no separator: the caller prints "what's new in vX:"
+// directly above the summary, so a blank line there would open with a gap
+// instead of the first line of content. The separator is the empty string rather
+// than a padded line, so it carries no indentation and no trailing whitespace
+// for a renderer to print.
+func TestSummarizeReleaseNotesSeparatesSectionsWithBlankLines(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want []string
+	}{
+		{
+			name: "a heading-only body opens without a blank line",
+			body: "### Added",
+			want: []string{"▸ Added"},
+		},
+		{
+			name: "content directly under the first heading needs no separator",
+			body: "### Added\n\n- a short item",
+			want: []string{"▸ Added", "• a short item"},
+		},
+		{
+			name: "each heading after kept content is preceded by one blank line",
+			body: "- item\n## Changed\n## Fixed",
+			want: []string{"• item", "", "▸ Changed", "", "▸ Fixed"},
+		},
+		{
+			name: "a dropped version heading adds no separator of its own",
+			body: "### Added\n- one item\n## 📦 v0.9.9 – Release\n- two item",
+			want: []string{"▸ Added", "• one item", "• two item"},
+		},
+		{
+			name: "a release body is separated block by block",
+			body: "# Changelog\n\n## 📦 v0.3.0 – Self-Update\n\n### Added\n\n- surface the update notification\n- summarize the release notes\n\n### Changed\n\n- rework the digest\n\n### Fixed\n\n- keep the current binary when a download fails\n",
+			want: []string{
+				"▸ Added",
+				"• surface the update notification",
+				"• summarize the release notes",
+				"",
+				"▸ Changed",
+				"• rework the digest",
+				"",
+				"▸ Fixed",
+				"• keep the current binary when a download fails",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := SummarizeReleaseNotes(tc.body)
+
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("SummarizeReleaseNotes(%q) = %#v, want %#v", tc.body, got, tc.want)
+			}
+			for _, line := range got {
+				if strings.TrimSpace(line) == "" && line != "" {
+					t.Fatalf("separator line = %q, want the empty string: an indented or padded separator is trailing whitespace", line)
+				}
+			}
+		})
+	}
+}
+
+// TestSummarizeReleaseNotesExemptsSeparatorsFromTheLineCap fixes why a separator
+// is presentation rather than content: maxReleaseNotesLines bounds how many
+// changelog lines a reader has to scan, so a blank line must neither spend one
+// of those slots nor push real content behind the ellipsis. The body below holds
+// exactly a full cap's worth of content lines spread over three sections, so a
+// bound that counted the two separators would drop the last bullets and announce
+// a truncation that never happened.
+func TestSummarizeReleaseNotesExemptsSeparatorsFromTheLineCap(t *testing.T) {
+	// Each section contributes one heading plus the given number of bullets, for
+	// fifteen content lines in total. The bullets keep one running number so the
+	// expected lines also pin the sections' order.
+	next := 0
+	bullets := func(count int) string {
+		var b strings.Builder
+		for i := 0; i < count; i++ {
+			next++
+			fmt.Fprintf(&b, "- item %02d\n", next)
+		}
+		return b.String()
+	}
+
+	body := "## Added\n" + bullets(4) +
+		"## Changed\n" + bullets(5) +
+		"## Fixed\n" + bullets(3)
+
+	got := SummarizeReleaseNotes(body)
+
+	// The fifteen content lines plus the two separators: the first heading opens
+	// the summary, the two later ones are preceded by a blank line each.
+	want := []string{
+		"▸ Added",
+		"• item 01", "• item 02", "• item 03", "• item 04",
+		"",
+		"▸ Changed",
+		"• item 05", "• item 06", "• item 07", "• item 08", "• item 09",
+		"",
+		"▸ Fixed",
+		"• item 10", "• item 11", "• item 12",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("SummarizeReleaseNotes(at the line cap) = %#v, want %#v", got, want)
+	}
+	if slices.Contains(got, "…") {
+		t.Fatalf("summary = %#v, want no ellipsis: the body held exactly the cap's worth of content lines", got)
+	}
+}
+
+// TestSummarizeReleaseNotesSeparatorsNeverTruncate is the other half of the line
+// cap exemption: excluding separators from the count would still be wrong if
+// their presence could make a complete summary look truncated. Seven one-item
+// sections render more lines than the cap once the six blank lines are added,
+// yet no content was dropped, so the summary must end without an ellipsis.
+func TestSummarizeReleaseNotesSeparatorsNeverTruncate(t *testing.T) {
+	var body strings.Builder
+	for i := 1; i <= 7; i++ {
+		fmt.Fprintf(&body, "## Section %d\n- item %d\n", i, i)
+	}
+
+	got := SummarizeReleaseNotes(body.String())
+
+	// Seven headings plus seven bullets, plus the six separators between them.
+	const wantLines = 20
+	if len(got) != wantLines {
+		t.Fatalf("len = %d, want %d (14 content lines plus 6 separators)", len(got), wantLines)
+	}
+	blanks := 0
+	for _, line := range got {
+		if line == "" {
+			blanks++
+		}
+	}
+	if blanks != 6 {
+		t.Fatalf("found %d separators in %#v, want 6: one blank line between each of the 7 sections", blanks, got)
+	}
+	if slices.Contains(got, "…") {
+		t.Fatalf("summary = %#v, want no ellipsis: nothing was dropped, so the separators must not read as truncation", got)
+	}
+}
+
+// TestSummarizeReleaseNotesExemptsSeparatorsFromTheCharacterBudget pins the
+// per-rune half of the exemption. A separator is the empty string, so it adds
+// nothing to the cumulative rune budget; the body below spends the whole
+// maxReleaseNotesChars budget on content while carrying a separator in the
+// middle, so an implementation that charged even one rune for a blank line would
+// drop the final line behind an ellipsis.
+func TestSummarizeReleaseNotesExemptsSeparatorsFromTheCharacterBudget(t *testing.T) {
+	filler := strings.Repeat("x", 100)
+
+	lines := []string{"## A"}
+	want := []string{"▸ A"}
+	for i := 0; i < 11; i++ {
+		lines = append(lines, filler)
+		want = append(want, filler)
+	}
+	// "▸ A" is three runes and the eleven fillers are 1100, so a three-rune
+	// second heading plus 94 runes of text lands exactly on the 1200-rune budget.
+	lines = append(lines, "## B", strings.Repeat("x", 94))
+	want = append(want, "", "▸ B", strings.Repeat("x", 94))
+
+	total := 0
+	for _, line := range want {
+		total += utf8.RuneCountInString(line)
+	}
+	if total != maxReleaseNotesChars {
+		t.Fatalf("the fixture spends %d content runes, want exactly the %d-rune budget", total, maxReleaseNotesChars)
+	}
+
+	got := SummarizeReleaseNotes(strings.Join(lines, "\n"))
+
+	if !slices.Equal(got, want) {
+		t.Fatalf("SummarizeReleaseNotes(at the character budget) = %#v, want %#v", got, want)
+	}
+	if slices.Contains(got, "…") {
+		t.Fatalf("summary = %#v, want no ellipsis: the content fit the budget exactly and the separator added nothing", got)
 	}
 }
 

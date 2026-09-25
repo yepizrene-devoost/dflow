@@ -144,6 +144,12 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	hasProvenance := selfupdate.HasReleaseProvenance(current)
 	if !hasProvenance {
 		utils.Warn("this dflow binary carries no release provenance (version marker %q): it was built without a published release version, so it cannot be compared with the latest one. A binary installed with 'go install' is usually updated by running 'go install github.com/yepizrene-devoost/dflow@latest' again.", current)
+		// The warning is a paragraph of its own, and on a terminal the helpers
+		// wrap it into several physical lines. A blank line separates that block
+		// from the report that follows, so the alert never runs into the first
+		// report line. Plain is suppressed in JSON mode exactly as Warn is, so a
+		// machine-readable run still carries only its document.
+		utils.Plain("%s", "")
 	}
 
 	client := selfupdate.NewReleaseClientWithBaseURL(updateBaseURL(), nil)
@@ -261,6 +267,11 @@ func confirmUpdateInstall(yes bool, current, target string, latest *selfupdate.R
 // lines for the release being offered. An empty body (GitHub has no changelog
 // for this release) prints nothing at all, because an empty header would
 // promise a section that has no content.
+//
+// A separator line from the renderer is printed verbatim, without the two-space
+// indent the content lines carry: the indent exists to subordinate a note to its
+// header, and applying it to a blank line would put two spaces of trailing
+// whitespace on a line that shows nothing.
 func reportNotesSummary(latest *selfupdate.Release) {
 	lines := selfupdate.SummarizeReleaseNotes(latest.Body)
 	if len(lines) == 0 {
@@ -268,6 +279,10 @@ func reportNotesSummary(latest *selfupdate.Release) {
 	}
 	utils.Info("what's new in %s:", latest.Tag)
 	for _, line := range lines {
+		if line == "" {
+			utils.Plain("%s", line)
+			continue
+		}
 		utils.Plain("  %s", line)
 	}
 }
@@ -290,9 +305,15 @@ func reportHumanCheck(report updateReport, latest *selfupdate.Release) {
 }
 
 // reportHumanReleaseURL prints the release page only when the API supplied one:
-// an empty "release notes: " line is worse than no line at all.
+// an empty "release notes: " line is worse than no line at all. The line is
+// opened by a blank line so it does not run together with the digest above it.
+//
+// Both of its callers are human-only: the JSON paths return before reaching this
+// function, and the helpers are suppressed in JSON mode anyway, so the
+// machine-readable document keeps exactly its six keys.
 func reportHumanReleaseURL(url string) {
 	if url != "" {
+		utils.Plain("%s", "")
 		utils.Info("release notes: %s", url)
 	}
 }

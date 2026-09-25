@@ -42,6 +42,14 @@ const releaseNotesEllipsis = "…"
 // print.
 const releaseNotesHeadingMarker = "▸ "
 
+// releaseNotesSeparator is the empty line emitted before each section heading
+// but the summary's first, so a multi-section digest reads block by block instead
+// of as one wall of text. It is an empty string rather than a padded or
+// whitespace-bearing line, which is what keeps it free of trailing whitespace in
+// the terminal, and it is presentation rather than content, so it is exempt from
+// both summary caps and can never trigger the ellipsis.
+const releaseNotesSeparator = ""
+
 // releaseNotesBulletMarker replaces a Markdown list item's dash, so "- item"
 // reads as "• item" instead of as a line that happens to start with a hyphen.
 const releaseNotesBulletMarker = "• "
@@ -110,6 +118,15 @@ var releaseNotesVersionToken = regexp.MustCompile(`\bv?\d+\.\d+\.\d+\b`)
 //   - Marker detection runs on the trimmed line, so an indented bullet is still
 //     recognized as one. Any other line passes through as it is: "---text" has
 //     no space after the dash, so it is not a list item and stays unchanged.
+//   - A section heading that is not the summary's first kept line is preceded by
+//     one empty-string separator line, so consecutive sections such as
+//     "### Added" and "### Fixed" read as separate blocks. The first heading gets
+//     none: the caller prints "what's new in vX:" directly above the summary, so
+//     a blank line there would open with a gap rather than the first line of
+//     content. A separator is presentation rather than content: it never spends
+//     maxReleaseNotesLines or maxReleaseNotesChars and never contributes to the
+//     ellipsis below, and because it is empty it carries no indentation or
+//     trailing whitespace.
 //   - At most maxReleaseNotesLines content lines and maxReleaseNotesChars
 //     cumulative runes are kept; the first line that would exceed either bound
 //     is dropped along with everything after it. Both bounds count the final
@@ -128,6 +145,7 @@ var releaseNotesVersionToken = regexp.MustCompile(`\bv?\d+\.\d+\.\d+\b`)
 func SummarizeReleaseNotes(body string) []string {
 	var kept []string
 	total := 0
+	contentKept := 0
 	dropped := false
 	sawContent := false
 
@@ -146,10 +164,12 @@ func SummarizeReleaseNotes(body string) []string {
 			continue
 		}
 
-		// Stop before the line that would break either bound. Because the
+		// Stop before the line that would break either bound, counting content
+		// lines only: a separator is presentation, so it neither spends a line of
+		// the budget nor pushes real content behind the ellipsis. Because the
 		// current line is non-blank, reaching here means real content is being
 		// dropped, which is exactly when the ellipsis line is owed.
-		if len(kept) >= maxReleaseNotesLines {
+		if contentKept >= maxReleaseNotesLines {
 			dropped = true
 			break
 		}
@@ -158,7 +178,17 @@ func SummarizeReleaseNotes(body string) []string {
 			break
 		}
 
+		// A section heading opens a new block, so one blank line separates it from
+		// the block above — unless it is the first line the summary keeps, where
+		// the caller's own header already provides the separation. The separator
+		// is added after the bounds have passed, so a heading that was dropped
+		// never leaves a dangling blank line behind it.
+		if contentKept > 0 && strings.HasPrefix(rendered, releaseNotesHeadingMarker) {
+			kept = append(kept, releaseNotesSeparator)
+		}
+
 		kept = append(kept, rendered)
+		contentKept++
 		total += utf8.RuneCountInString(rendered)
 	}
 

@@ -3,6 +3,27 @@ package utils
 import (
 	"fmt"
 	"os"
+	"strings"
+	"unicode/utf8"
+)
+
+// The shape of an icon-prefixed line, shared by the renderer and the wrapper.
+const (
+	// iconPrefixWidth is the column count of printWithIcon's "%-3s " prefix:
+	// the icon padded to three columns plus one separating space.
+	iconPrefixWidth = 4
+	// continuationIndent hangs a wrapped line under the message column rather
+	// than under the icon, so a paragraph reads as one block. Its width is
+	// iconPrefixWidth, and the two constants are kept adjacent so they cannot
+	// drift apart unnoticed.
+	continuationIndent = "    "
+	// minWrapWidth is the narrowest terminal printWithIcon will wrap for.
+	//
+	// A very narrow terminal would otherwise break every icon line into a
+	// column of two-word fragments, which is harder to read than letting a
+	// long line ride past the edge. A reported width below this floor is
+	// treated as this floor, so the wrap point has a readable lower bound.
+	minWrapWidth = 80
 )
 
 // Error prints a message with a red cross (❌) prefix.
@@ -82,18 +103,95 @@ func Prompt(label string, args ...interface{}) {
 	fmt.Print(fmt.Sprintf(label, args...))
 }
 
-// printWithIcon renders one icon-prefixed line. The icon is always the one the
-// caller declared, either the level default from Error, Info, Success or Warn or
-// the explicit icon from Icon; the arguments are format values only.
+// printWithIcon renders one icon-prefixed message. The icon is always the one
+// the caller declared, either the level default from Error, Info, Success or
+// Warn or the explicit icon from Icon; the arguments are format values only.
 //
-// It is also the single suppression point for every icon-prefixed helper: in
-// JSON mode the document is the only thing stdout may carry, so every
-// icon-prefixed line yields to it.
+// It also owns two output contracts:
+//
+//   - Suppression: in JSON mode the document is the only thing stdout may carry,
+//     so every icon-prefixed line yields to it.
+//   - Wrapping: when stdout is a terminal, a message longer than the terminal
+//     width is broken at word boundaries and the continuation lines are indented
+//     with continuationIndent, so the text hangs under the message column
+//     instead of running to column zero under the icon. The first line keeps the
+//     historical "%-3s %s" shape byte for byte.
+//
+// Wrapping is deliberately conditional on a measured terminal. When the width is
+// unknown — stdout is a pipe, a file or a command substitution — the message is
+// printed as one line, so piped and scripted output stays unwrapped and remains
+// easy to copy verbatim. A measured width below minWrapWidth is treated as the
+// floor, and a single token wider than the available width is left intact and
+// overflows its line rather than being split; see wrapIconMessage for the exact
+// fill rule.
 func printWithIcon(icon string, formattedMessage string, args ...interface{}) {
 	if CurrentFormat() == FormatJSON {
 		return
 	}
 
 	msg := fmt.Sprintf(formattedMessage, args...)
-	fmt.Printf("%-3s %s\n", icon, msg)
+
+	width, ok := stdoutWidth()
+	if !ok {
+		fmt.Printf("%-3s %s\n", icon, msg)
+		return
+	}
+	if width < minWrapWidth {
+		width = minWrapWidth
+	}
+
+	for i, line := range wrapIconMessage(msg, width-iconPrefixWidth) {
+		if i == 0 {
+			fmt.Printf("%-3s %s\n", icon, line)
+			continue
+		}
+		fmt.Printf("%s%s\n", continuationIndent, line)
+	}
+}
+
+// wrapIconMessage breaks a message into the physical lines printWithIcon should
+// render, given the content width available after the icon prefix.
+//
+// It fills each line greedily from the words in order, so a break always
+// replaces a space and no word is ever split across lines. A message that
+// already fits is returned as a single element, unchanged, byte for byte; only
+// a message that must wrap is re-flowed, and that re-flow normalises whitespace
+// runs to a single space.
+//
+// The one exception is an overlong token: a single word wider than contentWidth
+// is placed on its own line and overflows. A URL, a path or a hash is one value,
+// and cutting it would corrupt it, so the terminal's own edge wrapping is the
+// lesser evil.
+//
+// Widths are counted in runes, matching the rest of the output layer (the
+// release-notes clamp, for example). A double-width glyph — CJK text or an emoji
+// — occupies two terminal columns while counting as one rune, so a message
+// carrying one can still meet the terminal edge and be wrapped there by the
+// terminal itself; display-column measurement is deliberately not attempted.
+func wrapIconMessage(msg string, contentWidth int) []string {
+	if contentWidth < 1 {
+		contentWidth = 1
+	}
+	if utf8.RuneCountInString(msg) <= contentWidth {
+		return []string{msg}
+	}
+
+	var lines []string
+	current := ""
+	for _, word := range strings.Fields(msg) {
+		if current == "" {
+			current = word
+			continue
+		}
+		if utf8.RuneCountInString(current)+1+utf8.RuneCountInString(word) <= contentWidth {
+			current += " " + word
+			continue
+		}
+		lines = append(lines, current)
+		current = word
+	}
+	if current != "" {
+		lines = append(lines, current)
+	}
+	return lines
 }

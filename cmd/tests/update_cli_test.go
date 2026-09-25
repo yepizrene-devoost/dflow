@@ -226,6 +226,47 @@ func TestUpdateCLIWarnsWithoutReleaseProvenance(t *testing.T) {
 	})
 }
 
+// TestUpdateCLIWarnsWithoutReleaseProvenanceSeparatesTheAlertFromTheReport pins
+// the spacing the second screenshot called out: the provenance warning is one
+// long paragraph, and on a narrow terminal the helpers wrap it into several
+// physical lines. The report must open with a blank line after it, so the alert
+// reads as its own paragraph instead of running directly into "current
+// version:".
+//
+// The child process writes to a pipe here, so the wrap itself is out of scope:
+// the warning stays on one line. What this test pins is the separator, which is
+// independent of whether the warning wrapped.
+func TestUpdateCLIWarnsWithoutReleaseProvenanceSeparatesTheAlertFromTheReport(t *testing.T) {
+	setUpCLIEnv(t)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	server := startFakeReleaseServer(t, "v9.9.9", []byte("payload"))
+	t.Setenv("DFLOW_UPDATE_API_URL", server.URL)
+
+	// A plain `go build` binary has no release provenance, so the warning fires.
+	binary := buildDflowCLI(t)
+
+	output, exitCode := startCLIRawOutput(t, time.Minute, t.TempDir(), binary, "update", "--check")
+	if exitCode != 0 {
+		t.Fatalf("update --check exited %d, want 0\n%s", exitCode, output)
+	}
+
+	lines := strings.Split(output, "\n")
+	warning := lineIndexContaining(lines, "no release provenance")
+	if warning == -1 {
+		t.Fatalf("the report must carry the provenance warning, got:\n%s", output)
+	}
+	if warning+2 >= len(lines) {
+		t.Fatalf("the provenance warning is not followed by a report in:\n%s", output)
+	}
+	if lines[warning+1] != "" {
+		t.Fatalf("a blank line must separate the provenance warning from the report; line %d = %q in:\n%s", warning+1, lines[warning+1], output)
+	}
+	if !strings.Contains(lines[warning+2], "current version:") {
+		t.Fatalf("the report must open with the current version after the blank line; line %d = %q in:\n%s", warning+2, lines[warning+2], output)
+	}
+}
+
 // TestUpdateCLICheckHumanShowsReleaseNotes pins the read-only report a user
 // actually reads: when the served release carries a changelog body, --check in
 // human mode shows a "what's new" section with the summarized lines, and the
@@ -264,6 +305,13 @@ func TestUpdateCLICheckHumanShowsReleaseNotes(t *testing.T) {
 // bullet must arrive clipped to the item budget instead of wrapping across
 // several terminal lines.
 //
+// It also pins the presentation spacing from the maintainer's follow-up on the
+// same issue: a two-section digest read as a wall of text, so the second section
+// heading is opened by a genuinely empty line, and the closing release-page line
+// is separated from the digest above it. The empty line matters as much as its
+// position: the renderer returns "" and the caller must print it verbatim, so no
+// line may be whitespace that only looks blank.
+//
 // The budget is pinned here as a literal rather than read from the package: it
 // is unexported, so this test is the caller-visible width that would catch a
 // silent change to it, which the package's own unit tests would happily follow.
@@ -282,7 +330,9 @@ func TestUpdateCLICheckHumanDigestDropsTheVersionHeadingAndClampsDenseBullets(t 
 		"## 📦 v9.9.9 – Self-Update, Installers & CLI Contracts\n\n" +
 		"### Added\n\n" +
 		"- surface the update notification\n" +
-		"- " + denseItem + "\n"
+		"- " + denseItem + "\n\n" +
+		"### Fixed\n\n" +
+		"- keep the current binary when a download fails\n"
 	server := updateNotesStartReleaseServer(t, "v9.9.9", []byte("payload"), body)
 	t.Setenv("DFLOW_UPDATE_API_URL", server.URL)
 
@@ -320,17 +370,53 @@ func TestUpdateCLICheckHumanDigestDropsTheVersionHeadingAndClampsDenseBullets(t 
 	if strings.Contains(output, strings.Repeat("legibility ", 10)) {
 		t.Fatalf("the dense bullet must not reach the terminal at full length, got:\n%s", output)
 	}
-	if !strings.Contains(output, "release notes: "+server.URL) {
+
+	// Presentation spacing: the second section heading and the closing release
+	// page are each opened by an empty line, and no line is whitespace pretending
+	// to be blank.
+	lines := strings.Split(output, "\n")
+	fixed := lineIndexContaining(lines, "▸ Fixed")
+	if fixed == -1 {
+		t.Fatalf("the second section heading must keep its marker, got:\n%s", output)
+	}
+	if fixed == 0 || lines[fixed-1] != "" {
+		t.Fatalf("the second section heading must be opened by an empty line, got %q before it in:\n%s", lines[fixed-1], output)
+	}
+	notes := lineIndexContaining(lines, "release notes: "+server.URL)
+	if notes == -1 {
 		t.Fatalf("the release page line must still close the report, got:\n%s", output)
 	}
+	if notes == 0 || lines[notes-1] != "" {
+		t.Fatalf("the release page line must be opened by an empty line, got %q before it in:\n%s", lines[notes-1], output)
+	}
+	for i, line := range lines {
+		if line != "" && strings.TrimSpace(line) == "" {
+			t.Fatalf("line %d is %q; a separator must be the empty string, never indented or padded whitespace, in:\n%s", i, line, output)
+		}
+	}
+}
+
+// lineIndexContaining returns the index of the first output line carrying the
+// given text, or -1 when no line does. Locating a line by content lets a
+// spacing assertion name the line it must precede without depending on the
+// report's other lines, whose exact count is not this test's contract.
+func lineIndexContaining(lines []string, text string) int {
+	for i, line := range lines {
+		if strings.Contains(line, text) {
+			return i
+		}
+	}
+	return -1
 }
 
 // TestUpdateCLICheckHumanOmitsNotesWhenReleaseBodyIsEmpty pins the degradation
 // the maintainer accepted: when the published release body is empty, the reader
 // gets no "what's new" section at all. The report must stay well-formed — the
-// version lines and the verdict are still printed, and the release-page line
-// closes the report immediately after the verdict, with no empty heading and no
-// blank line where the missing section would have gone.
+// version lines and the verdict are still printed, no empty heading appears, and
+// the omitted section leaves no gap of its own. The release-page line still
+// closes the report, opened by the single blank line reportHumanReleaseURL now
+// prints, so the omission is visible as content missing rather than as a hole
+// between the verdict and the link.
 func TestUpdateCLICheckHumanOmitsNotesWhenReleaseBodyIsEmpty(t *testing.T) {
 	setUpCLIEnv(t)
 	// Keep the command's best-effort cache refresh out of the host's own cache.
@@ -358,42 +444,39 @@ func TestUpdateCLICheckHumanOmitsNotesWhenReleaseBodyIsEmpty(t *testing.T) {
 		t.Fatalf("an empty release body must not cost the reader the update verdict, got:\n%s", output)
 	}
 
-	// No empty heading, and no dangling separator: the release-page line comes
-	// directly after the verdict with nothing in between.
+	// An empty body opens no heading, so the only blank line in the report is the
+	// one the release page brings with it.
 	if strings.Contains(output, "what's new") {
 		t.Fatalf("an empty release body must not open a what's-new section, got:\n%s", output)
 	}
 
 	// Split on the line separator and drop only the single trailing newline, so
-	// any extra blank line remains visible to the check below.
+	// the spacing between lines remains visible to the checks below.
 	lines := strings.Split(output, "\n")
 	if len(lines) > 0 && lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
 	}
 
-	verdict := -1
-	for i, line := range lines {
-		if strings.Contains(line, "an update is available") {
-			verdict = i
-			break
+	notes := lineIndexContaining(lines, "release notes: "+server.URL)
+	if notes == -1 {
+		t.Fatalf("the release-page line is missing from:\n%s", output)
+	}
+	// The release page is opened by one blank line, and that blank line follows
+	// the verdict: the omitted section adds no gap of its own.
+	if notes < 2 || lines[notes-1] != "" || !strings.Contains(lines[notes-2], "an update is available") {
+		t.Fatalf("the release-page line must be opened by one blank line directly after the verdict, got %q before it in:\n%s", lines[notes-1], output)
+	}
+	if notes != len(lines)-1 {
+		t.Fatalf("the release-page line must close the report, but %d line(s) follow it in:\n%s", len(lines)-1-notes, output)
+	}
+	blanks := 0
+	for _, line := range lines {
+		if line == "" {
+			blanks++
 		}
 	}
-	if verdict == -1 {
-		t.Fatalf("could not find the update verdict line in:\n%s", output)
-	}
-	if verdict == len(lines)-1 {
-		t.Fatalf("the verdict line is the last line; the release-page line is missing from:\n%s", output)
-	}
-	if !strings.Contains(lines[verdict+1], "release notes: "+server.URL) {
-		t.Fatalf("the release-page line must follow the verdict directly, with no dangling section between them; line %d = %q in:\n%s", verdict+1, lines[verdict+1], output)
-	}
-	if verdict+1 != len(lines)-1 {
-		t.Fatalf("the release-page line must close the report, but %d line(s) follow it in:\n%s", len(lines)-1-(verdict+1), output)
-	}
-	for i, line := range lines {
-		if strings.TrimSpace(line) == "" {
-			t.Fatalf("line %d is blank; an omitted notes section must not leave a gap in:\n%s", i, output)
-		}
+	if blanks != 1 {
+		t.Fatalf("found %d blank lines, want exactly 1 (the one opening the release page) in:\n%s", blanks, output)
 	}
 }
 

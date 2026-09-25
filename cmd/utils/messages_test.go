@@ -1,0 +1,158 @@
+package utils
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
+
+// withStdoutWidth installs a fixed answer from the terminal-width seam for one
+// test and restores the real probe afterwards.
+//
+// stdoutWidth is the package-level seam printWithIcon reads, exactly like the
+// lookupEnv seam cmd/selfupdate established. Driving it here is what lets a
+// test pin wrapped rendering without a pseudo-terminal: the width decision is
+// the only thing that makes wrapping TTY-conditional, and it must be
+// answerable from a plain pipe.
+func withStdoutWidth(t *testing.T, width int, ok bool) {
+	t.Helper()
+
+	original := stdoutWidth
+	stdoutWidth = func() (int, bool) { return width, ok }
+	t.Cleanup(func() { stdoutWidth = original })
+}
+
+// longWarning is a single-line message wider than the 80-column floor's content
+// width (76 runes). Its word lengths are chosen so the greedy fill breaks at a
+// known point, and it is real prose rather than repeated filler so a failure
+// reads as the sentence it is.
+const longWarning = "the provenance warning must wrap at word boundaries and never split a word in the middle"
+
+// TestWrapIconMessageBreaksAtWordBoundaries pins the greedy fill: a line never
+// exceeds the content width unless it is a single overlong token, and every
+// break replaces a space rather than landing inside a word.
+func TestWrapIconMessageBreaksAtWordBoundaries(t *testing.T) {
+	cases := []struct {
+		name         string
+		message      string
+		contentWidth int
+		want         []string
+	}{
+		{
+			name:         "a message that fits stays on one line",
+			message:      "one two",
+			contentWidth: 7,
+			want:         []string{"one two"},
+		},
+		{
+			name:         "a break replaces the space at the boundary",
+			message:      "alpha beta gamma",
+			contentWidth: 10,
+			want:         []string{"alpha beta", "gamma"},
+		},
+		{
+			name:         "a word exactly at the width is not split",
+			message:      "alphabet soup",
+			contentWidth: 8,
+			want:         []string{"alphabet", "soup"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := wrapIconMessage(tc.message, tc.contentWidth)
+			if strings.Join(got, "\n") != strings.Join(tc.want, "\n") {
+				t.Fatalf("wrapIconMessage(%q, %d) = %q, want %q", tc.message, tc.contentWidth, got, tc.want)
+			}
+			for _, line := range got {
+				if line == "" {
+					t.Fatalf("wrapIconMessage(%q, %d) produced an empty line in %q", tc.message, tc.contentWidth, got)
+				}
+			}
+		})
+	}
+}
+
+// TestWrapIconMessageLeavesAnOverlongTokenIntact pins the documented exception:
+// a single word wider than the content width is not broken. A URL or a hash is
+// one value, and cutting it in half would corrupt it; the terminal's own edge
+// wrapping is the lesser evil.
+func TestWrapIconMessageLeavesAnOverlongTokenIntact(t *testing.T) {
+	const token = "https://example.com/releases/download/v9.9.9/dflow_9.9.9_darwin_arm64.tar.gz"
+
+	got := wrapIconMessage("see "+token+" for details", 20)
+	want := []string{"see", token, "for details"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("wrapIconMessage with an overlong token = %q, want %q", got, want)
+	}
+	for _, line := range got {
+		if len(line) > 20 && line != token {
+			t.Fatalf("only the overlong token may exceed the width, got %q", line)
+		}
+	}
+}
+
+// TestPrintWithIconHangsContinuationLinesUnderTheContentColumn is the rendering
+// contract for a wrapped line: the first physical line keeps the
+// "icon + space + message" shape, and every continuation line is indented by
+// four spaces so it hangs under the message column instead of under the icon.
+func TestPrintWithIconHangsContinuationLinesUnderTheContentColumn(t *testing.T) {
+	withStdoutWidth(t, 80, true)
+
+	output := captureStdout(t, func() { Warn("%s", longWarning) })
+
+	want := "⚠️  the provenance warning must wrap at word boundaries and never split a word\n" +
+		"    in the middle\n"
+	if output != want {
+		t.Fatalf("wrapped Warn output =\n%q\nwant\n%q", output, want)
+	}
+}
+
+// TestPrintWithIconLeavesTheLineWholeWhenTheWidthIsUnknown pins the TTY gate: a
+// pipe or a redirected file is never wrapped, so a machine that reads the
+// output can copy a long line verbatim.
+func TestPrintWithIconLeavesTheLineWholeWhenTheWidthIsUnknown(t *testing.T) {
+	withStdoutWidth(t, 0, false)
+
+	output := captureStdout(t, func() { Error("%s", longWarning) })
+
+	want := fmt.Sprintf("%-3s %s\n", "❌", longWarning)
+	if output != want {
+		t.Fatalf("unmeasured width output =\n%q\nwant the single historical line\n%q", output, want)
+	}
+	if strings.Contains(output, "\n    ") {
+		t.Fatalf("an unknown width must not add a hanging-indent continuation line:\n%q", output)
+	}
+}
+
+// TestPrintWithIconTreatsANarrowTerminalAsEightyColumnsWide pins the floor: a
+// terminal narrower than the floor wraps exactly as an 80-column one does, so
+// the floor is a wrapping width and not an opt-out from wrapping.
+func TestPrintWithIconTreatsANarrowTerminalAsEightyColumnsWide(t *testing.T) {
+	withStdoutWidth(t, 80, true)
+	want := captureStdout(t, func() { Warn("%s", longWarning) })
+
+	withStdoutWidth(t, 40, true)
+	got := captureStdout(t, func() { Warn("%s", longWarning) })
+
+	if got != want {
+		t.Fatalf("a 40-column terminal wrapped differently from an 80-column one:\ngot:\n%q\nwant:\n%q", got, want)
+	}
+	if !strings.Contains(got, "\n    ") {
+		t.Fatalf("the 40-column case must still wrap, got:\n%q", got)
+	}
+}
+
+// TestPrintWithIconKeepsAShortMessageByteIdentical protects every existing icon
+// line: a message that fits on one line is rendered exactly as the historical
+// single Printf did, so the wrap changes nothing outside the wrap.
+func TestPrintWithIconKeepsAShortMessageByteIdentical(t *testing.T) {
+	withStdoutWidth(t, 80, true)
+
+	output := captureStdout(t, func() { Success("%s", "dflow is already up to date") })
+
+	want := fmt.Sprintf("%-3s %s\n", "✅", "dflow is already up to date")
+	if output != want {
+		t.Fatalf("short-message output = %q, want the unchanged single line %q", output, want)
+	}
+}
