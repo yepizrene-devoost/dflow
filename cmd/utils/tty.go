@@ -22,6 +22,70 @@ func IsInteractive() bool {
 	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
 }
 
+// stdoutWidth reports the width of the terminal the icon helpers render to, in
+// columns, and whether that width could be measured at all.
+//
+// It is a variable rather than a direct call so tests can inject a fixed width
+// or an "unknown" answer without a pseudo-terminal, mirroring the lookupEnv
+// seam cmd/selfupdate already established. The end-to-end tests are unaffected:
+// they run the built binary, where this variable still holds the real probe.
+//
+// It measures stdout, not stderr: the icon helpers write their lines to stdout,
+// so the measured stream and the wrapped stream are the same stream. A stdout
+// that is not a terminal — a pipe, a file, a command substitution — must report
+// ok=false, and callers must read that as "do not wrap".
+var stdoutWidth = terminalWidth
+
+// stdoutIsTTY reports whether stdout is a terminal.
+//
+// It is the gate the styled helpers read: styling a line with ANSI escapes is
+// meaningful only on a terminal, and a pipe, a file or a command substitution
+// must receive the plain bytes so captured output stays easy to copy verbatim.
+//
+// Like stdoutWidth above, it is a variable rather than a direct call so tests
+// can inject an answer without a pseudo-terminal; the end-to-end tests that run
+// the built binary still exercise the real probe through the default closure.
+// It measures stdout, never stdin, because stdout is the stream the styled line
+// is written to, and it is deliberately separate from IsInteractive, which also
+// requires stdin to be a terminal for prompts: a styled heading needs only the
+// output stream to be a terminal to render correctly.
+var stdoutIsTTY = func() bool {
+	return term.IsTerminal(int(os.Stdout.Fd()))
+}
+
+// terminalWidth reads the column count of stdout.
+//
+// It declines to answer (ok=false) when stdout is not a terminal or the reported
+// size is unusable (a width of zero or less), which is exactly the signal to
+// leave a line unwrapped rather than guess a width a scripted reader did not
+// ask for.
+func terminalWidth() (int, bool) {
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil || width <= 0 {
+		return 0, false
+	}
+	return width, true
+}
+
+// TerminalWidth reports the width, in columns, of the terminal the human-facing
+// helpers render to, and whether that width could be measured at all.
+//
+// It is the exported view of the stdoutWidth seam, for callers outside this
+// package that must size text to the terminal themselves — the release-notes
+// digest does, because it is built line by line rather than wrapped by one
+// helper. ok=false means "do not size anything to a width": stdout is a pipe, a
+// file or a command substitution, and the caller must render its unmeasured
+// output exactly as it always has. A caller that does have a width is still
+// responsible for its own floor and ceiling; this function reports the terminal,
+// not a content width.
+//
+// It measures stdout, never stderr, for the same reason the icon helpers do:
+// stdout is the stream the sized output is written to and the one a user reads
+// in a terminal.
+func TerminalWidth() (int, bool) {
+	return stdoutWidth()
+}
+
 // NonInteractiveError builds the error returned when a command needs to prompt
 // but stdin or stdout is not a terminal.
 //

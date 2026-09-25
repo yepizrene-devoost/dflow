@@ -226,6 +226,47 @@ func TestUpdateCLIWarnsWithoutReleaseProvenance(t *testing.T) {
 	})
 }
 
+// TestUpdateCLIWarnsWithoutReleaseProvenanceSeparatesTheAlertFromTheReport pins
+// the spacing the second screenshot called out: the provenance warning is one
+// long paragraph, and on a narrow terminal the helpers wrap it into several
+// physical lines. The report must open with a blank line after it, so the alert
+// reads as its own paragraph instead of running directly into "current
+// version:".
+//
+// The child process writes to a pipe here, so the wrap itself is out of scope:
+// the warning stays on one line. What this test pins is the separator, which is
+// independent of whether the warning wrapped.
+func TestUpdateCLIWarnsWithoutReleaseProvenanceSeparatesTheAlertFromTheReport(t *testing.T) {
+	setUpCLIEnv(t)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	server := startFakeReleaseServer(t, "v9.9.9", []byte("payload"))
+	t.Setenv("DFLOW_UPDATE_API_URL", server.URL)
+
+	// A plain `go build` binary has no release provenance, so the warning fires.
+	binary := buildDflowCLI(t)
+
+	output, exitCode := startCLIRawOutput(t, time.Minute, t.TempDir(), binary, "update", "--check")
+	if exitCode != 0 {
+		t.Fatalf("update --check exited %d, want 0\n%s", exitCode, output)
+	}
+
+	lines := strings.Split(output, "\n")
+	warning := lineIndexContaining(lines, "no release provenance")
+	if warning == -1 {
+		t.Fatalf("the report must carry the provenance warning, got:\n%s", output)
+	}
+	if warning+2 >= len(lines) {
+		t.Fatalf("the provenance warning is not followed by a report in:\n%s", output)
+	}
+	if lines[warning+1] != "" {
+		t.Fatalf("a blank line must separate the provenance warning from the report; line %d = %q in:\n%s", warning+1, lines[warning+1], output)
+	}
+	if !strings.Contains(lines[warning+2], "current version:") {
+		t.Fatalf("the report must open with the current version after the blank line; line %d = %q in:\n%s", warning+2, lines[warning+2], output)
+	}
+}
+
 // TestUpdateCLICheckHumanShowsReleaseNotes pins the read-only report a user
 // actually reads: when the served release carries a changelog body, --check in
 // human mode shows a "what's new" section with the summarized lines, and the
@@ -256,12 +297,234 @@ func TestUpdateCLICheckHumanShowsReleaseNotes(t *testing.T) {
 	}
 }
 
+// TestUpdateCLICheckHumanDigestDropsTheVersionHeadingAndKeepsDenseBulletsWhole
+// pins the what's-new legibility contract from issue #30 at the level a user
+// meets it: against the body a curated release actually publishes, the release's
+// own version heading must not re-appear under the command's "what's new in vX:"
+// line, a version-free section heading must keep its marker, and one dense prose
+// bullet must reach the reader whole — no mid-word ellipsis, no clipped tail.
+//
+// The bullet was previously cut to a 100-rune item budget, which is what the
+// maintainer saw as mid-word truncation while the icon lines above filled the
+// terminal. That clamp is gone; the renderer now wraps at word boundaries when it
+// has a measured terminal width. This test runs the real binary with stdout on a
+// pipe, so the collected command is the unmeasured case and the contract it can
+// observe end to end is the truncation one: the full bullet appears and no
+// ellipsis does. The wrap geometry itself — where the continuation lines break and
+// how they hang under the item — is only observable with a measured width, so it
+// is pinned by the unit test in cmd/selfupdate
+// (TestSummarizeReleaseNotesWrapsBulletsAtWordBoundaries) rather than here.
+//
+// It also pins the spacing the maintainer asked for on the same issue: the
+// digest is an airy list rather than a wall of text, so the two bullets of a
+// section are separated by a genuinely empty line, a section's first bullet sits
+// directly under its heading, and each heading after bullets is opened by a blank
+// line. The empty line matters as much as its position: the renderer returns ""
+// and the caller must print it verbatim, so no line may be whitespace that only
+// looks blank.
+func TestUpdateCLICheckHumanDigestDropsTheVersionHeadingAndKeepsDenseBulletsWhole(t *testing.T) {
+	setUpCLIEnv(t)
+	// Keep the command's best-effort cache refresh out of the host's own cache.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	// Forty 10-rune words: far past the old 100-rune item clamp, so a
+	// reintroduced clip would be unmistakable in the assertions below.
+	words := make([]string, 40)
+	for i := range words {
+		words[i] = "legibility"
+	}
+	denseItem := strings.Join(words, " ")
+
+	body := "# Changelog\n\n" +
+		"## 📦 v9.9.9 – Self-Update, Installers & CLI Contracts\n\n" +
+		"### Added\n\n" +
+		"- surface the update notification\n" +
+		"- " + denseItem + "\n\n" +
+		"### Fixed\n\n" +
+		"- keep the current binary when a download fails\n"
+	server := updateNotesStartReleaseServer(t, "v9.9.9", []byte("payload"), body)
+	t.Setenv("DFLOW_UPDATE_API_URL", server.URL)
+
+	binary := buildDflowCLIWithMarker(t, "v0.1.0")
+
+	output, exitCode := startCLIRawOutput(t, time.Minute, t.TempDir(), binary, "update", "--check")
+	if exitCode != 0 {
+		t.Fatalf("update --check exited %d, want 0\n%s", exitCode, output)
+	}
+
+	if !strings.Contains(output, "what's new in v9.9.9:") {
+		t.Fatalf("human check output must open a notes summary for the newer release, got:\n%s", output)
+	}
+
+	// The version heading is gone outright: not even its emoji survives.
+	if strings.Contains(output, "📦") {
+		t.Fatalf("the release's own version heading must not be repeated under the command's header, got:\n%s", output)
+	}
+	// A heading without a version token is untouched and still marked.
+	if !strings.Contains(output, "▸ Added") {
+		t.Fatalf("a version-free section heading must keep its marker, got:\n%s", output)
+	}
+	// The dense bullet arrives whole. The old clamp cut it at 100 runes with an
+	// ellipsis, so the full text and the absence of any ellipsis are the two
+	// halves of "no mid-word truncation in the digest path".
+	if !strings.Contains(output, "• "+denseItem) {
+		t.Fatalf("the dense bullet must reach the terminal whole, not clipped, got:\n%s", output)
+	}
+	if strings.Contains(output, "…") {
+		t.Fatalf("the digest must not clip any line, so no ellipsis may appear, got:\n%s", output)
+	}
+
+	// Airy spacing: the first bullet sits directly under its heading, and the two
+	// bullets of the section are separated by an empty line instead of running
+	// back to back.
+	lines := strings.Split(output, "\n")
+	added := lineIndexContaining(lines, "▸ Added")
+	if added == -1 {
+		t.Fatalf("the first section heading must keep its marker, got:\n%s", output)
+	}
+	if added+1 >= len(lines) || !strings.Contains(lines[added+1], "• surface the update notification") {
+		t.Fatalf("the section's first bullet must sit directly under its heading with no blank between them, got %q after it in:\n%s", lineAt(lines, added+1), output)
+	}
+	second := lineIndexContaining(lines, "• "+denseItem)
+	if second == -1 {
+		t.Fatalf("the second bullet must keep its marker, got:\n%s", output)
+	}
+	if second == 0 || lines[second-1] != "" {
+		t.Fatalf("the second bullet of a section must be opened by an empty line, got %q before it in:\n%s", lineAt(lines, second-1), output)
+	}
+
+	// Presentation spacing: the second section heading and the closing release
+	// page are each opened by an empty line, and no line is whitespace pretending
+	// to be blank.
+	fixed := lineIndexContaining(lines, "▸ Fixed")
+	if fixed == -1 {
+		t.Fatalf("the second section heading must keep its marker, got:\n%s", output)
+	}
+	if fixed == 0 || lines[fixed-1] != "" {
+		t.Fatalf("the second section heading must be opened by an empty line, got %q before it in:\n%s", lines[fixed-1], output)
+	}
+	notes := lineIndexContaining(lines, "release notes: "+server.URL)
+	if notes == -1 {
+		t.Fatalf("the release page line must still close the report, got:\n%s", output)
+	}
+	if notes == 0 || lines[notes-1] != "" {
+		t.Fatalf("the release page line must be opened by an empty line, got %q before it in:\n%s", lines[notes-1], output)
+	}
+	for i, line := range lines {
+		if line != "" && strings.TrimSpace(line) == "" {
+			t.Fatalf("line %d is %q; a separator must be the empty string, never indented or padded whitespace, in:\n%s", i, line, output)
+		}
+	}
+}
+
+// TestUpdateCLICheckHumanDigestIsANSIFreeWhenPiped pins copy-paste fidelity for
+// the styling this change adds: section headings render bold only on a terminal,
+// so the piped digest a user captures with a redirect or a script must carry the
+// heading text and nothing else. The heading line is asserted with an exact
+// match rather than a substring, because an unconditional "\033[1m" prefix would
+// still satisfy a Contains check and quietly corrupt a copied digest.
+func TestUpdateCLICheckHumanDigestIsANSIFreeWhenPiped(t *testing.T) {
+	setUpCLIEnv(t)
+	// Keep the command's best-effort cache refresh out of the host's own cache.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	body := "## What's changed\n\n### Added\n\n- surface the update notification\n"
+	server := updateNotesStartReleaseServer(t, "v9.9.9", []byte("payload"), body)
+	t.Setenv("DFLOW_UPDATE_API_URL", server.URL)
+
+	binary := buildDflowCLIWithMarker(t, "v0.1.0")
+
+	output, exitCode := startCLIRawOutput(t, time.Minute, t.TempDir(), binary, "update", "--check")
+	if exitCode != 0 {
+		t.Fatalf("update --check exited %d, want 0\n%s", exitCode, output)
+	}
+
+	if strings.Contains(output, "\033") {
+		t.Fatalf("piped output must carry no ANSI escape codes, got:\n%q", output)
+	}
+	lines := strings.Split(output, "\n")
+	added := lineIndexContaining(lines, "▸ Added")
+	if added == -1 {
+		t.Fatalf("the section heading must appear in the digest, got:\n%s", output)
+	}
+	if got := lines[added]; got != "  ▸ Added" {
+		t.Fatalf("the piped heading line = %q, want exactly %q with no styling", got, "  ▸ Added")
+	}
+}
+
+// TestUpdateCLICheckHumanKeepsADigestPastTheRemovedLineCap pins the other
+// maintainer decision from the same screenshot feedback: the forty-physical-line
+// budget is gone, and the four-thousand-rune character budget is the only flood
+// guard left. The body below renders fifty-two physical content lines, twelve
+// more than the removed cap ever allowed, for well under three hundred runes, so
+// every bullet must reach the terminal and no ellipsis may appear.
+//
+// Before the change this digest ended early with "…", which is the defect the
+// screenshot showed: a release clipped for how many lines it rendered, not for
+// how much it said. The closing bullet is the load-bearing assertion, because a
+// reintroduced line budget would drop exactly that one.
+func TestUpdateCLICheckHumanKeepsADigestPastTheRemovedLineCap(t *testing.T) {
+	setUpCLIEnv(t)
+	// Keep the command's best-effort cache refresh out of the host's own cache.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	const bullets = 51
+	var body strings.Builder
+	body.WriteString("### Fixed\n\n")
+	for i := 1; i <= bullets; i++ {
+		fmt.Fprintf(&body, "- item %02d\n", i)
+	}
+
+	server := updateNotesStartReleaseServer(t, "v9.9.9", []byte("payload"), body.String())
+	t.Setenv("DFLOW_UPDATE_API_URL", server.URL)
+
+	binary := buildDflowCLIWithMarker(t, "v0.1.0")
+
+	output, exitCode := startCLIRawOutput(t, time.Minute, t.TempDir(), binary, "update", "--check")
+	if exitCode != 0 {
+		t.Fatalf("update --check exited %d, want 0\n%s", exitCode, output)
+	}
+
+	last := fmt.Sprintf("• item %02d", bullets)
+	if !strings.Contains(output, last) {
+		t.Fatalf("the closing bullet %q must reach the terminal: the character budget is the only flood guard, got:\n%s", last, output)
+	}
+	if strings.Contains(output, "…") {
+		t.Fatalf("the digest must not be clipped by length, so no ellipsis may appear, got:\n%s", output)
+	}
+}
+
+// lineIndexContaining returns the index of the first output line carrying the
+// given text, or -1 when no line does. Locating a line by content lets a
+// spacing assertion name the line it must precede without depending on the
+// report's other lines, whose exact count is not this test's contract.
+func lineIndexContaining(lines []string, text string) int {
+	for i, line := range lines {
+		if strings.Contains(line, text) {
+			return i
+		}
+	}
+	return -1
+}
+
+// lineAt returns the line at index i, or a marker for an out-of-range index, so
+// a spacing failure message can quote the neighbour it checked without the
+// assertion having to repeat the bounds test.
+func lineAt(lines []string, i int) string {
+	if i < 0 || i >= len(lines) {
+		return "<no such line>"
+	}
+	return lines[i]
+}
+
 // TestUpdateCLICheckHumanOmitsNotesWhenReleaseBodyIsEmpty pins the degradation
 // the maintainer accepted: when the published release body is empty, the reader
 // gets no "what's new" section at all. The report must stay well-formed — the
-// version lines and the verdict are still printed, and the release-page line
-// closes the report immediately after the verdict, with no empty heading and no
-// blank line where the missing section would have gone.
+// version lines and the verdict are still printed, no empty heading appears, and
+// the omitted section leaves no gap of its own. The release-page line still
+// closes the report, opened by the single blank line reportHumanReleaseURL now
+// prints, so the omission is visible as content missing rather than as a hole
+// between the verdict and the link.
 func TestUpdateCLICheckHumanOmitsNotesWhenReleaseBodyIsEmpty(t *testing.T) {
 	setUpCLIEnv(t)
 	// Keep the command's best-effort cache refresh out of the host's own cache.
@@ -289,42 +552,39 @@ func TestUpdateCLICheckHumanOmitsNotesWhenReleaseBodyIsEmpty(t *testing.T) {
 		t.Fatalf("an empty release body must not cost the reader the update verdict, got:\n%s", output)
 	}
 
-	// No empty heading, and no dangling separator: the release-page line comes
-	// directly after the verdict with nothing in between.
+	// An empty body opens no heading, so the only blank line in the report is the
+	// one the release page brings with it.
 	if strings.Contains(output, "what's new") {
 		t.Fatalf("an empty release body must not open a what's-new section, got:\n%s", output)
 	}
 
 	// Split on the line separator and drop only the single trailing newline, so
-	// any extra blank line remains visible to the check below.
+	// the spacing between lines remains visible to the checks below.
 	lines := strings.Split(output, "\n")
 	if len(lines) > 0 && lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
 	}
 
-	verdict := -1
-	for i, line := range lines {
-		if strings.Contains(line, "an update is available") {
-			verdict = i
-			break
+	notes := lineIndexContaining(lines, "release notes: "+server.URL)
+	if notes == -1 {
+		t.Fatalf("the release-page line is missing from:\n%s", output)
+	}
+	// The release page is opened by one blank line, and that blank line follows
+	// the verdict: the omitted section adds no gap of its own.
+	if notes < 2 || lines[notes-1] != "" || !strings.Contains(lines[notes-2], "an update is available") {
+		t.Fatalf("the release-page line must be opened by one blank line directly after the verdict, got %q before it in:\n%s", lines[notes-1], output)
+	}
+	if notes != len(lines)-1 {
+		t.Fatalf("the release-page line must close the report, but %d line(s) follow it in:\n%s", len(lines)-1-notes, output)
+	}
+	blanks := 0
+	for _, line := range lines {
+		if line == "" {
+			blanks++
 		}
 	}
-	if verdict == -1 {
-		t.Fatalf("could not find the update verdict line in:\n%s", output)
-	}
-	if verdict == len(lines)-1 {
-		t.Fatalf("the verdict line is the last line; the release-page line is missing from:\n%s", output)
-	}
-	if !strings.Contains(lines[verdict+1], "release notes: "+server.URL) {
-		t.Fatalf("the release-page line must follow the verdict directly, with no dangling section between them; line %d = %q in:\n%s", verdict+1, lines[verdict+1], output)
-	}
-	if verdict+1 != len(lines)-1 {
-		t.Fatalf("the release-page line must close the report, but %d line(s) follow it in:\n%s", len(lines)-1-(verdict+1), output)
-	}
-	for i, line := range lines {
-		if strings.TrimSpace(line) == "" {
-			t.Fatalf("line %d is blank; an omitted notes section must not leave a gap in:\n%s", i, output)
-		}
+	if blanks != 1 {
+		t.Fatalf("found %d blank lines, want exactly 1 (the one opening the release page) in:\n%s", blanks, output)
 	}
 }
 
