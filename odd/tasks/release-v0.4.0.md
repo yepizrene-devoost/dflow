@@ -142,7 +142,7 @@ strictly read-only by construction (`cmd/commands/agent.go` returns from the
 
 ## Commit identity
 
-- WU1 + WU2 land as one work-unit commit — pending, recorded in the `docs(odd)`
-  follow-up that closes this stage. They are one curation act over two files;
-  the two stages were tracked separately for their surfaces, not for their
-  commits.
+- WU1 + WU2: `0279a28` (`chore(release): prepare the v0.4.0 notes and history
+  entry`), on `release/v0.4.0`. They are one curation act over two files; the two
+  stages were tracked separately for their surfaces, not for their commits.
+- The review candidate is the branch diff against `develop` at `c5c1851`.
