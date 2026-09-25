@@ -124,3 +124,13 @@ problem anywhere an icon line exceeds the width. Presentation only:
       interleave in `cmd/commands/update.go` and `cmd/tests/update_cli_test.go`,
       so both units land as one commit to keep every commit green; the review
       was already planned as combined.
+
+## Work-unit commit identity (combined)
+
+- `2bbe807` feat(update): clamp digest items and drop the version heading (WU1)
+- `6171857` feat(update): space and wrap the update report for terminal
+  legibility (WU2 + WU3; hunks interleave in two shared files, so one commit
+  keeps every commit green — see T13)
+- Review declaration: `6171857` is the frozen candidate for the combined native
+  RDD review of work units 2 and 3; expected outcome is an ordinary review over
+  the diff against `a995653`.
