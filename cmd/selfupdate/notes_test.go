@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // TestSummarizeReleaseNotes covers the line-shaping rules a reader depends on:
@@ -65,9 +66,10 @@ func TestSummarizeReleaseNotes(t *testing.T) {
 }
 
 // TestSummarizeReleaseNotesRendersTerminalShapedLines pins the Markdown-to-
-// terminal rendering: the redundant top title disappears, headings lose their
-// hashes behind a marker, bullets swap their dash while keeping indentation, and
-// everything else — inline code included — passes through untouched.
+// terminal rendering: the redundant top title and the release's own version
+// heading disappear, version-free headings lose their hashes behind a marker,
+// bullets swap their dash while keeping indentation, and everything else —
+// inline code included — passes through untouched.
 func TestSummarizeReleaseNotesRendersTerminalShapedLines(t *testing.T) {
 	cases := []struct {
 		name string
@@ -76,8 +78,13 @@ func TestSummarizeReleaseNotesRendersTerminalShapedLines(t *testing.T) {
 	}{
 		{
 			name: "h2 heading",
-			body: "## 📦 v0.2.0 – Finish Automation",
-			want: []string{"▸ 📦 v0.2.0 – Finish Automation"},
+			body: "## What's changed",
+			want: []string{"▸ What's changed"},
+		},
+		{
+			name: "h2 heading carrying the release version is dropped",
+			body: "## 📦 v0.3.0 – Self-Update, Installers & CLI Contracts",
+			want: []string{},
 		},
 		{
 			name: "h3 heading",
@@ -97,7 +104,7 @@ func TestSummarizeReleaseNotesRendersTerminalShapedLines(t *testing.T) {
 		{
 			name: "heading and bullets together",
 			body: "## 📦 v0.2.0\n### Added\n- `dflow finish` command",
-			want: []string{"▸ 📦 v0.2.0", "▸ Added", "• `dflow finish` command"},
+			want: []string{"▸ Added", "• `dflow finish` command"},
 		},
 		{
 			name: "indented bullet keeps its indentation",
@@ -133,8 +140,14 @@ func TestSummarizeReleaseNotesRendersTerminalShapedLines(t *testing.T) {
 
 // TestSummarizeReleaseNotesRendersARealReleaseBody pins the whole contract
 // against the shape GoReleaser actually publishes, the one a maintainer saw
-// rendered as raw markup: the duplicated top title, the version heading, the
-// section headings and the bullet list.
+// rendered as raw markup: the duplicated top title and the release's own version
+// heading are both gone, while the section headings and the bullet list still
+// render.
+//
+// The version heading is the legibility fix from issue #30: the command already
+// prints "what's new in v0.2.0:" from the release tag, so rendering
+// "▸ 📦 v0.2.0 – Finish Automation" right below it would spend the reader's first
+// summary line repeating the version they just read.
 func TestSummarizeReleaseNotesRendersARealReleaseBody(t *testing.T) {
 	body := "# Changelog\n" +
 		"\n" +
@@ -152,7 +165,6 @@ func TestSummarizeReleaseNotesRendersARealReleaseBody(t *testing.T) {
 	got := SummarizeReleaseNotes(body)
 
 	want := []string{
-		"▸ 📦 v0.2.0 – Finish Automation",
 		"▸ Added",
 		"• `dflow finish` command to close a feature branch",
 		"• `dflow update` command to install the latest release",
@@ -161,6 +173,11 @@ func TestSummarizeReleaseNotesRendersARealReleaseBody(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("SummarizeReleaseNotes(release body) = %#v, want %#v", got, want)
+	}
+	for _, line := range got {
+		if strings.Contains(line, "📦") {
+			t.Fatalf("summary = %#v, want the release's own version heading dropped: it repeats the version the command already printed", got)
+		}
 	}
 }
 
@@ -179,6 +196,78 @@ func TestSummarizeReleaseNotesDropsTheH1Title(t *testing.T) {
 	}
 	if slices.Contains(got, "…") {
 		t.Fatalf("summary = %#v, want no ellipsis: dropping the title is formatting, not truncation", got)
+	}
+}
+
+// TestSummarizeReleaseNotesDropsTheVersionHeading pins the issue #30 rule on
+// its own: a section heading whose text carries a semantic-version token is the
+// release's own version heading, so it is dropped exactly like the H1 title
+// rather than rendered under the "what's new in vX:" line the caller prints.
+//
+// The rule is deliberately mechanical — any heading depth, an optional leading
+// "v", the version anywhere in the text — so it does not depend on how a
+// maintainer words or places the heading. A version-free heading is the control
+// that proves the rule keyed on the version token and not on headings in
+// general.
+func TestSummarizeReleaseNotesDropsTheVersionHeading(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want []string
+	}{
+		{
+			name: "the curated v0.3.0 heading disappears",
+			body: "## 📦 v0.3.0 – Self-Update, Installers & CLI Contracts",
+			want: []string{},
+		},
+		{
+			name: "a bare version without the leading v also disappears",
+			body: "## 0.3.0",
+			want: []string{},
+		},
+		{
+			name: "a deeper heading carrying a version disappears too",
+			body: "### Fixed in v0.4.1",
+			want: []string{},
+		},
+		{
+			name: "a version-free heading keeps its marker",
+			body: "### Added",
+			want: []string{"▸ Added"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := SummarizeReleaseNotes(tc.body)
+
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("SummarizeReleaseNotes(%q) = %#v, want %#v", tc.body, got, tc.want)
+			}
+			// Dropping a heading removes formatting, not content: the body was not
+			// blank, so an all-dropped body is an empty, non-nil summary.
+			if got == nil {
+				t.Fatalf("SummarizeReleaseNotes(%q) = nil, want an empty, non-nil summary: the body was not blank", tc.body)
+			}
+		})
+	}
+}
+
+// TestSummarizeReleaseNotesDropsTheVersionHeadingWithoutAnEllipsis pins the
+// bookkeeping consequence of the version-heading rule: like the top title, the
+// heading is formatting rather than content, so dropping it must not make a
+// complete summary look truncated.
+func TestSummarizeReleaseNotesDropsTheVersionHeadingWithoutAnEllipsis(t *testing.T) {
+	body := "## 📦 v0.3.0 – Self-Update, Installers & CLI Contracts\n\n### Added\n\n- a short item\n"
+
+	got := SummarizeReleaseNotes(body)
+
+	want := []string{"▸ Added", "• a short item"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("SummarizeReleaseNotes(%q) = %#v, want %#v", body, got, want)
+	}
+	if slices.Contains(got, "…") {
+		t.Fatalf("summary = %#v, want no ellipsis: dropping the version heading is formatting, not truncation", got)
 	}
 }
 
@@ -242,6 +331,127 @@ func TestSummarizeReleaseNotesDistinguishesBlankFromNothingRenderable(t *testing
 				t.Fatalf("SummarizeReleaseNotes(%q) = %#v, want no renderable lines", tc.body, got)
 			}
 		})
+	}
+}
+
+// TestSummarizeReleaseNotesClampsBulletItems pins the issue #30 legibility fix
+// for dense prose: a bullet's item text is clamped to maxReleaseNotesItemChars
+// runes, so one long sentence cannot wrap across several terminal lines and
+// break mid-word. A clipped item keeps the budget's worth of text and ends with
+// the same ellipsis character the truncation line uses, with no space before it.
+//
+// The clamp is a bound on the item text itself — marker and indentation are not
+// part of it — and it counts runes rather than bytes, so a non-ASCII bullet is
+// clipped at the same visible width as an ASCII one. A bullet at or under the
+// budget must come through byte-for-byte unchanged, otherwise the fix would
+// rewrite notes that were already readable.
+func TestSummarizeReleaseNotesClampsBulletItems(t *testing.T) {
+	clipped := strings.Repeat("x", maxReleaseNotesItemChars-1) + releaseNotesEllipsis
+
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "a bullet at exactly the budget is unchanged",
+			body: "- " + strings.Repeat("x", maxReleaseNotesItemChars),
+			want: "• " + strings.Repeat("x", maxReleaseNotesItemChars),
+		},
+		{
+			name: "a bullet one rune under the budget is unchanged",
+			body: "- " + strings.Repeat("x", maxReleaseNotesItemChars-1),
+			want: "• " + strings.Repeat("x", maxReleaseNotesItemChars-1),
+		},
+		{
+			name: "a bullet one rune over the budget is clipped to it",
+			body: "- " + strings.Repeat("x", maxReleaseNotesItemChars+1),
+			want: "• " + clipped,
+		},
+		{
+			name: "a much longer bullet clips to the same budget",
+			body: "- " + strings.Repeat("x", 400),
+			want: "• " + clipped,
+		},
+		{
+			name: "clipping preserves a nested bullet's indentation",
+			body: "  - " + strings.Repeat("x", 400),
+			want: "  • " + clipped,
+		},
+		{
+			name: "clipping counts runes, not bytes",
+			body: "- " + strings.Repeat("é", 400),
+			want: "• " + strings.Repeat("é", maxReleaseNotesItemChars-1) + releaseNotesEllipsis,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := SummarizeReleaseNotes(tc.body)
+
+			if len(got) != 1 || got[0] != tc.want {
+				t.Fatalf("SummarizeReleaseNotes(%q) = %#v, want [%q]", tc.body, got, tc.want)
+			}
+			// The budget bounds the content after the marker, wherever the marker
+			// starts: that is the width the reader actually has to scan.
+			item := got[0][strings.Index(got[0], releaseNotesBulletMarker)+len(releaseNotesBulletMarker):]
+			if count := utf8.RuneCountInString(item); count > maxReleaseNotesItemChars {
+				t.Fatalf("item text %q is %d runes, want at most %d", item, count, maxReleaseNotesItemChars)
+			}
+		})
+	}
+}
+
+// TestSummarizeReleaseNotesDoesNotClampHeadingsOrPlainLines is the negative half
+// of the item clamp: the budget exists for dense prose bullets, not for every
+// line, so a long heading and a long plain paragraph are still governed by the
+// global caps alone. Widening the clamp to them would silently cut section
+// titles and quoted text that a maintainer deliberately wrote on one line.
+func TestSummarizeReleaseNotesDoesNotClampHeadingsOrPlainLines(t *testing.T) {
+	long := strings.Repeat("x", maxReleaseNotesItemChars*2)
+	body := "## " + long + "\n" + long
+
+	got := SummarizeReleaseNotes(body)
+
+	want := []string{releaseNotesHeadingMarker + long, long}
+	if !slices.Equal(got, want) {
+		t.Fatalf("SummarizeReleaseNotes(%q) = %#v, want %#v", body, got, want)
+	}
+}
+
+// TestSummarizeReleaseNotesClampedBulletsStillRespectTheGlobalCaps fixes the
+// ordering between the two bounds: the item clamp runs per line while the line
+// is shaped, and the global caps then measure the shorter rendered strings. A
+// body of many long bullets must therefore keep as many clamped bullets as the
+// character budget allows, announce the rest with one ellipsis, and never let a
+// clamped bullet sneak past the global budget as if it were still full length.
+func TestSummarizeReleaseNotesClampedBulletsStillRespectTheGlobalCaps(t *testing.T) {
+	// A clamped bullet renders as the two-rune marker plus exactly the item
+	// budget, so the character budget admits a fixed number of them.
+	renderedLen := utf8.RuneCountInString(releaseNotesBulletMarker) + maxReleaseNotesItemChars
+	fit := maxReleaseNotesChars / renderedLen
+
+	// One more bullet than fits, plus one more again so the tail is unambiguous.
+	bullets := make([]string, 0, fit+2)
+	for i := 0; i < fit+2; i++ {
+		bullets = append(bullets, "- "+strings.Repeat("x", maxReleaseNotesItemChars*3))
+	}
+
+	got := SummarizeReleaseNotes(strings.Join(bullets, "\n"))
+
+	if len(got) != fit+1 {
+		t.Fatalf("len = %d, want %d (%d clamped bullets plus the ellipsis)", len(got), fit+1, fit)
+	}
+	for i := 0; i < fit; i++ {
+		if utf8.RuneCountInString(got[i]) != renderedLen {
+			t.Fatalf("bullet %d is %d runes, want the clamped %d", i, utf8.RuneCountInString(got[i]), renderedLen)
+		}
+		if !strings.HasSuffix(got[i], releaseNotesEllipsis) {
+			t.Fatalf("bullet %d = %q, want it to end in the clipping ellipsis", i, got[i])
+		}
+	}
+	if got[fit] != releaseNotesEllipsis {
+		t.Fatalf("final line = %q, want the ellipsis %q", got[fit], releaseNotesEllipsis)
 	}
 }
 

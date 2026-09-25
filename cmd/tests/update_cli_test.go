@@ -256,6 +256,75 @@ func TestUpdateCLICheckHumanShowsReleaseNotes(t *testing.T) {
 	}
 }
 
+// TestUpdateCLICheckHumanDigestDropsTheVersionHeadingAndClampsDenseBullets pins
+// the what's-new legibility contract from issue #30 at the level a user meets it:
+// against the body a curated release actually publishes, the release's own
+// version heading must not re-appear under the command's "what's new in vX:"
+// line, a version-free section heading must keep its marker, and one dense prose
+// bullet must arrive clipped to the item budget instead of wrapping across
+// several terminal lines.
+//
+// The budget is pinned here as a literal rather than read from the package: it
+// is unexported, so this test is the caller-visible width that would catch a
+// silent change to it, which the package's own unit tests would happily follow.
+// The fixture reuses one 11-rune word, so a 99-rune prefix plus the ellipsis is
+// exactly nine whole repetitions and the expected line needs no partial word.
+func TestUpdateCLICheckHumanDigestDropsTheVersionHeadingAndClampsDenseBullets(t *testing.T) {
+	setUpCLIEnv(t)
+	// Keep the command's best-effort cache refresh out of the host's own cache.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	const itemBudget = 100
+	clippedItem := strings.Repeat("legibility ", 9) + "…"
+	denseItem := strings.Repeat("legibility ", 40)
+
+	body := "# Changelog\n\n" +
+		"## 📦 v9.9.9 – Self-Update, Installers & CLI Contracts\n\n" +
+		"### Added\n\n" +
+		"- surface the update notification\n" +
+		"- " + denseItem + "\n"
+	server := updateNotesStartReleaseServer(t, "v9.9.9", []byte("payload"), body)
+	t.Setenv("DFLOW_UPDATE_API_URL", server.URL)
+
+	binary := buildDflowCLIWithMarker(t, "v0.1.0")
+
+	output, exitCode := startCLIRawOutput(t, time.Minute, t.TempDir(), binary, "update", "--check")
+	if exitCode != 0 {
+		t.Fatalf("update --check exited %d, want 0\n%s", exitCode, output)
+	}
+
+	if !strings.Contains(output, "what's new in v9.9.9:") {
+		t.Fatalf("human check output must open a notes summary for the newer release, got:\n%s", output)
+	}
+
+	// The version heading is gone outright: not even its emoji survives.
+	if strings.Contains(output, "📦") {
+		t.Fatalf("the release's own version heading must not be repeated under the command's header, got:\n%s", output)
+	}
+	// Dropping it is formatting, not truncation, so it must not add a truncation
+	// line either.
+	for _, line := range strings.Split(output, "\n") {
+		if strings.TrimSpace(line) == "…" {
+			t.Fatalf("dropping the version heading must not add a truncation line, got:\n%s", output)
+		}
+	}
+	// A heading without a version token is untouched and still marked.
+	if !strings.Contains(output, "▸ Added") {
+		t.Fatalf("a version-free section heading must keep its marker, got:\n%s", output)
+	}
+	// The dense bullet arrives at the item budget, ellipsis included, and not one
+	// rune wider.
+	if !strings.Contains(output, "• "+clippedItem) {
+		t.Fatalf("a dense bullet must be clipped to a %d-rune item ending in an ellipsis, got:\n%s", itemBudget, output)
+	}
+	if strings.Contains(output, strings.Repeat("legibility ", 10)) {
+		t.Fatalf("the dense bullet must not reach the terminal at full length, got:\n%s", output)
+	}
+	if !strings.Contains(output, "release notes: "+server.URL) {
+		t.Fatalf("the release page line must still close the report, got:\n%s", output)
+	}
+}
+
 // TestUpdateCLICheckHumanOmitsNotesWhenReleaseBodyIsEmpty pins the degradation
 // the maintainer accepted: when the published release body is empty, the reader
 // gets no "what's new" section at all. The report must stay well-formed — the
