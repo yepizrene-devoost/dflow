@@ -32,8 +32,7 @@ const AgentSpecAll = "all"
 // Agent is one supported coding agent and the discovery surfaces dflow targets
 // for it.
 type Agent struct {
-	ID          AgentID
-	DisplayName string
+	ID AgentID
 	// Instructions lists the instruction files this agent reads, in discovery
 	// order (earlier files win when the agent merges several).
 	Instructions []string
@@ -52,28 +51,24 @@ type Agent struct {
 var registry = []Agent{
 	{
 		ID:           AgentPi,
-		DisplayName:  "Pi",
 		Instructions: []string{"AGENTS.md", "CLAUDE.md"},
 		SkillDir:     ".agents/skills",
 		UserSkillDir: "~/.agents/skills",
 	},
 	{
 		ID:           AgentCodex,
-		DisplayName:  "Codex",
 		Instructions: []string{"AGENTS.md"},
 		SkillDir:     ".agents/skills",
 		UserSkillDir: "~/.codex/skills",
 	},
 	{
 		ID:           AgentOpenCode,
-		DisplayName:  "opencode",
 		Instructions: []string{"AGENTS.md"},
 		SkillDir:     ".agents/skills",
 		UserSkillDir: "~/.config/opencode/skills",
 	},
 	{
 		ID:           AgentClaude,
-		DisplayName:  "Claude Code",
 		Instructions: []string{"CLAUDE.md"},
 		SkillDir:     ".claude/skills",
 		UserSkillDir: "~/.claude/skills",

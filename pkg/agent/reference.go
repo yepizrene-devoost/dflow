@@ -122,10 +122,12 @@ func appendReference(content, block string) string {
 	return content + "\n" + block
 }
 
-// createInstructionFile creates path and its parents, then writes the block.
+// createInstructionFile creates path and its parents, then writes the block at
+// mode 0644.
 //
 // The create goes through the same atomic replacement as the overwrite: an
-// interrupted create must not leave a truncated file either.
+// interrupted create must not leave a truncated file either. A new file has no
+// prior mode to honor, so 0644 is both the default and the final mode.
 func createInstructionFile(path, block string) error {
 	if dir := filepath.Dir(path); dir != "" {
 		if err := os.MkdirAll(dir, 0755); err != nil {
@@ -138,13 +140,22 @@ func createInstructionFile(path, block string) error {
 	return nil
 }
 
-// writeInstructionFile overwrites path with content at mode 0644.
+// writeInstructionFile overwrites path with content, preserving path's mode.
 //
 // The overwrite goes through the same atomic replacement the skill installer
 // uses, so an interrupted run leaves the previous file whole rather than a
-// truncated one.
+// truncated one. Because writeFileAtomic always applies the mode it is handed,
+// this function stats the existing file and passes its permission bits through;
+// an overwrite must not widen a 0600 AGENTS.md to 0644. A file that does not
+// exist yet falls back to 0644, matching the create path.
 func writeInstructionFile(path, content string) error {
-	if err := writeFileAtomic(path, []byte(content), 0644); err != nil {
+	mode := os.FileMode(0644)
+	if info, err := os.Stat(path); err == nil {
+		mode = info.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("stat instruction file %s: %w", path, err)
+	}
+	if err := writeFileAtomic(path, []byte(content), mode); err != nil {
 		return fmt.Errorf("write instruction file %s: %w", path, err)
 	}
 	return nil

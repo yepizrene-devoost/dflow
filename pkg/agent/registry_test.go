@@ -13,28 +13,24 @@ func wantRegistry() []Agent {
 	return []Agent{
 		{
 			ID:           AgentPi,
-			DisplayName:  "Pi",
 			Instructions: []string{"AGENTS.md", "CLAUDE.md"},
 			SkillDir:     ".agents/skills",
 			UserSkillDir: "~/.agents/skills",
 		},
 		{
 			ID:           AgentCodex,
-			DisplayName:  "Codex",
 			Instructions: []string{"AGENTS.md"},
 			SkillDir:     ".agents/skills",
 			UserSkillDir: "~/.codex/skills",
 		},
 		{
 			ID:           AgentOpenCode,
-			DisplayName:  "opencode",
 			Instructions: []string{"AGENTS.md"},
 			SkillDir:     ".agents/skills",
 			UserSkillDir: "~/.config/opencode/skills",
 		},
 		{
 			ID:           AgentClaude,
-			DisplayName:  "Claude Code",
 			Instructions: []string{"CLAUDE.md"},
 			SkillDir:     ".claude/skills",
 			UserSkillDir: "~/.claude/skills",

@@ -212,16 +212,40 @@ none of them is a delivery risk for this repository's CI any more.
    after the first install and asserts all of it, including the absence of the
    "Generated agent workflow" line.
 
-4. [ ] WU5 — advisory follow-ups from the WU2 review, added after that review:
+4. [x] WU5 — advisory follow-ups from the WU2 review, added after that review:
        the `R1-nonatomic-instruction-overwrite` WARNING (`pkg/agent/reference.go`
-       still truncates in place and must adopt the atomic writer WU3 added) plus
+       still truncated in place and must adopt the atomic writer WU3 added) plus
        the five readability suggestions. Parent decision: fixed inside this
        branch rather than deferred to an issue.
+       Addressed in this unit:
+       - `R1-nonatomic-instruction-overwrite` — mode-preservation regression from
+         the R4-001 correction: `writeInstructionFile` now stats the target and
+         passes its `Mode().Perm()` through `writeFileAtomic`, falling back to 0644
+         only when the file does not exist. Pinned by an inode + mode test.
+       - `R2-unused-displayname-field` — `DisplayName` removed from the `Agent`
+         struct and all registry entries; it was unreferenced in production code.
+       Informational / by-design (not changed):
+       - `R1-skill-overwrite-unforced` — the `SKILL.md` is dflow-owned and kept
+         current without `--force`; this is the intended behavior, not a defect.
+       - `R2-append-adjacency-uniqueness` — the adjacency uniqueness check in
+         `appendUniqueAgent` is correct for registry-ordered input.
+       - `R2-json-agents-field-is-registry-fact` — the agents field is
+         intentionally a registry fact, not a selection projection.
+       - `R2-skillfileexists-conflation` — the same helper serves the CLI and the
+         JSON reporter; there is no conflation.
+       - `R4-002` (CRITICAL, resilience) — refuted by the targeted validator;
+         not actionable.
 5. [ ] WU4 — docs and verification: README section for the multi-agent wiring,
        the discovery table and the install flow; `go test ./...`,
        `golangci-lint run ./...`, and a smoke run of each new flag combination.
        Runs last so the docs describe the final state.
-6. [ ] Commit identity recorded.
+## Work-unit commit identity (WU5)
+
+- Review declaration: this commit is the frozen candidate for the native RDD
+  review of work unit 5; the expected outcome is an ordinary review over the
+  diff against `2944582` (develop at branch time).
+- Commit SHA and review outcome: recorded in the next work-unit commit, never
+  pre-written here.
 
 ## Work-unit commit identity (WU1)
 

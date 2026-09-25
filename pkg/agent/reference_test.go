@@ -216,6 +216,63 @@ func TestEnsureInstructionReferenceReplacesTheFileRatherThanTruncatingIt(t *test
 	}
 }
 
+// An overwrite must preserve whatever mode the existing file had. os.WriteFile
+// preserved it because the perm argument only applies at creation, and routing
+// the overwrite through writeFileAtomic must not silently widen a 0600 AGENTS.md
+// to 0644 on every rewrite.
+//
+// The check is POSIX-only because file modes are.
+func TestEnsureInstructionReferencePreservesExistingFileMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file modes are a POSIX filesystem detail")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "AGENTS.md")
+	// A delimited block naming another workflow path drives the overwrite branch.
+	writeFile(t, path, "before\n"+ReferenceBlock("old/path.md")+"after\n")
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatalf("chmod %s: %v", path, err)
+	}
+	before := inodeOf(t, path)
+
+	changed, err := EnsureInstructionReference(path, testWorkflowPath)
+	if err != nil {
+		t.Fatalf("EnsureInstructionReference() error: %v", err)
+	}
+	if !changed {
+		t.Fatal("changed = false, want true when the block content differs")
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat %s: %v", path, err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf("overwritten file mode = %o, want 600 (the mode of the file it replaced)", got)
+	}
+	if after := inodeOf(t, path); before == after {
+		t.Errorf("the instruction file kept inode %d, so it was rewritten in place instead of replaced atomically", before)
+	}
+
+	want := "before\n" + referenceBlockPin(testWorkflowPath) + "after\n"
+	if got := readFile(t, path); got != want {
+		t.Errorf("overwritten file =\n%q\nwant\n%q", got, want)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read %s: %v", dir, err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	if len(names) != 1 || names[0] != "AGENTS.md" {
+		t.Fatalf("%s holds %v, want exactly [AGENTS.md]", dir, names)
+	}
+}
+
 // Rule 5: start marker without end marker -> no-op, never guess the boundary.
 func TestEnsureInstructionReferenceStartWithoutEndIsNoOp(t *testing.T) {
 	dir := t.TempDir()
