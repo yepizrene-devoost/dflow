@@ -19,8 +19,9 @@ import (
 // file mode, an error's identity — rather than about the shape of the
 // implementation, and the discriminating ones are chosen so a plausible wrong
 // implementation fails them: a caller-ordered plan instead of a registry-ordered
-// one, a rewrite of identical bytes instead of a no-op, an unresolved "~", a
-// leftover temporary file.
+// one, a rewrite of identical bytes instead of a no-op, an overwrite that widens
+// a 0600 mode to 0644 instead of preserving it, an unresolved "~", a leftover
+// temporary file.
 
 // skillFileContent is the content the install tests write: the opening of the
 // generated document, recognisable in a failure message.
@@ -251,7 +252,13 @@ func TestInstallSkillCreatesAbsentFile(t *testing.T) {
 
 // Rule 2: identical bytes are a no-op. The pre-existing mode is what makes
 // "untouched" observable: a rewrite through a temporary file would restore 0644.
+//
+// The check is POSIX-only because file modes are.
 func TestInstallSkillLeavesIdenticalBytesUntouched(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file modes are a POSIX filesystem detail")
+	}
+
 	dir := installedSkillDir(t)
 	path := filepath.Join(dir, SkillFileName)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -307,7 +314,40 @@ func TestInstallSkillRewritesDifferentBytesWithoutForce(t *testing.T) {
 	requireInstalledSkill(t, path, skillFileContent, 0644)
 }
 
-// Rule 4: a "~"-prefixed directory is resolved through the user's home
+// Rule 4: a rewrite preserves the mode of the file it replaces. A SKILL.md a
+// user installed by hand with mode 0600 must not be widened to 0644 just because
+// dflow refreshed its bytes: the write applies the previous file's permission
+// bits, exactly as the instruction reference writer does.
+//
+// The check is POSIX-only because file modes are.
+func TestInstallSkillPreservesExistingFileMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file modes are a POSIX filesystem detail")
+	}
+
+	dir := installedSkillDir(t)
+	path := filepath.Join(dir, SkillFileName)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("mkdir for %s: %v", dir, err)
+	}
+	if err := os.WriteFile(path, []byte("# an older dflow document\n"), 0600); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+
+	changed, gotPath, err := InstallSkill(dir, []byte(skillFileContent))
+	if err != nil {
+		t.Fatalf("InstallSkill() error = %v, want nil", err)
+	}
+	if !changed {
+		t.Errorf("InstallSkill() changed = false, want true when the bytes differ")
+	}
+	if gotPath != path {
+		t.Errorf("InstallSkill() path = %q, want %q", gotPath, path)
+	}
+	requireInstalledSkill(t, path, skillFileContent, 0600)
+}
+
+// Rule 5: a "~"-prefixed directory is resolved through the user's home
 // directory, never left as a literal directory name.
 func TestInstallSkillExpandsTildeThroughTheHomeDirectory(t *testing.T) {
 	home := redirectHome(t)
@@ -357,7 +397,7 @@ func TestSkillFilePathResolvesBothRegistryForms(t *testing.T) {
 	}
 }
 
-// Rule 5: the write is atomic, so what it must never leave behind is a
+// Rule 6: the write is atomic, so what it must never leave behind is a
 // temporary file — on the create path or on the rewrite path.
 func TestInstallSkillLeavesNoTemporaryFileBehind(t *testing.T) {
 	dir := installedSkillDir(t)
@@ -382,7 +422,7 @@ func TestInstallSkillLeavesNoTemporaryFileBehind(t *testing.T) {
 	}
 }
 
-// Rule 5, the mechanism half: the replacement goes through a rename, which is
+// Rule 6, the mechanism half: the replacement goes through a rename, which is
 // what makes it atomic. A rename hands the target the temporary file's identity,
 // so the inode changes; truncating and rewriting the file in place would keep it
 // — and would be exactly the non-atomic write the rule exists to forbid.
@@ -423,7 +463,7 @@ func inodeOf(t *testing.T, path string) uint64 {
 	return stat.Ino
 }
 
-// Rule 6: failures are wrapped, naming the operation and the path and keeping
+// Rule 7: failures are wrapped, naming the operation and the path and keeping
 // the underlying error reachable through errors.Is.
 func TestInstallSkillWrapsFilesystemErrors(t *testing.T) {
 	content := []byte(skillFileContent)

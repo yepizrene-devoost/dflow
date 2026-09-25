@@ -47,6 +47,11 @@ On the release branch:
 - Curate the draft into `CHANGELOG.md` under a section for the version being
   released: prune the internal noise, reword entries for users, and keep the
   human-readable voice — the changelog is generated **and** curated
+- Look for commits that removed or renamed an exported `pkg/*` symbol and give
+  each one a `Changed` entry that names the symbol. `dflow` ships as a CLI, so a
+  break on the library surface never reaches a user's command output — it is
+  visible in the release notes only if the curator writes it, and git-cliff
+  files the commit under whatever its type says
 - Update `HISTORY.md` with the new version, tag, and date
 - Keep release-only documentation changes isolated in this branch
 
