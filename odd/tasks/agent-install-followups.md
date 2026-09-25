@@ -56,10 +56,18 @@ instead of depending on someone remembering this one.
       in this same file: `os.Stat` on Windows reports 0666/0444, so a 0600
       assertion could never hold there and Rule 2 was already failing that rule
       silently for any contributor testing on Windows.
-- [ ] **WU2 (#36)** — one bullet in `RELEASING.md` step 3: scan the draft for
+- [x] **WU2 (#36)** — one bullet in `RELEASING.md` step 3: scan the draft for
       commits that remove or rename an exported `pkg/*` API and give each one a
       `Changed` entry naming the symbol.
       Surfaces: `RELEASING.md`.
+
+      Evidence: the bullet sits between the curation bullet and the `HISTORY.md`
+      bullet, in the imperative voice the other bullets use, and names why the
+      curator has to do it by hand — git-cliff files `fix(agent): ... remove
+      unused DisplayName` (the commit that dropped `Agent.DisplayName`) under
+      `Fixed` like any other fix, and nothing in the runbook read that as an API
+      break. The general rule covers the specific case, so `Agent.DisplayName`
+      needs no entry of its own.
 
 ## Out of scope
 
@@ -71,4 +79,6 @@ instead of depending on someone remembering this one.
 
 ## Commit identity
 
-- Pending.
+- WU1: `4e04d89` (`fix(agent): preserve the installed skill file mode on
+  overwrite`), on `bugfix/agent-install-followups`.
+- WU2: pending — recorded in the `docs(odd)` follow-up that closes this stage.
