@@ -266,11 +266,27 @@ none of them is a delivery risk for this repository's CI any more.
 
 ## Work-unit commit identity (WU3)
 
-- Review declaration: this commit is the frozen candidate for the native RDD
-  review of work unit 3; the expected outcome is an ordinary review over the
-  diff against `2944582` (develop at branch time).
-- Commit SHA and review outcome: recorded in the next work-unit commit, never
-  pre-written here.
+- Commit SHA: `03015b9` feat(agent): install the generated skill and protect an
+  existing document.
+- Correction: `b278104` fix(agent): write instruction references atomically —
+  61 diff lines (9+/2- reference.go, 50+ reference_test.go) against the frozen
+  80-line correction plan. The correction rewrote `writeInstructionFile` and
+  `createInstructionFile` to route through `writeFileAtomic` (same package),
+  resolving the R4-001 CRITICAL finding of the WU3 refuter. A follow-up unit
+  (WU5) addresses the mode-preservation regression introduced by this fix and
+  the remaining advisory findings.
+- Review outcome: APPROVED — lineage `review-41e447836ec323cf`, tier `high`,
+  4/4 lenses + 1 refuter + 1 targeted validator. The refuter escalated
+  R4-001 from the WU2 WARNING to CRITICAL, triggering the bounded correction.
+  Authority burned (consumed revision
+  `sha256:e680127abbecc066fc810c646a61b34278e2bd5bba00ed93be5ba37db109e56f`).
+  R4-002 (a second CRITICAL) was refuted by the targeted validator.
+- Non-blocking advisories carried into WU5:
+  `R1-skill-overwrite-unforced` (risk, by design),
+  `R2-append-adjacency-uniqueness` (readability),
+  `R2-json-agents-field-is-registry-fact` (readability),
+  `R2-skillfileexists-conflation` (readability),
+  `R2-unused-displayname-field` (readability).
 
 ## Out of scope
 
