@@ -180,3 +180,9 @@ Design:
   `R2-stray-duplicate-work-unit-3-tasks-heading` (fixed in this file by that
   edit), plus WU1's `R2-version-heading-drop-doc-overstates-formatting`.
 - WU4 commit identity: recorded as it lands.
+- `806d4e9` feat(update): wrap the report on one shared text measure instead of
+  clamping (WU4; renderer width param, clamp removed, caps 40 lines / 4000
+  chars, icon measure ceiling 100, heading class decided before rendering)
+- Review declaration: `806d4e9` is the frozen candidate for the native RDD
+  review of work unit 4; expected outcome is an ordinary review over the diff
+  against `eacde90`.
