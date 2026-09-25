@@ -17,4 +17,4 @@ Closes #31
 
 ## Commit identity
 
-_Work-unit commits will be recorded here as they land._
+- `47a1de2` — feat(agent): generate agent workflow from .dflow.yaml (pkg/agent, cmd/commands/agent.go, init integration, tests, docs)
