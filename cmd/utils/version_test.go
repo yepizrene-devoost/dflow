@@ -64,6 +64,7 @@ func TestVersionDisplayReadsVCSStamp(t *testing.T) {
 		wantDisplay  string
 		wantRevision string
 		wantDirty    bool
+		marker       string
 	}{
 		{
 			name:         "stamped and clean",
@@ -102,6 +103,30 @@ func TestVersionDisplayReadsVCSStamp(t *testing.T) {
 			wantDisplay:  "dev abc1234",
 			wantRevision: "abc1234",
 		},
+
+		// Release marker (v-prefixed) — the marker stands alone when the build is
+		// clean and carries a stamp, because the revision is redundant for a
+		// published release. A dirty build keeps its provenance.
+		{
+			name:         "release marker, clean build",
+			ok:           true,
+			revision:     fullRevision,
+			modified:     "false",
+			wantDisplay:  "v0.4.0",
+			wantRevision: fullRevision,
+			wantDirty:    false,
+			marker:       "v0.4.0",
+		},
+		{
+			name:         "release marker, dirty build",
+			ok:           true,
+			revision:     fullRevision,
+			modified:     "true",
+			wantDisplay:  "v0.4.0 " + shortRevision + "-dirty",
+			wantRevision: fullRevision,
+			wantDirty:    true,
+			marker:       "v0.4.0",
+		},
 	}
 
 	for _, tc := range cases {
@@ -114,6 +139,9 @@ func TestVersionDisplayReadsVCSStamp(t *testing.T) {
 				settings = append(settings, debug.BuildSetting{Key: "vcs.modified", Value: tc.modified})
 			}
 			withBuildInfo(t, tc.ok, settings...)
+			if tc.marker != "" {
+				withVersionMarker(t, tc.marker)
+			}
 
 			if got := Revision(); got != tc.wantRevision {
 				t.Fatalf("Revision() = %q, want %q", got, tc.wantRevision)
@@ -170,8 +198,35 @@ func TestVersionMarkerReportsTheChannelAlone(t *testing.T) {
 	if got := VersionMarker(); got != "v0.2.0" {
 		t.Fatalf("VersionMarker() = %q, want %q", got, "v0.2.0")
 	}
-	if got := VersionDisplay(); got != "v0.2.0 "+shortRevision {
-		t.Fatalf("VersionDisplay() = %q, want %q", got, "v0.2.0 "+shortRevision)
+	// A release marker on a clean build: the tag names the commit, so the
+	// revision is redundant and the marker stands alone.
+	if got := VersionDisplay(); got != "v0.2.0" {
+		t.Fatalf("VersionDisplay() = %q, want %q", got, "v0.2.0")
+	}
+
+	// A release marker on a dirty build: provenance is information the marker
+	// does not carry, so the revision appears.
+	withBuildInfo(t, true,
+		debug.BuildSetting{Key: "vcs.revision", Value: fullRevision},
+		debug.BuildSetting{Key: "vcs.modified", Value: "true"},
+	)
+	if got := VersionDisplay(); got != "v0.2.0 "+shortRevision+"-dirty" {
+		t.Fatalf("VersionDisplay() = %q, want %q", got, "v0.2.0 "+shortRevision+"-dirty")
+	}
+
+	// A snapshot marker carries no release provenance, so it must be passed
+	// through as-is — never confused with a tagged release.
+	withVersionMarker(t, "snapshot-abc1234")
+	withBuildInfo(t, true,
+		debug.BuildSetting{Key: "vcs.revision", Value: fullRevision},
+		debug.BuildSetting{Key: "vcs.modified", Value: "false"},
+	)
+
+	if got := VersionMarker(); got != "snapshot-abc1234" {
+		t.Fatalf("VersionMarker() = %q, want %q", got, "snapshot-abc1234")
+	}
+	if got := VersionDisplay(); got != "snapshot-abc1234 "+shortRevision {
+		t.Fatalf("VersionDisplay() = %q, want %q", got, "snapshot-abc1234 "+shortRevision)
 	}
 }
 
