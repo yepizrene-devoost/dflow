@@ -320,6 +320,12 @@ func releaseNotesContentWidth() int {
 // indent the content lines carry: the indent exists to subordinate a note to its
 // header, and applying it to a blank line would put two spaces of trailing
 // whitespace on a line that shows nothing.
+//
+// A section heading — recognized through the renderer's own predicate rather
+// than by matching its marker here — is printed with PlainBold, so the digest's
+// titles stand out on a terminal. That styling is TTY-gated inside PlainBold, so
+// a piped or scripted digest stays plain text, and it is suppressed in JSON mode
+// like every other human-oriented line.
 func reportNotesSummary(latest *selfupdate.Release) {
 	lines := selfupdate.SummarizeReleaseNotes(latest.Body, releaseNotesContentWidth())
 	if len(lines) == 0 {
@@ -329,6 +335,10 @@ func reportNotesSummary(latest *selfupdate.Release) {
 	for _, line := range lines {
 		if line == "" {
 			utils.Plain("%s", line)
+			continue
+		}
+		if selfupdate.IsReleaseNotesHeading(line) {
+			utils.PlainBold("  %s", line)
 			continue
 		}
 		utils.Plain("  %s", line)

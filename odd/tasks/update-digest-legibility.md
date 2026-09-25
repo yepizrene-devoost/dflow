@@ -238,6 +238,32 @@ Design:
 - Review declaration: `573b6d8` is the frozen candidate for the native RDD
   review of work unit 5; expected outcome is an ordinary review over the diff
   against `b33ce11`.
+
+## Work unit 6: bold section headings (TTY-gated)
+
+Final polish before delivery: the `▸ ` section headings should carry visual
+weight so they anchor the airy blocks. Styling lives at the print layer — the
+renderer stays pure (no ANSI, no terminal detection, per its contract):
+
+- Exported predicate `selfupdate.IsReleaseNotesHeading(line)` — the renderer is
+  the authority on its own output shape (no prefix-sniffing from callers).
+- New TTY-gated bold print helper in `cmd/utils` (ANSI `\033[1m…\033[0m`, only
+  when stdout is a terminal and format is human; piped/JSON output byte-identical
+  to today — same gate philosophy as the spinner's escapes).
+- `reportNotesSummary` bolds heading lines via the predicate + helper.
+
+### Tasks
+
+- [x] T21: tests first — predicate table (headings vs bullets/plain/empty),
+      PlainBold TTY-gating through the `stdoutIsTTY` seam (bold on TTY,
+      byte-identical to Plain otherwise and in JSON mode), CLI pin asserting
+      piped digest output carries no ANSI.
+- [x] T22: implemented — `selfupdate.IsReleaseNotesHeading` (renderer owns its
+      output shape, documented as the consumer-side API), `utils.PlainBold`
+      (double gate: TTY seam + JSON suppression, never wraps),
+      `reportNotesSummary` bolds heading lines only. Full verification green:
+      `go test ./...`, `go vet`, `gofmt`. Work-unit commit below; RDD review
+      declared in the identity section.
 - `806d4e9` feat(update): wrap the report on one shared text measure instead of
   clamping (WU4; renderer width param, clamp removed, caps 40 lines / 4000
   chars, icon measure ceiling 100, heading class decided before rendering)

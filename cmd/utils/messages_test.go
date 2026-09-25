@@ -22,6 +22,21 @@ func withStdoutWidth(t *testing.T, width int, ok bool) {
 	t.Cleanup(func() { stdoutWidth = original })
 }
 
+// withStdoutIsTTY installs a fixed answer from the terminal-detection seam
+// PlainBold reads for one test and restores the real probe afterwards.
+//
+// stdoutIsTTY is the package-level seam that makes the bold heading conditional
+// on a terminal together with the shared JSON suppression. Driving it here is
+// what lets a test pin the styled rendering — and its byte-identical unstyled
+// twin — without a pseudo-terminal.
+func withStdoutIsTTY(t *testing.T, isTTY bool) {
+	t.Helper()
+
+	original := stdoutIsTTY
+	stdoutIsTTY = func() bool { return isTTY }
+	t.Cleanup(func() { stdoutIsTTY = original })
+}
+
 // longWarning is a single-line message wider than the 80-column floor's content
 // width (76 runes). Its word lengths are chosen so the greedy fill breaks at a
 // known point, and it is real prose rather than repeated filler so a failure
@@ -177,5 +192,53 @@ func TestPrintWithIconKeepsAShortMessageByteIdentical(t *testing.T) {
 	want := fmt.Sprintf("%-3s %s\n", "✅", "dflow is already up to date")
 	if output != want {
 		t.Fatalf("short-message output = %q, want the unchanged single line %q", output, want)
+	}
+}
+
+// TestPlainBoldBoldsTheHeadingOnATerminal pins the styling this work unit adds:
+// on a terminal a section heading of the update digest is wrapped in the ANSI
+// bold sequence, so its title anchors the airy block beneath it.
+func TestPlainBoldBoldsTheHeadingOnATerminal(t *testing.T) {
+	withStdoutIsTTY(t, true)
+
+	output := captureStdout(t, func() { PlainBold("  %s", "▸ Added") })
+
+	want := "\033[1m  ▸ Added\033[0m\n"
+	if output != want {
+		t.Fatalf("PlainBold on a terminal = %q, want %q", output, want)
+	}
+}
+
+// TestPlainBoldIsByteIdenticalToPlainOffATerminal pins the other half of the
+// gate: when stdout is not a terminal — a pipe, a file or a command substitution
+// — the line is emitted exactly as Plain emits it, so copied and scripted output
+// carries no escape codes and stays easy to paste verbatim.
+func TestPlainBoldIsByteIdenticalToPlainOffATerminal(t *testing.T) {
+	withStdoutIsTTY(t, false)
+
+	styled := captureStdout(t, func() { PlainBold("  %s", "▸ Added") })
+	plain := captureStdout(t, func() { Plain("  %s", "▸ Added") })
+
+	if styled != plain {
+		t.Fatalf("PlainBold off a terminal = %q, want Plain's byte-identical %q", styled, plain)
+	}
+	if strings.Contains(styled, "\033") {
+		t.Fatalf("off a terminal PlainBold emitted an escape code: %q", styled)
+	}
+}
+
+// TestPlainBoldYieldsToJSONDocuments pins the shared suppression every output
+// helper honours: when stdout carries a machine-readable document, a styled
+// heading is nothing but noise, so PlainBold writes nothing at all — exactly
+// like Plain, and regardless of the terminal gate.
+func TestPlainBoldYieldsToJSONDocuments(t *testing.T) {
+	t.Cleanup(func() { SetFormat(FormatHuman) })
+	withStdoutIsTTY(t, true)
+	SetFormat(FormatJSON)
+
+	output := captureStdout(t, func() { PlainBold("  %s", "▸ Added") })
+
+	if output != "" {
+		t.Fatalf("PlainBold in JSON mode = %q, want nothing", output)
 	}
 }

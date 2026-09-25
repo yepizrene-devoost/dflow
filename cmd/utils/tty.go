@@ -36,6 +36,23 @@ func IsInteractive() bool {
 // ok=false, and callers must read that as "do not wrap".
 var stdoutWidth = terminalWidth
 
+// stdoutIsTTY reports whether stdout is a terminal.
+//
+// It is the gate the styled helpers read: styling a line with ANSI escapes is
+// meaningful only on a terminal, and a pipe, a file or a command substitution
+// must receive the plain bytes so captured output stays easy to copy verbatim.
+//
+// Like stdoutWidth above, it is a variable rather than a direct call so tests
+// can inject an answer without a pseudo-terminal; the end-to-end tests that run
+// the built binary still exercise the real probe through the default closure.
+// It measures stdout, never stdin, because stdout is the stream the styled line
+// is written to, and it is deliberately separate from IsInteractive, which also
+// requires stdin to be a terminal for prompts: a styled heading needs only the
+// output stream to be a terminal to render correctly.
+var stdoutIsTTY = func() bool {
+	return term.IsTerminal(int(os.Stdout.Fd()))
+}
+
 // terminalWidth reads the column count of stdout.
 //
 // It declines to answer (ok=false) when stdout is not a terminal or the reported

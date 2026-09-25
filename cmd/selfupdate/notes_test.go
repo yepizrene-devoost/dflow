@@ -809,6 +809,38 @@ func TestSummarizeReleaseNotesReportsAClippedOversizedLine(t *testing.T) {
 	}
 }
 
+// TestIsReleaseNotesHeadingAnswersFromTheRendererMarker pins the consumer-side
+// predicate: a caller that styles or positions the returned lines asks this
+// function instead of matching the marker's bytes, so the renderer's marker
+// stays an internal detail and a future marker change cannot leak into the
+// command layer. Every rendered shape the summary produces is covered — the
+// marked heading is recognized, while bullets, plain lines, separators and the
+// truncation ellipsis are not.
+func TestIsReleaseNotesHeadingAnswersFromTheRendererMarker(t *testing.T) {
+	cases := []struct {
+		name     string
+		rendered string
+		want     bool
+	}{
+		{name: "a marked heading", rendered: "▸ Added", want: true},
+		{name: "a longer heading", rendered: "▸ What's changed", want: true},
+		{name: "a bullet", rendered: "• added a feature", want: false},
+		{name: "an indented bullet", rendered: "  • nested", want: false},
+		{name: "a plain line", rendered: "just a note", want: false},
+		{name: "an empty separator", rendered: "", want: false},
+		{name: "the truncation ellipsis", rendered: "…", want: false},
+		{name: "a bare marker without its space", rendered: "▸", want: false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsReleaseNotesHeading(tc.rendered); got != tc.want {
+				t.Fatalf("IsReleaseNotesHeading(%q) = %v, want %v", tc.rendered, got, tc.want)
+			}
+		})
+	}
+}
+
 // TestSummarizeReleaseNotesCountsCharactersNotBytes locks the unit of the
 // character budget: a line of 700 two-byte runes is 1400 bytes but only 700
 // characters, so it fits and must be kept whole.

@@ -417,6 +417,41 @@ func TestUpdateCLICheckHumanDigestDropsTheVersionHeadingAndKeepsDenseBulletsWhol
 	}
 }
 
+// TestUpdateCLICheckHumanDigestIsANSIFreeWhenPiped pins copy-paste fidelity for
+// the styling this change adds: section headings render bold only on a terminal,
+// so the piped digest a user captures with a redirect or a script must carry the
+// heading text and nothing else. The heading line is asserted with an exact
+// match rather than a substring, because an unconditional "\033[1m" prefix would
+// still satisfy a Contains check and quietly corrupt a copied digest.
+func TestUpdateCLICheckHumanDigestIsANSIFreeWhenPiped(t *testing.T) {
+	setUpCLIEnv(t)
+	// Keep the command's best-effort cache refresh out of the host's own cache.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	body := "## What's changed\n\n### Added\n\n- surface the update notification\n"
+	server := updateNotesStartReleaseServer(t, "v9.9.9", []byte("payload"), body)
+	t.Setenv("DFLOW_UPDATE_API_URL", server.URL)
+
+	binary := buildDflowCLIWithMarker(t, "v0.1.0")
+
+	output, exitCode := startCLIRawOutput(t, time.Minute, t.TempDir(), binary, "update", "--check")
+	if exitCode != 0 {
+		t.Fatalf("update --check exited %d, want 0\n%s", exitCode, output)
+	}
+
+	if strings.Contains(output, "\033") {
+		t.Fatalf("piped output must carry no ANSI escape codes, got:\n%q", output)
+	}
+	lines := strings.Split(output, "\n")
+	added := lineIndexContaining(lines, "▸ Added")
+	if added == -1 {
+		t.Fatalf("the section heading must appear in the digest, got:\n%s", output)
+	}
+	if got := lines[added]; got != "  ▸ Added" {
+		t.Fatalf("the piped heading line = %q, want exactly %q with no styling", got, "  ▸ Added")
+	}
+}
+
 // TestUpdateCLICheckHumanKeepsADigestPastTheRemovedLineCap pins the other
 // maintainer decision from the same screenshot feedback: the forty-physical-line
 // budget is gone, and the four-thousand-rune character budget is the only flood

@@ -267,6 +267,26 @@ func SummarizeReleaseNotes(body string, contentWidth int) []string {
 	return kept
 }
 
+// IsReleaseNotesHeading reports whether a rendered summary line is a section
+// heading.
+//
+// It is the consumer-side counterpart to SummarizeReleaseNotes, and it derives
+// its answer from releaseNotesHeadingMarker, the very marker the renderer
+// writes. That keeps this package the authority on the shape of its own output:
+// a caller that styles or positions the returned lines asks this function
+// instead of matching the marker's bytes, so a future marker change stays
+// internal to the renderer and cannot silently break the caller.
+//
+// The question is about the rendered string, not about the source line: a plain
+// source line whose text already begins with the marker renders identically to a
+// heading, and the renderer itself keeps the two apart — it decides headings from
+// the raw class precisely so that ambiguity never reaches the spacing rule. A
+// caller that only lays out the returned strings has nothing else to go on, so
+// the rendered shape is the honest answer it can be given.
+func IsReleaseNotesHeading(rendered string) bool {
+	return strings.HasPrefix(rendered, releaseNotesHeadingMarker)
+}
+
 // renderReleaseNoteLine classifies one already trailing-trimmed release-note
 // line and renders it to its terminal lines.
 //

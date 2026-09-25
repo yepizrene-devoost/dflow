@@ -82,6 +82,45 @@ func Plain(formattedMessage string, args ...interface{}) {
 	fmt.Println(fmt.Sprintf(formattedMessage, args...))
 }
 
+// The SGR sequences that turn bold on and off around a styled line. Naming them
+// keeps the escape bytes out of the formatting call and gives the style one place
+// to change if it ever does.
+const (
+	boldStart = "\033[1m"
+	boldEnd   = "\033[0m"
+)
+
+// PlainBold prints the formatted message followed by a single newline, exactly
+// like Plain, but wraps the message in the ANSI bold sequence when stdout is a
+// terminal, so a line that heads a block of output — a release-notes section
+// title, for example — visibly anchors the lines beneath it.
+//
+// The styling is gated twice, and both gates matter:
+//
+//   - The terminal gate, through the stdoutIsTTY seam, keeps a pipe, a file or a
+//     command substitution free of escape codes: off a terminal the output is
+//     byte-identical to Plain, so a redirected or scripted run stays exactly as
+//     copyable as it was before this helper existed.
+//   - The shared JSON suppression every helper honours: a machine-readable run
+//     gets its document and nothing else, so the styled line is dropped rather
+//     than bolded into stdout.
+//
+// Unlike printWithIcon, PlainBold never wraps. It exists for caller-built lines
+// whose width the caller has already reasoned about — the release-notes digest
+// sizes each line to the terminal itself — so wrapping here would size it twice.
+func PlainBold(formattedMessage string, args ...interface{}) {
+	if CurrentFormat() == FormatJSON {
+		return
+	}
+
+	message := fmt.Sprintf(formattedMessage, args...)
+	if !stdoutIsTTY() {
+		fmt.Println(message)
+		return
+	}
+	fmt.Printf("%s%s%s\n", boldStart, message, boldEnd)
+}
+
 // Notice prints one unadorned line to stderr, with no icon.
 //
 // Use Notice for out-of-band information about the run as a whole rather than a
