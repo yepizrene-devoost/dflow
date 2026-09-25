@@ -29,7 +29,7 @@ builds:
       - -s -w -X main.version={{.Version}}
 
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
@@ -39,18 +39,15 @@ archives:
       {{- if .Arm }}v{{ .Arm }}{{ end }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
     files:
       - LICENSE
       - README.md
       - CHANGELOG.md
 
 snapshot:
-  name_template: "snapshot-{{ .ShortCommit }}"
+  version_template: "snapshot-{{ .ShortCommit }}"
 
-changelog:
-  sort: asc
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
+# No `changelog:` block is configured on purpose: the GitHub release body is
+# supplied by `make release` through `--release-notes=RELEASE_NOTES.md`, extracted
+# from the newest `## 📦` section of CHANGELOG.md, so GoReleaser never generates one.

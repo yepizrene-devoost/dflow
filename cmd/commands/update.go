@@ -144,6 +144,12 @@ func runUpdate(cmd *cobra.Command, args []string) error {
 	hasProvenance := selfupdate.HasReleaseProvenance(current)
 	if !hasProvenance {
 		utils.Warn("this dflow binary carries no release provenance (version marker %q): it was built without a published release version, so it cannot be compared with the latest one. A binary installed with 'go install' is usually updated by running 'go install github.com/yepizrene-devoost/dflow@latest' again.", current)
+		// The warning is a paragraph of its own, and on a terminal the helpers
+		// wrap it into several physical lines. A blank line separates that block
+		// from the report that follows, so the alert never runs into the first
+		// report line. Plain is suppressed in JSON mode exactly as Warn is, so a
+		// machine-readable run still carries only its document.
+		utils.Plain("%s", "")
 	}
 
 	client := selfupdate.NewReleaseClientWithBaseURL(updateBaseURL(), nil)
@@ -257,17 +263,84 @@ func confirmUpdateInstall(yes bool, current, target string, latest *selfupdate.R
 	return true, nil
 }
 
+// maxDigestWidth caps how wide a release-notes content line may render, in
+// runes before the caller's two-space indent. It exists so the digest shares one
+// text measure with the icon-prefixed lines above it (cmd/utils caps those at
+// the same content width): without it, a bullet on a 200-column terminal would
+// run to the terminal edge while the surrounding report wraps much earlier.
+const maxDigestWidth = 100
+
+// minDigestWidth is the floor under the measured content width. Below it a
+// wrapped bullet becomes a column of two-word fragments, which is harder to read
+// than letting the line ride past a narrow terminal's edge — the same rationale
+// as cmd/utils.minWrapWidth, applied to the digest's own content width rather
+// than to the terminal.
+const minDigestWidth = 40
+
+// digestIndentWidth is the two-space indent reportNotesSummary puts in front of
+// every content line, so a note is visibly subordinate to the "what's new" header
+// above it. The digest's content width is measured after this indent, because the
+// indent is part of the columns the terminal shows.
+const digestIndentWidth = 2
+
+// releaseNotesContentWidth measures how wide a release-notes content line may
+// render for the stream this process writes to.
+//
+// It returns 0 when the width could not be measured — stdout is a pipe, a file or
+// a command substitution — which is the digest's "do not wrap" signal, so piped
+// and scripted output keeps the historical one-line-per-source-line shape. A
+// measured terminal yields its width minus the caller's indent, capped at
+// maxDigestWidth and floored at minDigestWidth.
+func releaseNotesContentWidth() int {
+	width, ok := utils.TerminalWidth()
+	if !ok {
+		return 0
+	}
+
+	content := width - digestIndentWidth
+	if content > maxDigestWidth {
+		content = maxDigestWidth
+	}
+	if content < minDigestWidth {
+		content = minDigestWidth
+	}
+	return content
+}
+
 // reportNotesSummary prints the short, terminal-sized list of release-note
 // lines for the release being offered. An empty body (GitHub has no changelog
 // for this release) prints nothing at all, because an empty header would
 // promise a section that has no content.
+//
+// The width passed to the summarizer is measured once for this stream: a terminal
+// gets wrapped lines sized to the indent below, and an unmeasured stream gets 0,
+// which the summarizer reads as "wrap nothing".
+//
+// A separator line from the renderer is printed verbatim, without the two-space
+// indent the content lines carry: the indent exists to subordinate a note to its
+// header, and applying it to a blank line would put two spaces of trailing
+// whitespace on a line that shows nothing.
+//
+// A section heading — recognized through the renderer's own predicate rather
+// than by matching its marker here — is printed with PlainBold, so the digest's
+// titles stand out on a terminal. That styling is TTY-gated inside PlainBold, so
+// a piped or scripted digest stays plain text, and it is suppressed in JSON mode
+// like every other human-oriented line.
 func reportNotesSummary(latest *selfupdate.Release) {
-	lines := selfupdate.SummarizeReleaseNotes(latest.Body)
+	lines := selfupdate.SummarizeReleaseNotes(latest.Body, releaseNotesContentWidth())
 	if len(lines) == 0 {
 		return
 	}
 	utils.Info("what's new in %s:", latest.Tag)
 	for _, line := range lines {
+		if line == "" {
+			utils.Plain("%s", line)
+			continue
+		}
+		if selfupdate.IsReleaseNotesHeading(line) {
+			utils.PlainBold("  %s", line)
+			continue
+		}
 		utils.Plain("  %s", line)
 	}
 }
@@ -290,9 +363,15 @@ func reportHumanCheck(report updateReport, latest *selfupdate.Release) {
 }
 
 // reportHumanReleaseURL prints the release page only when the API supplied one:
-// an empty "release notes: " line is worse than no line at all.
+// an empty "release notes: " line is worse than no line at all. The line is
+// opened by a blank line so it does not run together with the digest above it.
+//
+// Both of its callers are human-only: the JSON paths return before reaching this
+// function, and the helpers are suppressed in JSON mode anyway, so the
+// machine-readable document keeps exactly its six keys.
 func reportHumanReleaseURL(url string) {
 	if url != "" {
+		utils.Plain("%s", "")
 		utils.Info("release notes: %s", url)
 	}
 }

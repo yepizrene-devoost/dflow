@@ -2,6 +2,18 @@
 
 Repository instructions for coding agents working in this project.
 
+## Session Start
+
+- At the beginning of every session in this repository, before the first
+  substantive reply, recover the working state:
+  1. Read the recent memory context (`mem_context`, project `dflow`) and the
+     latest session summary — that is where the previous session recorded
+     decisions, discoveries and pending steps.
+  2. List the open backlog: `gh issue list --state open`.
+- Open the conversation with one line on where the last session left off and
+  the current backlog, then ask what to pick up. Do not start work without
+  that anchor.
+
 ## Commit Messages
 
 - Follow the commit convention defined in `.agents/workflows/commit-rules.md`.
@@ -46,6 +58,20 @@ skill paths from the local skill registry.
 - Read `.agents/MEMORY.md` before making consequential changes; it holds the
   current-state decisions and architecture context. Keep it short and current
   (it is not a log).
+
+## Closure and External-Action Confirmations
+
+Closing an issue, merging, pushing, deleting a branch, or publishing a release
+is always a standalone decision with its own explicit confirmation.
+
+- Never infer closure from tentative phrasing ("creo que lo podemos cerrar",
+  "¿qué opinas?", "no sé"): tentative means ask, plainly and separately.
+- Never bundle a closure into the description of an option, a question, or
+  another approval. Choosing "do X now" authorizes X only — not X plus close.
+- The confirmation names the exact action and the state it changes ("cierro el
+  issue #30 como completed"); execution waits for a plain, standalone yes.
+- When one message approves several steps, only the explicitly confirmed step
+  runs; every other step re-asks at its own boundary.
 
 ## Task Tracking (odd/)
 

@@ -8,12 +8,14 @@ package commands
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
 	"github.com/yepizrene-devoost/dflow/cmd/gitutils"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/agent"
 	"github.com/yepizrene-devoost/dflow/pkg/flow"
 	"github.com/yepizrene-devoost/dflow/pkg/validators"
 )
@@ -230,6 +232,38 @@ var InitCmd = &cobra.Command{
 			}
 			if err := gitutils.PushBranch(uatBranch); err != nil {
 				return fmt.Errorf("Failed to push '%s': %v", uatBranch, err)
+			}
+		}
+
+		// 📝 generate agent workflow file
+		var generateAgent bool
+		if err := survey.AskOne(&survey.Confirm{
+			Message: "Generate an agent workflow file for AI coding assistants?",
+			Default: true,
+		}, &generateAgent); err != nil {
+			fmt.Fprintf(os.Stderr, "Prompt failed: %v\n", err)
+			os.Exit(1)
+		}
+
+		if generateAgent {
+			doc := agent.GenerateAgentDoc(&cfg)
+			agentPath := ".agents/workflows/dflow.md"
+
+			if err := os.MkdirAll(filepath.Dir(agentPath), 0755); err != nil {
+				return fmt.Errorf("failed to create agent workflow directory: %w", err)
+			}
+			if err := os.WriteFile(agentPath, doc, 0644); err != nil {
+				return fmt.Errorf("failed to write agent workflow: %w", err)
+			}
+			utils.Success("Generated agent workflow: %s", agentPath)
+
+			// Wire the same reference `dflow agent` writes, in auto mode: init never
+			// asked which agents this project uses, so every registry agent is
+			// selected with explicit == false, and CLAUDE.md is therefore maintained
+			// only when the project already has one.
+			plan := agent.PlanInstructionTargets(agent.Agents(), instructionFileExists, false)
+			if err := writeInstructionReferences(plan, agentPath); err != nil {
+				utils.Warn("Could not update instruction references: %v", err)
 			}
 		}
 
