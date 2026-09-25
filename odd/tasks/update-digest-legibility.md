@@ -42,4 +42,9 @@ Branch: `feature/update-digest-legibility` (base `develop`, per `.dflow.yaml`).
 
 ## Work-unit commit identity
 
-(recorded as commits land)
+- `2bbe807` feat(update): clamp digest items and drop the version heading
+  (cmd/selfupdate/notes.go, cmd/selfupdate/notes_test.go,
+  cmd/tests/update_cli_test.go, odd/tasks/update-digest-legibility.md)
+- Review declaration: this commit is the frozen candidate for the native RDD
+  review; the expected outcome is an ordinary review over the diff against
+  `faceb0b` (develop at branch time).
