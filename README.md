@@ -177,18 +177,48 @@ workflow file is derived from your config so it cannot drift.
 
 ### `dflow agent`
 
-Generate an agent workflow file from your `.dflow.yaml` configuration.
+Generate an agent workflow file from your `.dflow.yaml` configuration, and
+optionally install it as a formal Agent Skills artifact.
 
 ```bash
 dflow agent
-````
+dflow agent --install
+dflow agent --install --local
+dflow agent --install --agents claude
+dflow agent --json
+```
 
 - Renders branch types, prefixes, bases, finish targets, and merge rules from `.dflow.yaml`
 - Writes to `.agents/workflows/dflow.md` by default
-- Includes static sections: commands, commit conventions, issue lifecycle, JSON contract
+- After writing the document, wires instruction references into `AGENTS.md`
+  (and `CLAUDE.md` when it already exists)
 - Never overwrites an existing file unless `--force` is passed
-- Supports `--path` to choose a different output location
-- Supports `--json` to print the path and rendered document on stdout without writing
+- `--install` installs the generated skill where agents discover it:
+  `~/.agents/skills/dflow/SKILL.md` by default (serves Pi, Codex, and opencode
+  from one file). `--local` installs into the project at `.agents/skills/`
+  instead. No `--force` is needed for the skill — it is dflow's own artifact
+  and is kept current on every run.
+- `--agents <spec>` selects the agents to wire: `all`, a comma-separated list
+  (`pi,claude`), or omitted for the portable default (`AGENTS.md` +
+  `.agents/skills/`). Naming `claude` creates `CLAUDE.md` when it does not
+  exist; naming `pi` does not create `CLAUDE.md` even though Pi reads it.
+- `--json` is strictly read-only: reports the path, the rendered document, the
+  reference plan, and the skill plan, and writes nothing.
+
+#### Multi-agent discovery
+
+Each AI coding agent reads different files for project instructions and skills.
+dflow knows which files each agent discovers:
+
+| Agent | Instruction file | Skill directory |
+|---|---|---|
+| Pi | `AGENTS.md`, `CLAUDE.md` | `.agents/skills/`, `.pi/skills/` |
+| Codex | `AGENTS.md` | `.agents/skills/` |
+| opencode | `AGENTS.md` | `.agents/skills/` |
+| Claude Code | `CLAUDE.md` | `.claude/skills/` |
+
+`AGENTS.md` serves three agents with one reference. `CLAUDE.md` is only wired
+when it already exists or when `--agents claude` is passed.
 
 ```bash
 dflow agent --path docs/AGENT.md

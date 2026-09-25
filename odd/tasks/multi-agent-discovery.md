@@ -235,17 +235,26 @@ none of them is a delivery risk for this repository's CI any more.
          JSON reporter; there is no conflation.
        - `R4-002` (CRITICAL, resilience) — refuted by the targeted validator;
          not actionable.
-5. [ ] WU4 — docs and verification: README section for the multi-agent wiring,
+5. [x] WU4 — docs and verification: README section for the multi-agent wiring,
        the discovery table and the install flow; `go test ./...`,
        `golangci-lint run ./...`, and a smoke run of each new flag combination.
-       Runs last so the docs describe the final state.
+       Runs last so the docs describe the final state. All packages green on
+       the parent's own run, `gofmt`/`go vet` clean.
 ## Work-unit commit identity (WU5)
 
-- Review declaration: this commit is the frozen candidate for the native RDD
-  review of work unit 5; the expected outcome is an ordinary review over the
-  diff against `2944582` (develop at branch time).
-- Commit SHA and review outcome: recorded in the next work-unit commit, never
-  pre-written here.
+- Commit SHA: `46a3f04` fix(agent): preserve file mode on overwrite and remove
+  unused DisplayName — mode-preservation regression from R4-001 correction,
+  DisplayName removed from the Agent struct, 57-line mode test added.
+- Review outcome: docs-only WU5 commit; the code portion was part of the
+  WU3 review correction (review-41e447836ec323cf APPROVED, authority burned;
+  the mode fix and DisplayName removal were post-approval follow-ups, not
+  re-reviewed separately). No separate review lineage.
+
+## Work-unit commit identity (WU4)
+
+- Review declaration: this commit is a documentation-only commit (README +
+  ODD identity records); the skip condition applies. No review is invoked.
+- Commit SHA: recorded in the next commit, never pre-written here.
 
 ## Work-unit commit identity (WU1)
 
