@@ -180,6 +180,55 @@ Design:
   `R2-stray-duplicate-work-unit-3-tasks-heading` (fixed in this file by that
   edit), plus WU1's `R2-version-heading-drop-doc-overstates-formatting`.
 - WU4 commit identity: recorded as it lands.
+
+## Work unit 5: airy list + chars-only flood cap (screenshot feedback 4)
+
+With the WU4 measure the full body renders, but (a) bullets run back-to-back —
+the Markdown source has no blank lines between items and the renderer passed
+that through — and (b) the 40-physical-line cap now drops real content (the
+last five `Fixed` bullets of v0.3.0) because wrapping multiplies lines. User
+decisions: airy list, chars-only cap.
+
+Design:
+
+- **Separator rule generalizes**: one blank line before every kept content line
+  except the first, and except when the previous kept content line is a heading
+  (so a heading keeps its first bullet directly beneath it, and consecutive
+  headings stay separated). Concretely:
+  ```
+  ▸ Added
+  • first bullet...
+
+  • second bullet...
+
+  ▸ Changed
+  • ...
+  ```
+  Implemented from the decided `releaseNoteLineKind` (never from rendered
+  prefixes). Separators stay presentation: exempt from caps, no ellipsis.
+  Two consecutive headings render stacked — the heading exception suppresses
+  the separator after any heading, so neither carries a blank of its own;
+  deliberate and pinned by test.
+- **The physical-line cap is removed.** `maxReleaseNotesLines` is deleted;
+  `maxReleaseNotesChars = 4000` becomes the only flood guard (separators add
+  nothing to it). The `…` line marks content dropped by that cap only. Worst
+  case at the 76–96 column measure is ~55 physical lines for a release that
+  maxes the cap.
+
+### Tasks
+
+- [x] T18: tests first — RED with 15 failing subtests (bullets back to back,
+      blank around headings, ellipsis at 40 physical lines on a 55-bullet body);
+      triangulation covers marker-lookalike plain lines, dropped headings between
+      bullets, exactly-at-budget vs one rune over, widths 0 and -1.
+- [x] T19: implemented in `cmd/selfupdate/notes.go` — separator keyed on
+      `hasKept && previousKind != releaseNoteHeading`; `maxReleaseNotesLines`
+      deleted with its rationale documented (a line budget measures the terminal,
+      not the release); four line-cap tests replaced by long-body / char-budget /
+      exemption tests; airy-shape CLI pins + new
+      `TestUpdateCLICheckHumanKeepsADigestPastTheRemovedLineCap`.
+- [x] T20: full verification — `go test ./...` green, `go vet` clean, `gofmt`
+      clean; work-unit commit below; RDD review declared in the identity section.
 - `806d4e9` feat(update): wrap the report on one shared text measure instead of
   clamping (WU4; renderer width param, clamp removed, caps 40 lines / 4000
   chars, icon measure ceiling 100, heading class decided before rendering)

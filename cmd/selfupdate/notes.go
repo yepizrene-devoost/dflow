@@ -7,25 +7,18 @@ import (
 	"unicode/utf8"
 )
 
-// maxReleaseNotesLines bounds how many physical lines a terminal summary may
-// render. It is a readability bound for a person scanning an update notice, not
-// a guarantee about the changelog format: a release that ships more content than
-// this still gets summarized, just with its tail replaced by one ellipsis line.
-//
-// It counts physical lines, not source lines: a bullet that wraps at a narrow
-// width spends as many of these lines as the terminal will show, which is what
-// the reader actually has to scan. A source line's wrapped lines are kept or
-// dropped together, so a bullet is never half-rendered. Separator lines are
-// presentation, not content, and never spend one of these lines.
-const maxReleaseNotesLines = 40
-
 // maxReleaseNotesChars bounds the cumulative size of a summary, counted in
-// runes of rendered line content. Like maxReleaseNotesLines it is a
-// terminal-friendly bound rather than a format guarantee: it keeps a release
-// with a few enormous paragraphs from flooding the screen, and the dropped tail
-// is represented by one ellipsis line. Counting runes rather than bytes keeps
-// the bound meaningful for changelogs containing non-ASCII text, and separators
-// — the empty string — add nothing to it.
+// runes of rendered line content. It is the only flood guard, and like every
+// bound here it is a terminal-friendly limit rather than a format guarantee: it
+// keeps a release with a few enormous paragraphs from flooding the screen, and
+// the dropped tail is represented by one ellipsis line. Counting runes rather
+// than bytes keeps the bound meaningful for changelogs containing non-ASCII text,
+// and separators — the empty string — add nothing to it.
+//
+// No physical-line bound sits beside it, and that is deliberate: once lines
+// wrap, how many lines a release renders to is a function of the terminal width,
+// not of how much content the release carries, so a line budget would clip an
+// ordinary release while telling the reader nothing about its size.
 const maxReleaseNotesChars = 4000
 
 // releaseNotesEllipsis is the exact line appended when the summarizer had to
@@ -38,12 +31,19 @@ const releaseNotesEllipsis = "…"
 // print.
 const releaseNotesHeadingMarker = "▸ "
 
-// releaseNotesSeparator is the empty line emitted before each section heading
-// but the summary's first, so a multi-section digest reads block by block instead
-// of as one wall of text. It is an empty string rather than a padded or
-// whitespace-bearing line, which is what keeps it free of trailing whitespace in
-// the terminal, and it is presentation rather than content, so it is exempt from
-// both summary caps and can never trigger the ellipsis.
+// releaseNotesSeparator is the empty line emitted before a kept content line, so
+// a multi-section digest reads as spaced blocks instead of one wall of text. It
+// is emitted before every kept content line except the summary's first — the
+// caller's own "what's new in vX:" header already separates that one — and except
+// a line whose predecessor in the summary is a heading, which is what keeps a
+// section's first bullet directly beneath its heading. One consequence is
+// deliberate: two consecutive headings render stacked, with no blank line between
+// them, because neither carries content of its own to space apart.
+//
+// It is an empty string rather than a padded or whitespace-bearing line, which is
+// what keeps it free of trailing whitespace in the terminal, and it is
+// presentation rather than content, so it is exempt from the summary's character
+// cap and can never trigger the ellipsis.
 const releaseNotesSeparator = ""
 
 // releaseNotesBulletMarker replaces a Markdown list item's dash, so "- item"
@@ -83,8 +83,9 @@ const (
 	// is wrapped at the content width and otherwise passes through as it is.
 	releaseNotePlain releaseNoteLineKind = iota
 	// releaseNoteHeading is a version-free Markdown section heading. It renders
-	// behind releaseNotesHeadingMarker and opens a new block with a separator
-	// unless it is the summary's first kept line.
+	// behind releaseNotesHeadingMarker, and it suppresses the separator before the
+	// line that follows it, so a section's first bullet sits directly beneath its
+	// heading.
 	releaseNoteHeading
 	// releaseNoteBullet is a Markdown list item. It swaps its dash for
 	// releaseNotesBulletMarker and wraps with its continuations hanging under the
@@ -92,8 +93,8 @@ const (
 	releaseNoteBullet
 	// releaseNoteDropped is a line rendering removes entirely: the top title or a
 	// section heading carrying the release's own version. Dropping it removes
-	// formatting rather than content, so it never spends a cap, never owes the
-	// reader an ellipsis, and never opens a section block.
+	// formatting rather than content, so it never spends the character budget,
+	// never owes the reader an ellipsis, and never spaces the lines around it.
 	releaseNoteDropped
 )
 
@@ -159,26 +160,32 @@ const (
 //     left intact and overflows its line rather than being cut. Headings are not
 //     wrapped: a heading is a short title, and it is left intact even when it
 //     overflows. Wrapping re-flows text; it never removes any.
-//   - A section heading that is not the summary's first kept line is preceded by
-//     one empty-string separator line, so consecutive sections such as
-//     "### Added" and "### Fixed" read as separate blocks. The first heading gets
-//     none: the caller prints "what's new in vX:" directly above the summary, so
-//     a blank line there would open with a gap rather than the first line of
-//     content. A separator is presentation rather than content: it never spends
-//     maxReleaseNotesLines or maxReleaseNotesChars and never contributes to the
+//   - Every kept content line after the summary's first is preceded by one
+//     empty-string separator, except the line that directly follows a section
+//     heading: a heading's first bullet then sits immediately beneath it, while
+//     bullets within a section are spaced apart and a heading after bullets gets
+//     its blank line. One consequence is deliberately accepted: two consecutive
+//     headings render stacked, with no blank between them, because neither has any
+//     content for a separator to keep apart. The summary's first line gets no
+//     separator either, because the caller prints "what's new in vX:" directly
+//     above the summary and a blank line there would open with a gap rather than
+//     with the first line of content. A separator is presentation rather than
+//     content: it never spends maxReleaseNotesChars and never contributes to the
 //     ellipsis below, and because it is empty it carries no indentation or
 //     trailing whitespace.
-//   - At most maxReleaseNotesLines physical rendered lines and maxReleaseNotesChars
-//     cumulative runes are kept. The first source line whose rendered lines would
-//     exceed either bound is dropped along with everything after it, so a source
+//   - At most maxReleaseNotesChars cumulative runes of rendered content are kept;
+//     it is the only flood guard. The first source line whose rendered lines would
+//     exceed that bound is dropped along with everything after it, so a source
 //     line's wrapped lines are kept or dropped together and a bullet is never
-//     half-rendered. Both bounds count the final rendered strings — a heading's
-//     marker included — because they exist to limit what the terminal actually
+//     half-rendered. The bound counts the final rendered strings — a heading's
+//     marker included — because it exists to limit what the terminal actually
 //     shows.
-//   - When any non-blank content was dropped by those bounds, one
-//     releaseNotesEllipsis line is appended so the summary visibly ends early. A
-//     line removed by either formatting rule above is not dropped content: the
-//     ellipsis marks truncation only, and there is no ellipsis anywhere else.
+//   - When any non-blank content was dropped by that bound, one
+//     releaseNotesEllipsis line is appended so the summary visibly ends early. The
+//     ellipsis follows the last kept line directly instead of being spaced from
+//     it, because it continues that block rather than opening one; a line removed
+//     by either formatting rule above is not dropped content: the ellipsis marks
+//     truncation only, and there is no ellipsis anywhere else.
 //
 // A non-blank body whose every line was formatting — for example a body that is
 // only "# Changelog", or only a version heading — has nothing to render; it
@@ -186,9 +193,17 @@ const (
 func SummarizeReleaseNotes(body string, contentWidth int) []string {
 	var kept []string
 	total := 0
-	physicalKept := 0
 	dropped := false
 	sawContent := false
+	// hasKept and previousKind carry the spacing rule's state: whether the summary
+	// has kept any content line yet, and the class of the last one. hasKept is
+	// separate from len(kept) because separators are kept strings too, and it is
+	// also what makes previousKind's initial value unreachable — the rule must key
+	// on the decided line kind rather than on rendered text, so a plain line that
+	// happens to start with the heading marker is not a heading and does not
+	// suppress the blank line that follows it.
+	hasKept := false
+	var previousKind releaseNoteLineKind
 
 	for _, line := range strings.Split(body, "\n") {
 		// A whitespace-only line is not content: skipping it collapses the
@@ -198,24 +213,19 @@ func SummarizeReleaseNotes(body string, contentWidth int) []string {
 		}
 		sawContent = true
 
-		// Classify and render first, then measure: the caps bound the terminal
-		// lines, so they are applied to the strings the reader will actually see.
+		// Classify and render first, then measure: the cap bounds the terminal
+		// lines, so it is applied to the strings the reader will actually see.
 		rendered, kind := renderReleaseNoteLine(strings.TrimRightFunc(line, unicode.IsSpace), contentWidth)
 		if kind == releaseNoteDropped {
 			continue
 		}
 
-		// Stop before the source line whose physical lines would break either
-		// bound, counting content only: a separator is presentation, so it
-		// neither spends a line of the budget nor pushes real content behind the
-		// ellipsis. The whole wrapped group is kept or dropped together, so no
-		// bullet is ever half-rendered. Because the current line is non-blank,
-		// reaching here means real content is being dropped, which is exactly
-		// when the ellipsis line is owed.
-		if physicalKept+len(rendered) > maxReleaseNotesLines {
-			dropped = true
-			break
-		}
+		// Stop before the source line whose physical lines would break the
+		// budget, counting content only: a separator is presentation, so it does
+		// not push real content behind the ellipsis. The whole wrapped group is
+		// kept or dropped together, so no bullet is ever half-rendered. Because
+		// the current line is non-blank, reaching here means real content is being
+		// dropped, which is exactly when the ellipsis line is owed.
 		groupRunes := 0
 		for _, renderedLine := range rendered {
 			groupRunes += utf8.RuneCountInString(renderedLine)
@@ -225,18 +235,19 @@ func SummarizeReleaseNotes(body string, contentWidth int) []string {
 			break
 		}
 
-		// A section heading opens a new block, so one blank line separates it from
-		// the block above — unless it is the first line the summary keeps, where
-		// the caller's own header already provides the separation. The separator
-		// is added after the bounds have passed, so a heading that was dropped
-		// never leaves a dangling blank line behind it.
-		if kind == releaseNoteHeading && len(kept) > 0 {
+		// Every kept line but the summary's first is spaced by one blank line
+		// from the block above it — except directly under a heading, where a
+		// blank would detach a section's first bullet from its own title. The
+		// separator is added after the bound has passed, so a dropped line never
+		// leaves a dangling blank line behind it.
+		if hasKept && previousKind != releaseNoteHeading {
 			kept = append(kept, releaseNotesSeparator)
 		}
 
 		kept = append(kept, rendered...)
-		physicalKept += len(rendered)
 		total += groupRunes
+		hasKept = true
+		previousKind = kind
 	}
 
 	if !sawContent {

@@ -315,12 +315,13 @@ func TestUpdateCLICheckHumanShowsReleaseNotes(t *testing.T) {
 // is pinned by the unit test in cmd/selfupdate
 // (TestSummarizeReleaseNotesWrapsBulletsAtWordBoundaries) rather than here.
 //
-// It also pins the presentation spacing from the maintainer's follow-up on the
-// same issue: a two-section digest read as a wall of text, so the second section
-// heading is opened by a genuinely empty line, and the closing release-page line
-// is separated from the digest above it. The empty line matters as much as its
-// position: the renderer returns "" and the caller must print it verbatim, so no
-// line may be whitespace that only looks blank.
+// It also pins the spacing the maintainer asked for on the same issue: the
+// digest is an airy list rather than a wall of text, so the two bullets of a
+// section are separated by a genuinely empty line, a section's first bullet sits
+// directly under its heading, and each heading after bullets is opened by a blank
+// line. The empty line matters as much as its position: the renderer returns ""
+// and the caller must print it verbatim, so no line may be whitespace that only
+// looks blank.
 func TestUpdateCLICheckHumanDigestDropsTheVersionHeadingAndKeepsDenseBulletsWhole(t *testing.T) {
 	setUpCLIEnv(t)
 	// Keep the command's best-effort cache refresh out of the host's own cache.
@@ -373,10 +374,28 @@ func TestUpdateCLICheckHumanDigestDropsTheVersionHeadingAndKeepsDenseBulletsWhol
 		t.Fatalf("the digest must not clip any line, so no ellipsis may appear, got:\n%s", output)
 	}
 
+	// Airy spacing: the first bullet sits directly under its heading, and the two
+	// bullets of the section are separated by an empty line instead of running
+	// back to back.
+	lines := strings.Split(output, "\n")
+	added := lineIndexContaining(lines, "▸ Added")
+	if added == -1 {
+		t.Fatalf("the first section heading must keep its marker, got:\n%s", output)
+	}
+	if added+1 >= len(lines) || !strings.Contains(lines[added+1], "• surface the update notification") {
+		t.Fatalf("the section's first bullet must sit directly under its heading with no blank between them, got %q after it in:\n%s", lineAt(lines, added+1), output)
+	}
+	second := lineIndexContaining(lines, "• "+denseItem)
+	if second == -1 {
+		t.Fatalf("the second bullet must keep its marker, got:\n%s", output)
+	}
+	if second == 0 || lines[second-1] != "" {
+		t.Fatalf("the second bullet of a section must be opened by an empty line, got %q before it in:\n%s", lineAt(lines, second-1), output)
+	}
+
 	// Presentation spacing: the second section heading and the closing release
 	// page are each opened by an empty line, and no line is whitespace pretending
 	// to be blank.
-	lines := strings.Split(output, "\n")
 	fixed := lineIndexContaining(lines, "▸ Fixed")
 	if fixed == -1 {
 		t.Fatalf("the second section heading must keep its marker, got:\n%s", output)
@@ -398,6 +417,48 @@ func TestUpdateCLICheckHumanDigestDropsTheVersionHeadingAndKeepsDenseBulletsWhol
 	}
 }
 
+// TestUpdateCLICheckHumanKeepsADigestPastTheRemovedLineCap pins the other
+// maintainer decision from the same screenshot feedback: the forty-physical-line
+// budget is gone, and the four-thousand-rune character budget is the only flood
+// guard left. The body below renders fifty-two physical content lines, twelve
+// more than the removed cap ever allowed, for well under three hundred runes, so
+// every bullet must reach the terminal and no ellipsis may appear.
+//
+// Before the change this digest ended early with "…", which is the defect the
+// screenshot showed: a release clipped for how many lines it rendered, not for
+// how much it said. The closing bullet is the load-bearing assertion, because a
+// reintroduced line budget would drop exactly that one.
+func TestUpdateCLICheckHumanKeepsADigestPastTheRemovedLineCap(t *testing.T) {
+	setUpCLIEnv(t)
+	// Keep the command's best-effort cache refresh out of the host's own cache.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	const bullets = 51
+	var body strings.Builder
+	body.WriteString("### Fixed\n\n")
+	for i := 1; i <= bullets; i++ {
+		fmt.Fprintf(&body, "- item %02d\n", i)
+	}
+
+	server := updateNotesStartReleaseServer(t, "v9.9.9", []byte("payload"), body.String())
+	t.Setenv("DFLOW_UPDATE_API_URL", server.URL)
+
+	binary := buildDflowCLIWithMarker(t, "v0.1.0")
+
+	output, exitCode := startCLIRawOutput(t, time.Minute, t.TempDir(), binary, "update", "--check")
+	if exitCode != 0 {
+		t.Fatalf("update --check exited %d, want 0\n%s", exitCode, output)
+	}
+
+	last := fmt.Sprintf("• item %02d", bullets)
+	if !strings.Contains(output, last) {
+		t.Fatalf("the closing bullet %q must reach the terminal: the character budget is the only flood guard, got:\n%s", last, output)
+	}
+	if strings.Contains(output, "…") {
+		t.Fatalf("the digest must not be clipped by length, so no ellipsis may appear, got:\n%s", output)
+	}
+}
+
 // lineIndexContaining returns the index of the first output line carrying the
 // given text, or -1 when no line does. Locating a line by content lets a
 // spacing assertion name the line it must precede without depending on the
@@ -409,6 +470,16 @@ func lineIndexContaining(lines []string, text string) int {
 		}
 	}
 	return -1
+}
+
+// lineAt returns the line at index i, or a marker for an out-of-range index, so
+// a spacing failure message can quote the neighbour it checked without the
+// assertion having to repeat the bounds test.
+func lineAt(lines []string, i int) string {
+	if i < 0 || i >= len(lines) {
+		return "<no such line>"
+	}
+	return lines[i]
 }
 
 // TestUpdateCLICheckHumanOmitsNotesWhenReleaseBodyIsEmpty pins the degradation

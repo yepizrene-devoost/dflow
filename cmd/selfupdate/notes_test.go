@@ -30,27 +30,29 @@ func TestSummarizeReleaseNotes(t *testing.T) {
 		{
 			name: "drops the title and renders the bullets",
 			body: "# v0.3.0\n\n- fixed a bug\n- added a feature",
-			want: []string{"• fixed a bug", "• added a feature"},
+			want: []string{"• fixed a bug", "", "• added a feature"},
 		},
 		{
 			name: "collapses blank lines",
 			body: "first\n\n\n   \nsecond",
-			want: []string{"first", "second"},
+			// The source's blank run collapses to the one presentation blank line
+			// every kept line after the first is spaced by.
+			want: []string{"first", "", "second"},
 		},
 		{
 			name: "trims trailing whitespace",
 			body: "change one   \nchange two\t",
-			want: []string{"change one", "change two"},
+			want: []string{"change one", "", "change two"},
 		},
 		{
 			name: "strips CRLF carriage returns",
 			body: "first\r\nsecond\r\n",
-			want: []string{"first", "second"},
+			want: []string{"first", "", "second"},
 		},
 		{
 			name: "preserves bullet indentation",
 			body: "- top\n  - nested\n    - deeper",
-			want: []string{"• top", "  • nested", "    • deeper"},
+			want: []string{"• top", "", "  • nested", "", "    • deeper"},
 		},
 	}
 
@@ -115,7 +117,7 @@ func TestSummarizeReleaseNotesRendersTerminalShapedLines(t *testing.T) {
 		{
 			name: "indented bullet keeps its indentation",
 			body: "- top\n  - nested",
-			want: []string{"• top", "  • nested"},
+			want: []string{"• top", "", "  • nested"},
 		},
 		{
 			name: "dash without a space is not a bullet",
@@ -148,7 +150,7 @@ func TestSummarizeReleaseNotesRendersTerminalShapedLines(t *testing.T) {
 // against the shape GoReleaser actually publishes, the one a maintainer saw
 // rendered as raw markup: the duplicated top title and the release's own version
 // heading are both gone, while the section headings and the bullet list still
-// render, separated into blocks by one blank line per later heading.
+// render, spaced into an airy list by the generalized separator rule.
 //
 // The version heading is the legibility fix from issue #30: the command already
 // prints "what's new in v0.2.0:" from the release tag, so rendering
@@ -173,9 +175,10 @@ func TestSummarizeReleaseNotesRendersARealReleaseBody(t *testing.T) {
 	want := []string{
 		"▸ Added",
 		"• `dflow finish` command to close a feature branch",
+		// The two bullets of one section are spaced, and the next heading keeps
+		// its own separating blank line.
+		"",
 		"• `dflow update` command to install the latest release",
-		// The blank line before the second heading is the presentation fix: it
-		// keeps the Added block from running straight into the Fixed block.
 		"",
 		"▸ Fixed",
 		"• keep the current binary when a download fails",
@@ -190,19 +193,25 @@ func TestSummarizeReleaseNotesRendersARealReleaseBody(t *testing.T) {
 	}
 }
 
-// TestSummarizeReleaseNotesSeparatesSectionsWithBlankLines pins the presentation
-// fix from the maintainer's follow-up on issue #30: a real multi-section body
-// read as a wall of text, because each "▸ " block and the bullets under it ran
-// straight into the next. Once the summary has kept something, every following
-// section heading is preceded by one empty-string line, so the reader sees where
-// one section ends and the next begins.
+// TestSummarizeReleaseNotesSpacesContentWithBlankLines pins the airy list the
+// maintainer asked for on the follow-up to issue #30: a real multi-section body
+// read as a wall of text, so every kept content line after the summary's first
+// is preceded by one empty-string separator — which puts a blank between two
+// bullets of the same section — with one exception: a line whose predecessor in
+// the summary is a heading gets none, so a section's first bullet sits directly
+// under its heading instead of floating away from it.
 //
-// The first heading gets no separator: the caller prints "what's new in vX:"
-// directly above the summary, so a blank line there would open with a gap
-// instead of the first line of content. The separator is the empty string rather
-// than a padded line, so it carries no indentation and no trailing whitespace
-// for a renderer to print.
-func TestSummarizeReleaseNotesSeparatesSectionsWithBlankLines(t *testing.T) {
+// Two consequences are deliberate and pinned below. The summary never opens with
+// a blank line, because the caller prints "what's new in vX:" directly above it,
+// so a blank there would open with a gap instead of the first line of content.
+// And two consecutive headings render stacked without a blank between them: the
+// exception welds every line to a heading before it, and a second heading has no
+// content of its own, so it lands directly beneath the first — which matches how
+// tightly a maintainer groups two adjacent section titles.
+//
+// The separator is the empty string rather than a padded line, so it carries no
+// indentation and no trailing whitespace for a renderer to print.
+func TestSummarizeReleaseNotesSpacesContentWithBlankLines(t *testing.T) {
 	cases := []struct {
 		name string
 		body string
@@ -219,21 +228,37 @@ func TestSummarizeReleaseNotesSeparatesSectionsWithBlankLines(t *testing.T) {
 			want: []string{"▸ Added", "• a short item"},
 		},
 		{
-			name: "each heading after kept content is preceded by one blank line",
-			body: "- item\n## Changed\n## Fixed",
-			want: []string{"• item", "", "▸ Changed", "", "▸ Fixed"},
+			name: "a plain first line is not preceded by a blank line",
+			body: "intro\nmore prose",
+			want: []string{"intro", "", "more prose"},
+		},
+		{
+			name: "bullets in one section are separated by blank lines",
+			body: "### Added\n- first item\n- second item",
+			want: []string{"▸ Added", "• first item", "", "• second item"},
+		},
+		{
+			name: "a heading after bullets keeps its separating blank line",
+			body: "- item\n## Changed",
+			want: []string{"• item", "", "▸ Changed"},
+		},
+		{
+			name: "two consecutive headings stack without a blank between them",
+			body: "## Changed\n## Fixed",
+			want: []string{"▸ Changed", "▸ Fixed"},
 		},
 		{
 			name: "a dropped version heading adds no separator of its own",
 			body: "### Added\n- one item\n## 📦 v0.9.9 – Release\n- two item",
-			want: []string{"▸ Added", "• one item", "• two item"},
+			want: []string{"▸ Added", "• one item", "", "• two item"},
 		},
 		{
-			name: "a release body is separated block by block",
+			name: "a release body is spaced block by block",
 			body: "# Changelog\n\n## 📦 v0.3.0 – Self-Update\n\n### Added\n\n- surface the update notification\n- summarize the release notes\n\n### Changed\n\n- rework the digest\n\n### Fixed\n\n- keep the current binary when a download fails\n",
 			want: []string{
 				"▸ Added",
 				"• surface the update notification",
+				"",
 				"• summarize the release notes",
 				"",
 				"▸ Changed",
@@ -261,65 +286,64 @@ func TestSummarizeReleaseNotesSeparatesSectionsWithBlankLines(t *testing.T) {
 	}
 }
 
-// TestSummarizeReleaseNotesExemptsSeparatorsFromTheLineCap fixes why a separator
-// is presentation rather than content: maxReleaseNotesLines bounds how many
-// changelog lines a reader has to scan, so a blank line must neither spend one
-// of those slots nor push real content behind the ellipsis. The body below holds
-// exactly a full cap's worth of content lines spread over three sections, so a
-// bound that counted the two separators would drop the last bullets and announce
-// a truncation that never happened.
-func TestSummarizeReleaseNotesExemptsSeparatorsFromTheLineCap(t *testing.T) {
-	// Each section contributes one heading plus the given number of bullets, for
-	// the cap's worth of content lines in total. The bullets keep one running
-	// number so the expected lines also pin the sections' order.
-	next := 0
-	bullets := func(count int) string {
-		var b strings.Builder
-		for i := 0; i < count; i++ {
-			next++
-			fmt.Fprintf(&b, "- item %02d\n", next)
-		}
-		return b.String()
+// TestSummarizeReleaseNotesKeepsALongBodyUnderTheCharacterBudgetWhole inverts
+// the regression the removed physical-line cap caused. Counting rendered lines
+// made a normal release overflow a forty-line budget as soon as lines wrapped,
+// so the tail of the changelog disappeared behind an ellipsis for no legibility
+// gain. The character budget is now the only flood guard, so both bodies below —
+// one with more physical lines than the removed cap ever allowed, one that wraps
+// well past it — must render completely, with no ellipsis and not a bullet lost.
+//
+// The bullets also make the airy spacing measurable here: every pair of bullets
+// carries a separator between them, and none of those separators may spend a
+// rune of the budget.
+func TestSummarizeReleaseNotesKeepsALongBodyUnderTheCharacterBudgetWhole(t *testing.T) {
+	cases := []struct {
+		name         string
+		body         string
+		contentWidth int
+		wantBullets  int
+	}{
+		{
+			name:         "fifty-five bullets are more than the removed forty-line cap",
+			body:         strings.TrimSpace(strings.Repeat("- item 01\n", 55)),
+			contentWidth: 0,
+			wantBullets:  55,
+		},
+		{
+			name:         "forty bullets wrapped at a narrow width render eighty physical lines",
+			body:         strings.TrimSpace(strings.Repeat("- alpha beta gamma\n", 40)),
+			contentWidth: 12,
+			wantBullets:  40,
+		},
 	}
 
-	body := "## Added\n" + bullets(14) +
-		"## Changed\n" + bullets(15) +
-		"## Fixed\n" + bullets(8)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := SummarizeReleaseNotes(tc.body, tc.contentWidth)
 
-	got := SummarizeReleaseNotes(body, 0)
-
-	// The forty content lines plus the two separators: the first heading opens
-	// the summary, the two later ones are preceded by a blank line each.
-	want := []string{
-		"▸ Added",
-		"• item 01", "• item 02", "• item 03", "• item 04",
-		"• item 05", "• item 06", "• item 07", "• item 08",
-		"• item 09", "• item 10", "• item 11", "• item 12",
-		"• item 13", "• item 14",
-		"",
-		"▸ Changed",
-		"• item 15", "• item 16", "• item 17", "• item 18",
-		"• item 19", "• item 20", "• item 21", "• item 22",
-		"• item 23", "• item 24", "• item 25", "• item 26",
-		"• item 27", "• item 28", "• item 29",
-		"",
-		"▸ Fixed",
-		"• item 30", "• item 31", "• item 32", "• item 33",
-		"• item 34", "• item 35", "• item 36", "• item 37",
-	}
-	if !slices.Equal(got, want) {
-		t.Fatalf("SummarizeReleaseNotes(at the line cap) = %#v, want %#v", got, want)
-	}
-	if slices.Contains(got, "…") {
-		t.Fatalf("summary = %#v, want no ellipsis: the body held exactly the cap's worth of content lines", got)
+			if slices.Contains(got, releaseNotesEllipsis) {
+				t.Fatalf("summary = %#v, want no ellipsis: the body is far under the character budget, which is the only flood guard left", got)
+			}
+			markers := 0
+			for _, line := range got {
+				if strings.HasPrefix(line, releaseNotesBulletMarker) {
+					markers++
+				}
+			}
+			if markers != tc.wantBullets {
+				t.Fatalf("summary = %#v, want all %d bullets rendered: only the character budget may clip content", got, tc.wantBullets)
+			}
+		})
 	}
 }
 
-// TestSummarizeReleaseNotesSeparatorsNeverTruncate is the other half of the line
-// cap exemption: excluding separators from the count would still be wrong if
-// their presence could make a complete summary look truncated. Seven one-item
-// sections render more lines than the cap once the six blank lines are added,
-// yet no content was dropped, so the summary must end without an ellipsis.
+// TestSummarizeReleaseNotesSeparatorsNeverTruncate is the other half of the
+// separator exemption: excluding separators from the character budget would
+// still be wrong if their presence could make a complete summary look truncated.
+// Seven one-item sections carry six blank lines and fourteen short content
+// lines, far more than the removed line cap would have allowed, yet no content
+// was dropped, so the summary must end without an ellipsis.
 func TestSummarizeReleaseNotesSeparatorsNeverTruncate(t *testing.T) {
 	var body strings.Builder
 	for i := 1; i <= 7; i++ {
@@ -348,46 +372,46 @@ func TestSummarizeReleaseNotesSeparatorsNeverTruncate(t *testing.T) {
 }
 
 // TestSummarizeReleaseNotesExemptsSeparatorsFromTheCharacterBudget pins the
-// per-rune half of the exemption. A separator is the empty string, so it adds
-// nothing to the cumulative rune budget; the body below spends the whole
-// maxReleaseNotesChars budget on content while carrying a separator in the
-// middle, so an implementation that charged even one rune for a blank line would
-// drop the final line behind an ellipsis.
+// exemption. A separator is the empty string, so it adds nothing to the
+// cumulative rune budget; the body below spends the whole
+// maxReleaseNotesChars budget on content while carrying a separator between
+// every pair of bullets, so an implementation that charged even one rune for a
+// blank line would drop the tail behind an ellipsis.
 func TestSummarizeReleaseNotesExemptsSeparatorsFromTheCharacterBudget(t *testing.T) {
-	// "▸ " is two runes, so a heading of 98 runes renders to exactly 100. Forty
-	// such lines spend the 4000-rune budget exactly, which also lands on the
-	// forty-physical-line cap: neither bound may fire, and the separator must not
-	// spend a rune of either.
-	heading := releaseNotesHeadingMarker + strings.Repeat("x", 98)
-	filler := strings.Repeat("x", 100)
+	// "• " is two runes, so an item of 98 runes renders to exactly 100, and forty
+	// such bullets spend the 4000-rune budget exactly. Those forty bullets also
+	// carry thirty-nine separators, none of which may spend a rune.
+	const contentLines = 40
+	item := strings.Repeat("x", 98)
+	line := "- " + item
 
-	lines := []string{"## " + strings.Repeat("x", 98)}
-	want := []string{heading}
-	for i := 0; i < 38; i++ {
-		lines = append(lines, filler)
-		want = append(want, filler)
+	body := strings.Repeat(line+"\n", contentLines)
+
+	// The rendered shape: a bullet, then a separator and a bullet for each of the
+	// remaining thirty-nine.
+	want := make([]string, 0, contentLines*2-1)
+	for i := 0; i < contentLines; i++ {
+		if i > 0 {
+			want = append(want, releaseNotesSeparator)
+		}
+		want = append(want, releaseNotesBulletMarker+item)
 	}
-	lines = append(lines, "## "+strings.Repeat("x", 98))
-	want = append(want, "", heading)
 
 	total := 0
-	for _, line := range want {
-		total += utf8.RuneCountInString(line)
+	for _, rendered := range want {
+		total += utf8.RuneCountInString(rendered)
 	}
 	if total != maxReleaseNotesChars {
 		t.Fatalf("the fixture spends %d content runes, want exactly the %d-rune budget", total, maxReleaseNotesChars)
 	}
-	if len(want)-1 != maxReleaseNotesLines {
-		t.Fatalf("the fixture holds %d content lines, want exactly the %d-line cap", len(want)-1, maxReleaseNotesLines)
-	}
 
-	got := SummarizeReleaseNotes(strings.Join(lines, "\n"), 0)
+	got := SummarizeReleaseNotes(body, 0)
 
 	if !slices.Equal(got, want) {
 		t.Fatalf("SummarizeReleaseNotes(at the character budget) = %#v, want %#v", got, want)
 	}
 	if slices.Contains(got, "…") {
-		t.Fatalf("summary = %#v, want no ellipsis: the content fit the budget exactly and the separator added nothing", got)
+		t.Fatalf("summary = %#v, want no ellipsis: the content fit the budget exactly and the separators added nothing", got)
 	}
 }
 
@@ -643,9 +667,9 @@ func TestSummarizeReleaseNotesDoesNotWrapWithoutAMeasuredWidth(t *testing.T) {
 		t.Run(fmt.Sprintf("width %d", width), func(t *testing.T) {
 			got := SummarizeReleaseNotes(body, width)
 
-			want := []string{releaseNotesBulletMarker + longItem, longPlain}
+			want := []string{releaseNotesBulletMarker + longItem, "", longPlain}
 			if !slices.Equal(got, want) {
-				t.Fatalf("SummarizeReleaseNotes(body, %d) = %#v, want the two whole lines %#v", width, got, want)
+				t.Fatalf("SummarizeReleaseNotes(body, %d) = %#v, want the two whole lines %#v, spaced like any other pair of kept lines", width, got, want)
 			}
 			if slices.Contains(got, releaseNotesEllipsis) {
 				t.Fatalf("summary = %#v, want no ellipsis: an unmeasured width is no reason to truncate", got)
@@ -669,11 +693,12 @@ func TestSummarizeReleaseNotesLeavesHeadingsUnwrapped(t *testing.T) {
 }
 
 // TestSummarizeReleaseNotesDecidesHeadingClassFromTheRawLine pins the structure
-// the separator rule needs once one raw line can render to several physical
-// lines: the class is decided from the raw text, not by sniffing the rendered
-// output for the heading marker. A plain line that happens to start with "▸ " is
-// still a plain line and gets no separator, while a real section heading still
-// opens a new block.
+// the spacing rule needs now that any kept line can be followed by content: the
+// class is decided from the raw text, never by sniffing the rendered output for
+// the heading marker. The rule that exposes the class is the heading exception —
+// a line directly under a heading takes no separating blank — so a plain line
+// that merely looks like a heading must still be followed by one, while a real
+// heading must weld the line beneath it.
 func TestSummarizeReleaseNotesDecidesHeadingClassFromTheRawLine(t *testing.T) {
 	cases := []struct {
 		name string
@@ -681,19 +706,19 @@ func TestSummarizeReleaseNotesDecidesHeadingClassFromTheRawLine(t *testing.T) {
 		want []string
 	}{
 		{
-			name: "a real heading after content opens a new block",
-			body: "intro\n## Added",
-			want: []string{"intro", "", "▸ Added"},
+			name: "a real heading welds the line under it",
+			body: "## Added\nintro",
+			want: []string{"▸ Added", "intro"},
 		},
 		{
 			name: "a plain line that looks like a marker is not a heading",
-			body: "intro\n▸ literal text",
-			want: []string{"intro", "▸ literal text"},
+			body: "▸ literal text\nintro",
+			want: []string{"▸ literal text", "", "intro"},
 		},
 		{
 			name: "a bullet whose text starts with the marker is still a bullet",
-			body: "intro\n- ▸ literal text",
-			want: []string{"intro", "• ▸ literal text"},
+			body: "- ▸ literal text\nintro",
+			want: []string{"• ▸ literal text", "", "intro"},
 		},
 	}
 
@@ -704,44 +729,6 @@ func TestSummarizeReleaseNotesDecidesHeadingClassFromTheRawLine(t *testing.T) {
 				t.Fatalf("SummarizeReleaseNotes(%q) = %#v, want %#v", tc.body, got, tc.want)
 			}
 		})
-	}
-}
-
-// TestSummarizeReleaseNotesCapsPhysicalRenderedLines pins what the line cap
-// counts once lines wrap: physical lines. The body holds a full cap's worth of
-// bullets — exactly a full source-line budget — but each wraps into two physical
-// lines, so a cap that still counted source lines would keep everything and
-// never truncate. The cap must stop after half the bullets and announce the rest
-// with one ellipsis, and it must stop between bullets, never inside one.
-func TestSummarizeReleaseNotesCapsPhysicalRenderedLines(t *testing.T) {
-	// A ten-rune item that wraps into "alpha beta" and "gamma" at width 12.
-	body := strings.TrimSpace(strings.Repeat("- alpha beta gamma\n", maxReleaseNotesLines))
-
-	got := SummarizeReleaseNotes(body, 12)
-
-	// Half the bullets, because each spends two of the physical-line budget.
-	const keptBullets = maxReleaseNotesLines / 2
-	if len(got) != maxReleaseNotesLines+1 {
-		t.Fatalf("len = %d, want %d (%d physical lines plus the ellipsis)", len(got), maxReleaseNotesLines+1, maxReleaseNotesLines)
-	}
-	markers := 0
-	for i, line := range got[:maxReleaseNotesLines] {
-		if strings.HasPrefix(line, releaseNotesBulletMarker) {
-			markers++
-			if line != releaseNotesBulletMarker+"alpha beta" {
-				t.Fatalf("bullet at line %d = %q, want the first wrapped half", i, line)
-			}
-			continue
-		}
-		if line != "  gamma" {
-			t.Fatalf("continuation at line %d = %q, want the second wrapped half", i, line)
-		}
-	}
-	if markers != keptBullets {
-		t.Fatalf("kept %d bullets, want %d: the cap counts physical lines, not source lines", markers, keptBullets)
-	}
-	if got[maxReleaseNotesLines] != releaseNotesEllipsis {
-		t.Fatalf("final line = %q, want the ellipsis: the remaining bullets were dropped", got[maxReleaseNotesLines])
 	}
 }
 
@@ -764,56 +751,16 @@ func TestSummarizeReleaseNotesCapsTheRenderedLine(t *testing.T) {
 	}
 }
 
-// TestSummarizeReleaseNotesCapsLineCount pins the line bound and the ellipsis
-// line: a body with more lines than the cap keeps exactly the cap's worth and
-// then announces the drop with one final ellipsis.
-func TestSummarizeReleaseNotesCapsLineCount(t *testing.T) {
-	lines := make([]string, 0, maxReleaseNotesLines+5)
-	for i := 1; i <= maxReleaseNotesLines+5; i++ {
-		lines = append(lines, fmt.Sprintf("line %02d", i))
-	}
-
-	got := SummarizeReleaseNotes(strings.Join(lines, "\n"), 0)
-
-	if len(got) != maxReleaseNotesLines+1 {
-		t.Fatalf("len = %d, want %d (the %d-line cap plus the ellipsis)", len(got), maxReleaseNotesLines+1, maxReleaseNotesLines)
-	}
-	if got[0] != "line 01" {
-		t.Fatalf("first line = %q, want %q", got[0], "line 01")
-	}
-	wantLastKept := fmt.Sprintf("line %02d", maxReleaseNotesLines)
-	if got[maxReleaseNotesLines-1] != wantLastKept {
-		t.Fatalf("last kept line = %q, want %q", got[maxReleaseNotesLines-1], wantLastKept)
-	}
-	if got[maxReleaseNotesLines] != "…" {
-		t.Fatalf("final line = %q, want the ellipsis %q", got[maxReleaseNotesLines], "…")
-	}
-}
-
-// TestSummarizeReleaseNotesKeepsTheCapWithoutEllipsis fixes the boundary: a
-// body of exactly the cap's worth of lines is complete, so no ellipsis line is
-// owed and none is added.
-func TestSummarizeReleaseNotesKeepsTheCapWithoutEllipsis(t *testing.T) {
-	lines := make([]string, 0, maxReleaseNotesLines)
-	for i := 1; i <= maxReleaseNotesLines; i++ {
-		lines = append(lines, fmt.Sprintf("line %02d", i))
-	}
-
-	got := SummarizeReleaseNotes(strings.Join(lines, "\n"), 0)
-
-	if len(got) != maxReleaseNotesLines {
-		t.Fatalf("len = %d, want %d with no ellipsis", len(got), maxReleaseNotesLines)
-	}
-	if slices.Contains(got, "…") {
-		t.Fatalf("summary = %#v, want no ellipsis for a body that exactly fits", got)
-	}
-}
-
-// TestSummarizeReleaseNotesCapsTheCharacterBudget pins the character bound:
-// lines are added until the next one would exceed the budget, at which point it
-// and the rest are dropped behind a single ellipsis line. The 200-rune lines
-// keep the arithmetic exact and well under the line cap, so the character bound
-// is the one that fires.
+// TestSummarizeReleaseNotesCapsTheCharacterBudget pins the character bound — the
+// only flood guard left — together with the ellipsis line that announces it:
+// rendered lines are added until the next one would exceed the budget, at which
+// point it and the rest are dropped behind a single ellipsis line. The 200-rune
+// lines keep the arithmetic exact, so the budget is what fires.
+//
+// The surviving content is read back out of the summary with the separators
+// removed: where the blanks sit is the spacing rule's contract, pinned by
+// TestSummarizeReleaseNotesSpacesContentWithBlankLines, while this test is about
+// how much content survives.
 func TestSummarizeReleaseNotesCapsTheCharacterBudget(t *testing.T) {
 	const lineLen = 200
 	fit := maxReleaseNotesChars / lineLen
@@ -826,16 +773,28 @@ func TestSummarizeReleaseNotesCapsTheCharacterBudget(t *testing.T) {
 
 	got := SummarizeReleaseNotes(strings.Join(lines, "\n"), 0)
 
-	if len(got) != fit+1 {
-		t.Fatalf("len = %d, want %d (%d full lines plus the ellipsis)", len(got), fit+1, fit)
-	}
-	for i := 0; i < fit; i++ {
-		if got[i] != line {
-			t.Fatalf("line %d = %q, want the full %d-rune line", i, got[i], lineLen)
+	content := make([]string, 0, len(got))
+	for _, rendered := range got {
+		if rendered != releaseNotesSeparator {
+			content = append(content, rendered)
 		}
 	}
-	if got[fit] != "…" {
-		t.Fatalf("final line = %q, want the ellipsis %q", got[fit], "…")
+
+	if len(content) != fit+1 {
+		t.Fatalf("content = %#v, want %d lines (%d full lines plus the ellipsis)", content, fit+1, fit)
+	}
+	for i := 0; i < fit; i++ {
+		if content[i] != line {
+			t.Fatalf("line %d = %q, want the full %d-rune line", i, content[i], lineLen)
+		}
+	}
+	if content[fit] != releaseNotesEllipsis {
+		t.Fatalf("final line = %q, want the ellipsis %q", content[fit], releaseNotesEllipsis)
+	}
+	// The ellipsis continues the final block instead of opening one, so it is not
+	// spaced from the line above it.
+	if last := got[len(got)-2]; last == releaseNotesSeparator {
+		t.Fatalf("summary = %#v, want the ellipsis appended directly to the last kept line, not spaced from it", got)
 	}
 }
 
