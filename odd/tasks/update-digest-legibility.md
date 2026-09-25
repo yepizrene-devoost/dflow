@@ -81,8 +81,6 @@ only — the content rules from work unit 1 are unchanged:
 - [x] T9: full verification and work-unit commits — combined with T13 into one
       commit (see the note under T13).
 
-### Tasks (work unit 3)
-
 ## Work unit 3: terminal word-wrap for icon lines (screenshot feedback 2)
 
 The provenance warning after the banner (~230 chars in one `utils.Warn` at
@@ -125,12 +123,60 @@ problem anywhere an icon line exceeds the width. Presentation only:
       so both units land as one commit to keep every commit green; the review
       was already planned as combined.
 
+## Work unit 4: unified text measure — wrap replaces clamp (screenshot feedback 3)
+
+Two connected symptoms against the real v0.3.0 body on a ~200-column terminal:
+the digest still clamps bullets at 100 runes (mid-word `…` cuts, half the line
+empty), while icon lines fill the full terminal width (~196 cols) — two
+different text measures side by side read as misaligned, and a 196-column prose
+line is unreadable. User decision: no more truncation; the full bullet text is
+shown, wrapped.
+
+Design:
+
+- **One readable measure for the whole report**: effective content width =
+  `min(measured − indent, 100)`, floor 80, TTY-only. Same measure for icon
+  lines (printWithIcon) and digest lines (renderer).
+- **The 100-rune item clamp is removed.** `SummarizeReleaseNotes` takes a
+  content width parameter (stays pure): bullets and plain content lines wrap at
+  word boundaries with hanging indent aligned under the bullet text; a width ≤ 0
+  (non-TTY) means unbounded — no wrap, no clamp.
+- **Flood caps move to physical lines (40) and 4000 chars**; the ellipsis marks
+  dropped content only at those caps, never mid-word.
+- Heading/bullet markers, H1 and version-heading drop, nil-vs-empty contract
+  unchanged.
+- Also fixes advisory `R2-stray-duplicate-work-unit-3-tasks-heading` (duplicate
+  heading in this file) and, naturally, `R2-heading-class-sniffed-from-rendered-prefix`
+  (heading detection moves before rendering).
+
+### Tasks
+
+- [x] T14: tests first — wrap-at-measure contract in `cmd/selfupdate/notes_test.go`
+      and measure cap in `cmd/utils/messages_test.go` — RED observed (new
+      signature + removed clamp constants), GREEN after implementation.
+- [x] T15: renderer takes content width (`SummarizeReleaseNotes(body, contentWidth)`,
+      pure, 0 = unbounded); exported `utils.TerminalWidth()` wrapping the
+      `stdoutWidth` seam; `reportNotesSummary` passes
+      `min(measured−2, maxDigestWidth=100)`, floor 40, 0 when unmeasured. Fill
+      helper shared as a local `wrapReleaseNoteText` copy (cmd/selfupdate must
+      not import cmd/utils).
+- [x] T16: `printWithIcon` ceiling `maxWrapWidth=100` over the existing 80 floor;
+      clamp tests replaced by wrap tests; heading class decided from the raw line
+      (`releaseNoteLineKind`) before rendering — closes advisory
+      `R2-heading-class-sniffed-from-rendered-prefix`.
+- [x] T17: full verification — `go test ./...` green, `go vet` clean, `gofmt`
+      clean; work-unit commit below; RDD review of the new candidate declared in
+      the commit identity section.
+
 ## Work-unit commit identity (combined)
 
 - `2bbe807` feat(update): clamp digest items and drop the version heading (WU1)
 - `6171857` feat(update): space and wrap the update report for terminal
   legibility (WU2 + WU3; hunks interleave in two shared files, so one commit
   keeps every commit green — see T13)
-- Review declaration: `6171857` is the frozen candidate for the combined native
-  RDD review of work units 2 and 3; expected outcome is an ordinary review over
-  the diff against `a995653`.
+- Review outcome: APPROVED — lineage `review-42908f606d1b3841`, 4/4 lenses,
+  authority burned (consumed revision `sha256:254552772891af242587f99e4281973d4e1169a26f0255b17e947d677d36c358`).
+  Non-blocking advisories carried into WU4: `R2-heading-class-sniffed-from-rendered-prefix`,
+  `R2-stray-duplicate-work-unit-3-tasks-heading` (fixed in this file by that
+  edit), plus WU1's `R2-version-heading-drop-doc-overstates-formatting`.
+- WU4 commit identity: recorded as it lands.

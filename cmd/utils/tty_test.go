@@ -21,3 +21,20 @@ func TestStdoutWidthDeclinesToMeasureANonTerminalStdout(t *testing.T) {
 		t.Fatalf("stdoutWidth() = (%d, true) for a non-terminal stdout, want ok=false", width)
 	}
 }
+
+// TestTerminalWidthExposesTheStdoutSeam pins the exported view callers outside
+// this package measure through (the release-notes digest does, because it is
+// built line by line rather than wrapped by one helper): TerminalWidth answers
+// exactly what the stdoutWidth seam answers, so a caller sizes its text to the
+// stream it writes and gets the same unmeasured signal a pipe produces.
+func TestTerminalWidthExposesTheStdoutSeam(t *testing.T) {
+	withStdoutWidth(t, 120, true)
+	if width, ok := TerminalWidth(); !ok || width != 120 {
+		t.Fatalf("TerminalWidth() = (%d, %v), want (120, true)", width, ok)
+	}
+
+	withStdoutWidth(t, 0, false)
+	if width, ok := TerminalWidth(); ok || width != 0 {
+		t.Fatalf("TerminalWidth() = (%d, %v), want (0, false) for an unmeasured stdout", width, ok)
+	}
+}

@@ -297,13 +297,23 @@ func TestUpdateCLICheckHumanShowsReleaseNotes(t *testing.T) {
 	}
 }
 
-// TestUpdateCLICheckHumanDigestDropsTheVersionHeadingAndClampsDenseBullets pins
-// the what's-new legibility contract from issue #30 at the level a user meets it:
-// against the body a curated release actually publishes, the release's own
-// version heading must not re-appear under the command's "what's new in vX:"
+// TestUpdateCLICheckHumanDigestDropsTheVersionHeadingAndKeepsDenseBulletsWhole
+// pins the what's-new legibility contract from issue #30 at the level a user
+// meets it: against the body a curated release actually publishes, the release's
+// own version heading must not re-appear under the command's "what's new in vX:"
 // line, a version-free section heading must keep its marker, and one dense prose
-// bullet must arrive clipped to the item budget instead of wrapping across
-// several terminal lines.
+// bullet must reach the reader whole — no mid-word ellipsis, no clipped tail.
+//
+// The bullet was previously cut to a 100-rune item budget, which is what the
+// maintainer saw as mid-word truncation while the icon lines above filled the
+// terminal. That clamp is gone; the renderer now wraps at word boundaries when it
+// has a measured terminal width. This test runs the real binary with stdout on a
+// pipe, so the collected command is the unmeasured case and the contract it can
+// observe end to end is the truncation one: the full bullet appears and no
+// ellipsis does. The wrap geometry itself — where the continuation lines break and
+// how they hang under the item — is only observable with a measured width, so it
+// is pinned by the unit test in cmd/selfupdate
+// (TestSummarizeReleaseNotesWrapsBulletsAtWordBoundaries) rather than here.
 //
 // It also pins the presentation spacing from the maintainer's follow-up on the
 // same issue: a two-section digest read as a wall of text, so the second section
@@ -311,20 +321,18 @@ func TestUpdateCLICheckHumanShowsReleaseNotes(t *testing.T) {
 // is separated from the digest above it. The empty line matters as much as its
 // position: the renderer returns "" and the caller must print it verbatim, so no
 // line may be whitespace that only looks blank.
-//
-// The budget is pinned here as a literal rather than read from the package: it
-// is unexported, so this test is the caller-visible width that would catch a
-// silent change to it, which the package's own unit tests would happily follow.
-// The fixture reuses one 11-rune word, so a 99-rune prefix plus the ellipsis is
-// exactly nine whole repetitions and the expected line needs no partial word.
-func TestUpdateCLICheckHumanDigestDropsTheVersionHeadingAndClampsDenseBullets(t *testing.T) {
+func TestUpdateCLICheckHumanDigestDropsTheVersionHeadingAndKeepsDenseBulletsWhole(t *testing.T) {
 	setUpCLIEnv(t)
 	// Keep the command's best-effort cache refresh out of the host's own cache.
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 
-	const itemBudget = 100
-	clippedItem := strings.Repeat("legibility ", 9) + "…"
-	denseItem := strings.Repeat("legibility ", 40)
+	// Forty 10-rune words: far past the old 100-rune item clamp, so a
+	// reintroduced clip would be unmistakable in the assertions below.
+	words := make([]string, 40)
+	for i := range words {
+		words[i] = "legibility"
+	}
+	denseItem := strings.Join(words, " ")
 
 	body := "# Changelog\n\n" +
 		"## 📦 v9.9.9 – Self-Update, Installers & CLI Contracts\n\n" +
@@ -351,24 +359,18 @@ func TestUpdateCLICheckHumanDigestDropsTheVersionHeadingAndClampsDenseBullets(t 
 	if strings.Contains(output, "📦") {
 		t.Fatalf("the release's own version heading must not be repeated under the command's header, got:\n%s", output)
 	}
-	// Dropping it is formatting, not truncation, so it must not add a truncation
-	// line either.
-	for _, line := range strings.Split(output, "\n") {
-		if strings.TrimSpace(line) == "…" {
-			t.Fatalf("dropping the version heading must not add a truncation line, got:\n%s", output)
-		}
-	}
 	// A heading without a version token is untouched and still marked.
 	if !strings.Contains(output, "▸ Added") {
 		t.Fatalf("a version-free section heading must keep its marker, got:\n%s", output)
 	}
-	// The dense bullet arrives at the item budget, ellipsis included, and not one
-	// rune wider.
-	if !strings.Contains(output, "• "+clippedItem) {
-		t.Fatalf("a dense bullet must be clipped to a %d-rune item ending in an ellipsis, got:\n%s", itemBudget, output)
+	// The dense bullet arrives whole. The old clamp cut it at 100 runes with an
+	// ellipsis, so the full text and the absence of any ellipsis are the two
+	// halves of "no mid-word truncation in the digest path".
+	if !strings.Contains(output, "• "+denseItem) {
+		t.Fatalf("the dense bullet must reach the terminal whole, not clipped, got:\n%s", output)
 	}
-	if strings.Contains(output, strings.Repeat("legibility ", 10)) {
-		t.Fatalf("the dense bullet must not reach the terminal at full length, got:\n%s", output)
+	if strings.Contains(output, "…") {
+		t.Fatalf("the digest must not clip any line, so no ellipsis may appear, got:\n%s", output)
 	}
 
 	// Presentation spacing: the second section heading and the closing release

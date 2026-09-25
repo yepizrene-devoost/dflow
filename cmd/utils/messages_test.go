@@ -125,6 +125,29 @@ func TestPrintWithIconLeavesTheLineWholeWhenTheWidthIsUnknown(t *testing.T) {
 	}
 }
 
+// TestPrintWithIconCapsTheWrapWidthAtOneHundredColumns pins the ceiling that
+// keeps icon lines and the release-notes digest on one common measure: a
+// terminal far wider than the cap still wraps at maxWrapWidth content columns,
+// so a 200-column terminal does not produce 196-column lines while the digest
+// wraps at 100. Without the cap the message below fits on one 179-rune line.
+func TestPrintWithIconCapsTheWrapWidthAtOneHundredColumns(t *testing.T) {
+	// Thirty "alpha" words: 179 runes, wider than the 100-column cap but well
+	// under the 196 content columns an uncapped 200-column terminal would offer.
+	message := strings.TrimSpace(strings.Repeat("alpha ", 30))
+
+	withStdoutWidth(t, 200, true)
+	output := captureStdout(t, func() { Warn("%s", message) })
+
+	// The greedy fill takes sixteen words at 95 runes and cannot add a
+	// seventeenth (101), so the remaining fourteen take the continuation line.
+	firstLine := strings.TrimSpace(strings.Repeat("alpha ", 16))
+	secondLine := strings.TrimSpace(strings.Repeat("alpha ", 14))
+	want := fmt.Sprintf("%-3s %s\n%s%s\n", "⚠️", firstLine, continuationIndent, secondLine)
+	if output != want {
+		t.Fatalf("200-column output =\n%q\nwant the wrap at the %d-column ceiling\n%q", output, maxWrapWidth, want)
+	}
+}
+
 // TestPrintWithIconTreatsANarrowTerminalAsEightyColumnsWide pins the floor: a
 // terminal narrower than the floor wraps exactly as an 80-column one does, so
 // the floor is a wrapping width and not an opt-out from wrapping.

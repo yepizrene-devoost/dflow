@@ -50,6 +50,25 @@ func terminalWidth() (int, bool) {
 	return width, true
 }
 
+// TerminalWidth reports the width, in columns, of the terminal the human-facing
+// helpers render to, and whether that width could be measured at all.
+//
+// It is the exported view of the stdoutWidth seam, for callers outside this
+// package that must size text to the terminal themselves — the release-notes
+// digest does, because it is built line by line rather than wrapped by one
+// helper. ok=false means "do not size anything to a width": stdout is a pipe, a
+// file or a command substitution, and the caller must render its unmeasured
+// output exactly as it always has. A caller that does have a width is still
+// responsible for its own floor and ceiling; this function reports the terminal,
+// not a content width.
+//
+// It measures stdout, never stderr, for the same reason the icon helpers do:
+// stdout is the stream the sized output is written to and the one a user reads
+// in a terminal.
+func TerminalWidth() (int, bool) {
+	return stdoutWidth()
+}
+
 // NonInteractiveError builds the error returned when a command needs to prompt
 // but stdin or stdout is not a terminal.
 //

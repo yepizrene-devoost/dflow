@@ -24,6 +24,17 @@ const (
 	// long line ride past the edge. A reported width below this floor is
 	// treated as this floor, so the wrap point has a readable lower bound.
 	minWrapWidth = 80
+	// maxWrapWidth is the widest content width printWithIcon will wrap for.
+	//
+	// A very wide terminal would otherwise let an icon line run to nearly its
+	// full width — 196 content columns on a 200-column terminal — while the
+	// release-notes digest the same update report prints wraps at its own,
+	// narrower measure. Capping the content width keeps a long icon line and a
+	// digest bullet on one common measure, so the report reads as one document:
+	// a message longer than the cap wraps at the cap even when the terminal
+	// could show more. It caps content, not the terminal, so it never competes
+	// with minWrapWidth's floor on the terminal width.
+	maxWrapWidth = 100
 )
 
 // Error prints a message with a red cross (❌) prefix.
@@ -111,7 +122,7 @@ func Prompt(label string, args ...interface{}) {
 //
 //   - Suppression: in JSON mode the document is the only thing stdout may carry,
 //     so every icon-prefixed line yields to it.
-//   - Wrapping: when stdout is a terminal, a message longer than the terminal
+//   - Wrapping: when stdout is a terminal, a message longer than the available
 //     width is broken at word boundaries and the continuation lines are indented
 //     with continuationIndent, so the text hangs under the message column
 //     instead of running to column zero under the icon. The first line keeps the
@@ -120,10 +131,12 @@ func Prompt(label string, args ...interface{}) {
 // Wrapping is deliberately conditional on a measured terminal. When the width is
 // unknown — stdout is a pipe, a file or a command substitution — the message is
 // printed as one line, so piped and scripted output stays unwrapped and remains
-// easy to copy verbatim. A measured width below minWrapWidth is treated as the
-// floor, and a single token wider than the available width is left intact and
-// overflows its line rather than being split; see wrapIconMessage for the exact
-// fill rule.
+// easy to copy verbatim. A measured terminal width below minWrapWidth is treated
+// as the floor, so the wrap point has a readable lower bound, and a content
+// width above maxWrapWidth is treated as the cap, so a very wide terminal shares
+// one measure with the release-notes digest; a single token wider than the
+// available width is left intact and overflows its line rather than being split.
+// See wrapIconMessage for the exact fill rule.
 func printWithIcon(icon string, formattedMessage string, args ...interface{}) {
 	if CurrentFormat() == FormatJSON {
 		return
@@ -139,8 +152,12 @@ func printWithIcon(icon string, formattedMessage string, args ...interface{}) {
 	if width < minWrapWidth {
 		width = minWrapWidth
 	}
+	wrapWidth := width - iconPrefixWidth
+	if wrapWidth > maxWrapWidth {
+		wrapWidth = maxWrapWidth
+	}
 
-	for i, line := range wrapIconMessage(msg, width-iconPrefixWidth) {
+	for i, line := range wrapIconMessage(msg, wrapWidth) {
 		if i == 0 {
 			fmt.Printf("%-3s %s\n", icon, line)
 			continue
