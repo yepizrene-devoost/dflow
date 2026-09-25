@@ -81,4 +81,7 @@ instead of depending on someone remembering this one.
 
 - WU1: `4e04d89` (`fix(agent): preserve the installed skill file mode on
   overwrite`), on `bugfix/agent-install-followups`.
-- WU2: pending — recorded in the `docs(odd)` follow-up that closes this stage.
+- WU2: `7cd7c28` (`docs(releasing): call for a Changed entry when a pkg API
+  disappears`).
+- Both work units are one review candidate: the branch diff against `develop` at
+  `20e929e`.
