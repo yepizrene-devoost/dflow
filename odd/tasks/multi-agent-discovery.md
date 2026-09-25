@@ -164,13 +164,64 @@ the first time in CI. Verified instead by running it on Linux in a container
 The remaining accepted costs are the ones listed above (prompt-wording coupling,
 the `t.Skip` coverage gap on hosts without `script(1)`, and the 50 ms reply gap);
 none of them is a delivery risk for this repository's CI any more.
-3. [ ] WU3 — skill install (`pkg/agent/install.go`, `install_test.go`,
-       `cmd/commands/agent.go`): `--install` and `--local`, per-agent skill
-       placement, idempotent rewrite, `--json` reporting of every written path.
-4. [ ] WU4 — docs and verification: README section for the multi-agent wiring
-       and the discovery table; `go test ./...`, `golangci-lint run ./...`, and a
-       manual smoke run of each new flag combination.
-5. [ ] Commit identity recorded.
+3. [x] WU3 — skill install (`pkg/agent/install.go`, `install_test.go`,
+       `cmd/commands/agent.go`, `cmd/tests/agent_cli_test.go`): `--install` and
+       `--local`, per-agent skill placement, idempotent rewrite, `--json`
+       reporting of every planned path. Tests first — RED observed first as a
+       build failure on the new symbols, then behaviourally with all twelve new
+       or modified CLI pins failing on `unknown flag: --install`. Parent
+       verification: exact scope, focused and full suites green on the parent's
+       own runs, `gofmt` and `go vet` clean, `install.go` read line by line.
+
+   WU3 decisions:
+
+   - **Auto (`--agents` absent) targets the PORTABLE root only**, resolved as
+     `LookupAgent(AgentPi)` rather than hardcoded paths: `~/.agents/skills` in
+     user scope, `.agents/skills` with `--local`. This is the path issue #34
+     names for a plain `--install`, and one file serving several agents is the
+     point of the work unit. Two alternatives were rejected: installing into
+     every non-claude agent's private root writes three identical copies that
+     can drift, and writing `~/.claude` on an unqualified run is the surprise
+     file decision 2 forbids. `--agents all` widens to every registry root
+     (four in user scope, two in project scope).
+   - That settles one principle for both discovery surfaces: **auto targets the
+     portable artifact** — `AGENTS.md` on the instruction side, the shared
+     `.agents/skills` root on the skill side — and naming agents widens it.
+   - `SKILL.md` is wholly dflow's artifact, so it is rewritten whenever its bytes
+     differ and needs no `--force`. The workflow document keeps the opposite rule
+     because a team may have hand-edited it. The two may therefore differ;
+     deliberately.
+   - The install write is atomic (temporary file beside the target, then one
+     rename), so an interrupted run cannot leave a truncated `SKILL.md`.
+   - `SkillFilePath` is the single "~" resolver, shared by the writer and the
+     read-only `--json` reporter so the two cannot drift apart.
+
+   ### WU3 correction pass (defect the parent refused to ship)
+
+   The handoff recorded this as an accepted interaction; it was not acceptable.
+   `dflow agent --install` exited non-zero when the document already existed and
+   `--force` was absent — and every project that ever ran `dflow init` has that
+   document, so the only way to install the skill was the destructive flag whose
+   entire purpose is overwriting a hand-edited document. The flag coerced users
+   toward the one destructive path in the command. Now, with `--install`, an
+   existing document and no `--force`, the run leaves the document
+   byte-identical, says so truthfully through `utils.Info` instead of claiming it
+   generated the document, and still wires the references and installs the skill
+   from freshly rendered bytes. Without `--install` the guard is unchanged, and
+   `--force` still regenerates. The flipped pin plants a hand-edited sentinel
+   after the first install and asserts all of it, including the absence of the
+   "Generated agent workflow" line.
+
+4. [ ] WU5 — advisory follow-ups from the WU2 review, added after that review:
+       the `R1-nonatomic-instruction-overwrite` WARNING (`pkg/agent/reference.go`
+       still truncates in place and must adopt the atomic writer WU3 added) plus
+       the five readability suggestions. Parent decision: fixed inside this
+       branch rather than deferred to an issue.
+5. [ ] WU4 — docs and verification: README section for the multi-agent wiring,
+       the discovery table and the install flow; `go test ./...`,
+       `golangci-lint run ./...`, and a smoke run of each new flag combination.
+       Runs last so the docs describe the final state.
+6. [ ] Commit identity recorded.
 
 ## Work-unit commit identity (WU1)
 
@@ -194,6 +245,30 @@ none of them is a delivery risk for this repository's CI any more.
   review of work unit 2; the expected outcome is an ordinary review over the
   diff against `2944582` (develop at branch time), which this time also carries
   the WU1 identity record above.
+- Commit SHA: `3785b23` feat(agent): wire instruction references and add
+  --agents selection.
+- Review outcome: APPROVED — lineage `review-e0e412ba263a2faa`, tier `high`
+  (raised by the report's own risk evidence: "code that starts other processes in
+  cmd/tests/agent_cli_test.go", i.e. the pty driver), 4/4 lenses (`review-risk`,
+  `review-resilience`, `review-readability`, `review-reliability`), 2145 changed
+  lines against a correction budget of 200 (unused). Authority burned (consumed
+  revision
+  `sha256:aac96a682112438b3e4072fdadce0637955f6364132615181ce93fb976a33b37`).
+- Non-blocking advisories, all `informational`, carried into WU5:
+  `R1-heading-false-positive-noop` (risk), `R1-nonatomic-instruction-overwrite`
+  (risk, **WARNING**), `R2-append-adjacency` (readability),
+  `R2-json-agents-field` (readability), `R2-unused-registry-fields`
+  (readability), `R2-updated-wording` (readability).
+- Consent note: the first START for this candidate returned an unresolved
+  `consent/v3` envelope whose binding expired unanswered; per policy the
+  envelope was not resent, a fresh START was issued, and the subsequent run
+  proceeded with four lenses.
+
+## Work-unit commit identity (WU3)
+
+- Review declaration: this commit is the frozen candidate for the native RDD
+  review of work unit 3; the expected outcome is an ordinary review over the
+  diff against `2944582` (develop at branch time).
 - Commit SHA and review outcome: recorded in the next work-unit commit, never
   pre-written here.
 
@@ -207,6 +282,17 @@ none of them is a delivery risk for this repository's CI any more.
 
 ## Discovered during this work
 
+- The WU3 stability probe found a real test-harness defect: redirecting `HOME`
+  (needed so an install pin cannot write into the developer's real skills
+  directories) also changed how the shared `go build` in
+  `cmd/tests/clibuild_test.go` resolves its module cache, because with no
+  `GOMODCACHE` set that cache is `$GOPATH/pkg/mod` under the process's HOME. The
+  build then downloaded modules into the throwaway home, and since a module cache
+  is read-only, `t.TempDir`'s own cleanup failed with `permission denied` —
+  turning a green pin into a cleanup error. Fixed the same way issue #33 fixed
+  the compiler cache: capture the host's `GOMODCACHE` at package initialization
+  and pin it in the redirected environment. Any future pin that redirects HOME
+  must do the same.
 - `odd/tasks/agent-workflow-hydration.md` (issue #31, merged `bb6d2b1`) still
   shows every task unchecked although the work shipped. Reported to the
   maintainer; not silently rewritten here.

@@ -316,7 +316,7 @@ func TestAgentCLIUnknownAgentWritesNothing(t *testing.T) {
 // read-only render: one JSON document and nothing else, the byte-compatible
 // path/content keys, the reference plan, and no file on disk at all.
 func TestAgentCLIJSONReportsThePlanAndWritesNothing(t *testing.T) {
-	setUpCLIEnv(t)
+	home := skillInstallEnv(t)
 	binary := buildDflowCLI(t)
 	repo := newAgentRepo(t)
 
@@ -327,8 +327,8 @@ func TestAgentCLIJSONReportsThePlanAndWritesNothing(t *testing.T) {
 	assertNoHumanChrome(t, output)
 
 	doc := decodeSingleJSONDocument(t, output)
-	if len(doc) != 3 {
-		t.Fatalf("the document carries %d top-level keys, want exactly path, content and references: %v", len(doc), doc)
+	if len(doc) != 4 {
+		t.Fatalf("the document carries %d top-level keys, want exactly path, content, references and skills: %v", len(doc), doc)
 	}
 	path, ok := doc["path"].(string)
 	if !ok {
@@ -352,16 +352,39 @@ func TestAgentCLIJSONReportsThePlanAndWritesNothing(t *testing.T) {
 	requireJSONStringSlice(t, entry, "agents", []string{"pi", "codex", "opencode"})
 	requireJSONBool(t, entry, "create", true)
 
+	// The skills plan is reported without --install too: it is the plan the flag
+	// would apply, and a read-only render of it costs nothing. Auto mode targets
+	// the portable root only, and an uninstalled skill is reported as absent.
+	skills := requireJSONArray(t, doc, "skills")
+	if len(skills) != 1 {
+		t.Fatalf("skills has %d entries, want 1 (the portable root):\n%v", len(skills), skills)
+	}
+	skillEntry, ok := skills[0].(map[string]any)
+	if !ok {
+		t.Fatalf("skills[0] = %#v, want an object", skills[0])
+	}
+	if len(skillEntry) != 4 {
+		t.Fatalf("skills[0] carries %d keys, want exactly root, dir, agents and exists: %v", len(skillEntry), skillEntry)
+	}
+	requireJSONString(t, skillEntry, "root", "~/.agents/skills")
+	requireJSONString(t, skillEntry, "dir", filepath.Join("~/.agents/skills", agent.SkillName))
+	requireJSONStringSlice(t, skillEntry, "agents", []string{"pi"})
+	requireJSONBool(t, skillEntry, "exists", false)
+
 	requireFileAbsent(t, filepath.Join(repo, agentWorkflowDefaultPath))
 	requireFileAbsent(t, filepath.Join(repo, ".agents"))
 	requireFileAbsent(t, filepath.Join(repo, "AGENTS.md"))
+	requireFileAbsent(t, filepath.Join(home, ".agents"))
 }
 
 // TestAgentCLIJSONRendersWhenDocumentExists pins the read-only render against
 // the document it renders: an existing document must not make --json fail with
 // "already exists", and the bytes already on disk must survive untouched.
 func TestAgentCLIJSONRendersWhenDocumentExists(t *testing.T) {
-	setUpCLIEnv(t)
+	// HOME is redirected even though no HOME path is asserted here: the report
+	// now carries the skill plan, whose existence check reads the user's skills
+	// directory, and a pin must not read the machine's own installed skills.
+	skillInstallEnv(t)
 	binary := buildDflowCLI(t)
 	repo := newAgentRepo(t)
 
@@ -382,6 +405,496 @@ func TestAgentCLIJSONRendersWhenDocumentExists(t *testing.T) {
 	requireJSONString(t, doc, "content", expectedAgentDoc(t, repo))
 	requireFileContent(t, docPath, sentinel)
 	requireFileAbsent(t, filepath.Join(repo, "AGENTS.md"))
+}
+
+// realGOMODCACHE is the host's module cache, captured at package initialization,
+// before any test can redirect HOME.
+//
+// Redirecting HOME for a skill pin would otherwise change how the `go build` in
+// the shared CLI helper resolves its module cache. With no GOMODCACHE set, that
+// cache is `$GOPATH/pkg/mod` under the process's HOME, so the build would download
+// modules into the throwaway home — and the module cache is deliberately
+// read-only, which makes t.TempDir's own RemoveAll cleanup fail and turns an
+// otherwise green pin into a cleanup error. Anchoring the variable keeps the build
+// identical to the one the host would run on its own and keeps the temporary home
+// free of build state. It mirrors realGOCACHE in clibuild_test.go.
+//
+// Package-level initialization runs before TestMain and before any t.Setenv, so
+// the value captured is the host's real cache. An empty value leaves the child's
+// environment unchanged: correct, only slower.
+var realGOMODCACHE = func() string {
+	out, err := exec.Command("go", "env", "GOMODCACHE").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}()
+
+// skillInstallEnv extends setUpCLIEnv with a redirected HOME, and returns it.
+//
+// Installing a skill resolves the "~"-prefixed registry roots through the user's
+// home directory, so an install-capable pin that left HOME alone would write into
+// the developer's real ~/.agents/skills or ~/.claude/skills — and a --json pin
+// would read them, making its report depend on the machine it runs on. setUpCLIEnv
+// already keeps Git and the update-check cache off the real home; this keeps
+// skills off it as well, and pins the module cache so the shared build does not
+// move into the temporary home with it.
+func skillInstallEnv(t *testing.T) string {
+	t.Helper()
+
+	setUpCLIEnv(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if realGOMODCACHE != "" {
+		t.Setenv("GOMODCACHE", realGOMODCACHE)
+	}
+	return home
+}
+
+// skillPath is the installed skill file under a skills root.
+func skillPath(root string) string {
+	return filepath.Join(root, agent.SkillName, agent.SkillFileName)
+}
+
+// userSkillPath is the installed skill file inside the redirected home for one
+// agent directory, such as ".agents" or ".claude".
+func userSkillPath(home, dir string) string {
+	return skillPath(filepath.Join(home, dir, "skills"))
+}
+
+// projectSkillPath is the installed skill file inside the repository for one
+// agent directory.
+func projectSkillPath(repo, dir string) string {
+	return skillPath(filepath.Join(repo, dir, "skills"))
+}
+
+// requireSingleSkillFile asserts a skills directory holds exactly the skill file.
+// It is how a temporary file left behind by a non-atomic write is caught.
+func requireSingleSkillFile(t *testing.T, dir string) {
+	t.Helper()
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read %s: %v", dir, err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	if len(names) != 1 || names[0] != agent.SkillFileName {
+		t.Fatalf("%s holds %v, want exactly [%s]", dir, names, agent.SkillFileName)
+	}
+}
+
+// The default install writes the PORTABLE root only — the one file pi, codex and
+// opencode all discover — and leaves every private agent directory in $HOME
+// alone. An unattended run must not scatter four copies through the user's home,
+// so the private roots are opt-in through --agents.
+func TestAgentCLIInstallWritesPortableSkillRootOnly(t *testing.T) {
+	home := skillInstallEnv(t)
+	binary := buildDflowCLI(t)
+	repo := newAgentRepo(t)
+
+	output, exitCode := startCLIRawOutput(t, 30*time.Second, repo, binary, "agent", "--install")
+	if exitCode != 0 {
+		t.Fatalf("dflow agent --install exited %d, want 0\n%s", exitCode, output)
+	}
+
+	doc := expectedAgentDoc(t, repo)
+	installed := userSkillPath(home, ".agents")
+	requireFileContent(t, installed, doc)
+	if !strings.Contains(output, installed) {
+		t.Errorf("the run must name the skill file it installed (%s), got:\n%s", installed, output)
+	}
+
+	requireFileAbsent(t, filepath.Join(home, ".claude"))
+	requireFileAbsent(t, filepath.Join(home, ".codex"))
+	requireFileAbsent(t, filepath.Join(home, ".config"))
+
+	// --install adds to what the command already does: the document and its
+	// AGENTS.md reference are still written exactly as before.
+	requireFileContent(t, filepath.Join(repo, agentWorkflowDefaultPath), doc)
+	requireFileContent(t, filepath.Join(repo, "AGENTS.md"), expectedReferenceBlock(agentWorkflowDefaultPath))
+}
+
+// Naming claude installs claude's own root in $HOME — and nothing else in either
+// direction: no portable root, and no AGENTS.md, because no selected agent reads
+// it.
+func TestAgentCLIInstallNamedClaudeWritesOnlyClaudeRoot(t *testing.T) {
+	home := skillInstallEnv(t)
+	binary := buildDflowCLI(t)
+	repo := newAgentRepo(t)
+
+	output, exitCode := startCLIRawOutput(t, 30*time.Second, repo, binary, "agent", "--install", "--agents", "claude")
+	if exitCode != 0 {
+		t.Fatalf("dflow agent --install --agents claude exited %d, want 0\n%s", exitCode, output)
+	}
+
+	doc := expectedAgentDoc(t, repo)
+	requireFileContent(t, userSkillPath(home, ".claude"), doc)
+	requireFileAbsent(t, filepath.Join(home, ".agents"))
+	requireFileAbsent(t, filepath.Join(home, ".codex"))
+	requireFileAbsent(t, filepath.Join(home, ".config"))
+
+	requireFileContent(t, filepath.Join(repo, "CLAUDE.md"), expectedReferenceBlock(agentWorkflowDefaultPath))
+	requireFileAbsent(t, filepath.Join(repo, "AGENTS.md"))
+}
+
+// Naming every agent widens the install to all four user-scope roots, including
+// the private ones a plain run leaves alone.
+func TestAgentCLIInstallAllWritesEveryUserRoot(t *testing.T) {
+	home := skillInstallEnv(t)
+	binary := buildDflowCLI(t)
+	repo := newAgentRepo(t)
+
+	output, exitCode := startCLIRawOutput(t, 30*time.Second, repo, binary, "agent", "--install", "--agents", "all")
+	if exitCode != 0 {
+		t.Fatalf("dflow agent --install --agents all exited %d, want 0\n%s", exitCode, output)
+	}
+
+	doc := expectedAgentDoc(t, repo)
+	for _, dir := range []string{".agents", ".codex", filepath.Join(".config", "opencode"), ".claude"} {
+		requireFileContent(t, userSkillPath(home, dir), doc)
+	}
+}
+
+// --install --local keeps the skill inside the repository: the project's own
+// portable root, and nothing in the user's home.
+func TestAgentCLIInstallLocalWritesProjectSkill(t *testing.T) {
+	home := skillInstallEnv(t)
+	binary := buildDflowCLI(t)
+	repo := newAgentRepo(t)
+
+	output, exitCode := startCLIRawOutput(t, 30*time.Second, repo, binary, "agent", "--install", "--local")
+	if exitCode != 0 {
+		t.Fatalf("dflow agent --install --local exited %d, want 0\n%s", exitCode, output)
+	}
+
+	doc := expectedAgentDoc(t, repo)
+	requireFileContent(t, projectSkillPath(repo, ".agents"), doc)
+	requireFileAbsent(t, filepath.Join(repo, ".claude"))
+	requireFileAbsent(t, filepath.Join(home, ".agents"))
+	requireFileAbsent(t, filepath.Join(home, ".claude"))
+}
+
+// --agents all in the LOCAL scope writes both project roots, which is the pair
+// the portable root does not cover for a repository that uses Claude Code.
+func TestAgentCLIInstallLocalAllWritesBothProjectRoots(t *testing.T) {
+	home := skillInstallEnv(t)
+	binary := buildDflowCLI(t)
+	repo := newAgentRepo(t)
+
+	output, exitCode := startCLIRawOutput(t, 30*time.Second, repo, binary, "agent", "--install", "--local", "--agents", "all")
+	if exitCode != 0 {
+		t.Fatalf("dflow agent --install --local --agents all exited %d, want 0\n%s", exitCode, output)
+	}
+
+	doc := expectedAgentDoc(t, repo)
+	requireFileContent(t, projectSkillPath(repo, ".agents"), doc)
+	requireFileContent(t, projectSkillPath(repo, ".claude"), doc)
+	requireFileAbsent(t, filepath.Join(home, ".agents"))
+	requireFileAbsent(t, filepath.Join(home, ".claude"))
+}
+
+// A second --install is idempotent: one file, identical bytes, no temporary
+// leftovers. It also must NOT require --force: the document is protected and the
+// skill is generated, so an existing document is no reason to push the user onto
+// the one destructive path in the command. The pin writes a distinctive sentinel
+// to the document before the second run — standing in for a team's hand edit —
+// and asserts the document survives byte for byte while the skill is refreshed
+// from the freshly generated bytes and the references are rewired.
+func TestAgentCLIInstallIsIdempotent(t *testing.T) {
+	home := skillInstallEnv(t)
+	binary := buildDflowCLI(t)
+	repo := newAgentRepo(t)
+
+	if output, exitCode := startCLIRawOutput(t, 30*time.Second, repo, binary, "agent", "--install"); exitCode != 0 {
+		t.Fatalf("first dflow agent --install exited %d, want 0\n%s", exitCode, output)
+	}
+	doc := expectedAgentDoc(t, repo)
+	installed := userSkillPath(home, ".agents")
+	requireFileContent(t, installed, doc)
+
+	// The document a team hand-edited: bytes this install must never overwrite.
+	sentinel := "# hand-edited workflow document the install must protect\n"
+	docPath := filepath.Join(repo, agentWorkflowDefaultPath)
+	writeRepoFile(t, docPath, sentinel)
+
+	output, exitCode := startCLIRawOutput(t, 30*time.Second, repo, binary, "agent", "--install")
+	if exitCode != 0 {
+		t.Fatalf("the second dflow agent --install exited %d, want 0: an existing document must not force --force on an install\n%s", exitCode, output)
+	}
+	// The document is protected, so it keeps its exact bytes...
+	requireFileContent(t, docPath, sentinel)
+	// ...the skill is generated from the freshly rendered document...
+	requireFileContent(t, installed, doc)
+	// ...the reference is still wired...
+	requireFileContent(t, filepath.Join(repo, "AGENTS.md"), expectedReferenceBlock(agentWorkflowDefaultPath))
+	// ...and the run must not claim a document it never generated.
+	if strings.Contains(output, "Generated agent workflow") {
+		t.Fatalf("the run claimed to generate the document it left untouched:\n%s", output)
+	}
+	requireSingleSkillFile(t, filepath.Dir(installed))
+
+	if output, exitCode := startCLIRawOutput(t, 30*time.Second, repo, binary, "agent", "--install", "--force"); exitCode != 0 {
+		t.Fatalf("dflow agent --install --force exited %d, want 0\n%s", exitCode, output)
+	}
+	requireFileContent(t, docPath, doc)
+	requireFileContent(t, installed, doc)
+	requireSingleSkillFile(t, filepath.Dir(installed))
+}
+
+// TestAgentCLIInstallProtectsHandEditedDocument is the scenario that motivates
+// --install not requiring --force: a repository whose workflow document was
+// hand-edited, on a FIRST install. The install must succeed, because the document
+// is protected and the skill is generated — the two artifacts are allowed to
+// differ — while driving the user to the destructive --force to install a skill
+// would be exactly backwards.
+func TestAgentCLIInstallProtectsHandEditedDocument(t *testing.T) {
+	home := skillInstallEnv(t)
+	binary := buildDflowCLI(t)
+	repo := newAgentRepo(t)
+
+	docPath := filepath.Join(repo, agentWorkflowDefaultPath)
+	if err := os.MkdirAll(filepath.Dir(docPath), 0755); err != nil {
+		t.Fatalf("failed to create the document directory: %v", err)
+	}
+	sentinel := "# hand-edited workflow document a project owns\n\nOnly --force may replace me.\n"
+	writeRepoFile(t, docPath, sentinel)
+
+	output, exitCode := startCLIRawOutput(t, 30*time.Second, repo, binary, "agent", "--install")
+	if exitCode != 0 {
+		t.Fatalf("dflow agent --install over a hand-edited document exited %d, want 0; installing must not require --force\n%s", exitCode, output)
+	}
+
+	// The document keeps its exact bytes...
+	requireFileContent(t, docPath, sentinel)
+	// ...the skill is the generated one...
+	doc := expectedAgentDoc(t, repo)
+	requireFileContent(t, userSkillPath(home, ".agents"), doc)
+	// ...the reference is still wired...
+	requireFileContent(t, filepath.Join(repo, "AGENTS.md"), expectedReferenceBlock(agentWorkflowDefaultPath))
+	// ...and the run never claims to have generated the document.
+	if strings.Contains(output, "Generated agent workflow") {
+		t.Fatalf("the run claimed to generate the document it protected:\n%s", output)
+	}
+}
+
+// TestAgentCLIWithoutInstallRefusesExistingDocument pins the other half of the
+// contract: without --install the document guard is unchanged. An existing
+// document and no --force is still the same refusal as before, and nothing at
+// all is written.
+func TestAgentCLIWithoutInstallRefusesExistingDocument(t *testing.T) {
+	setUpCLIEnv(t)
+	binary := buildDflowCLI(t)
+	repo := newAgentRepo(t)
+
+	docPath := filepath.Join(repo, agentWorkflowDefaultPath)
+	if err := os.MkdirAll(filepath.Dir(docPath), 0755); err != nil {
+		t.Fatalf("failed to create the document directory: %v", err)
+	}
+	sentinel := "# hand-edited workflow document the plain guard must refuse to overwrite\n"
+	writeRepoFile(t, docPath, sentinel)
+
+	output, exitCode := startCLIRawOutput(t, 30*time.Second, repo, binary, "agent")
+	if exitCode == 0 {
+		t.Fatalf("dflow agent over an existing document exited 0, want the guard to refuse it\n%s", output)
+	}
+	if !strings.Contains(output, "--force") {
+		t.Fatalf("the refusal must name the way out (--force), got:\n%s", output)
+	}
+	requireFileContent(t, docPath, sentinel)
+	requireFileAbsent(t, filepath.Join(repo, "AGENTS.md"))
+}
+
+// TestAgentCLIForceRegeneratesDocument keeps the destructive path honest: --force
+// is the one run allowed to replace a hand-edited document, with or without
+// --install.
+func TestAgentCLIForceRegeneratesDocument(t *testing.T) {
+	home := skillInstallEnv(t)
+	binary := buildDflowCLI(t)
+	repo := newAgentRepo(t)
+
+	docPath := filepath.Join(repo, agentWorkflowDefaultPath)
+	if err := os.MkdirAll(filepath.Dir(docPath), 0755); err != nil {
+		t.Fatalf("failed to create the document directory: %v", err)
+	}
+	sentinel := "# hand-edited workflow document --force is expected to replace\n"
+
+	for _, args := range [][]string{
+		{"agent", "--force"},
+		{"agent", "--install", "--force"},
+	} {
+		writeRepoFile(t, docPath, sentinel)
+		output, exitCode := startCLIRawOutput(t, 30*time.Second, repo, binary, args...)
+		if exitCode != 0 {
+			t.Fatalf("dflow %v exited %d, want 0\n%s", args, exitCode, output)
+		}
+		requireFileContent(t, docPath, expectedAgentDoc(t, repo))
+		if !strings.Contains(output, "Generated agent workflow") {
+			t.Fatalf("dflow %v must report the regenerated document, got:\n%s", args, output)
+		}
+	}
+
+	// The --install --force run installs the skill from the same bytes it wrote.
+	requireFileContent(t, userSkillPath(home, ".agents"), expectedAgentDoc(t, repo))
+}
+
+// Reinstalling over a stale skill file needs no --force: those bytes are dflow's
+// own artifact, so refreshing them is the point rather than an override. The
+// document is removed first because its own guard is a separate decision that
+// does require --force.
+func TestAgentCLIInstallRefreshesStaleSkillWithoutForce(t *testing.T) {
+	home := skillInstallEnv(t)
+	binary := buildDflowCLI(t)
+	repo := newAgentRepo(t)
+
+	if output, exitCode := startCLIRawOutput(t, 30*time.Second, repo, binary, "agent", "--install", "--local"); exitCode != 0 {
+		t.Fatalf("first dflow agent --install --local exited %d, want 0\n%s", exitCode, output)
+	}
+	doc := expectedAgentDoc(t, repo)
+	skill := projectSkillPath(repo, ".agents")
+	requireFileContent(t, skill, doc)
+
+	// Simulate a skill installed by an older dflow, with no document on disk, so
+	// the document guard cannot be what makes the rerun succeed.
+	writeRepoFile(t, skill, "---\nname: dflow\n---\n\n# an older dflow document\n")
+	if err := os.Remove(filepath.Join(repo, agentWorkflowDefaultPath)); err != nil {
+		t.Fatalf("failed to remove the document for the stale-skill pin: %v", err)
+	}
+
+	output, exitCode := startCLIRawOutput(t, 30*time.Second, repo, binary, "agent", "--install", "--local")
+	if exitCode != 0 {
+		t.Fatalf("dflow agent --install --local over a stale skill exited %d, want 0\n%s", exitCode, output)
+	}
+
+	requireFileContent(t, skill, doc)
+	requireSingleSkillFile(t, filepath.Dir(skill))
+	requireFileAbsent(t, filepath.Join(home, ".agents"))
+}
+
+// --install --json reports the skill plan and still writes nothing: no document,
+// no reference, no skill directory, and no key claiming a change --json cannot
+// know about without writing.
+func TestAgentCLIInstallJSONReportsPlanAndWritesNothing(t *testing.T) {
+	home := skillInstallEnv(t)
+	binary := buildDflowCLI(t)
+	repo := newAgentRepo(t)
+
+	output, exitCode := startCLIRawOutput(t, 30*time.Second, repo, binary, "agent", "--install", "--json")
+	if exitCode != 0 {
+		t.Fatalf("dflow agent --install --json exited %d, want 0\n%s", exitCode, output)
+	}
+	assertNoHumanChrome(t, output)
+
+	doc := decodeSingleJSONDocument(t, output)
+	skills := requireJSONArray(t, doc, "skills")
+	if len(skills) != 1 {
+		t.Fatalf("skills has %d entries, want 1 (the portable root):\n%v", len(skills), skills)
+	}
+	entry, ok := skills[0].(map[string]any)
+	if !ok {
+		t.Fatalf("skills[0] = %#v, want an object", skills[0])
+	}
+	if len(entry) != 4 {
+		t.Fatalf("skills[0] carries %d keys, want exactly root, dir, agents and exists: %v", len(entry), entry)
+	}
+	requireJSONString(t, entry, "root", "~/.agents/skills")
+	requireJSONString(t, entry, "dir", filepath.Join("~/.agents/skills", agent.SkillName))
+	requireJSONStringSlice(t, entry, "agents", []string{"pi"})
+	requireJSONBool(t, entry, "exists", false)
+	if _, ok := entry["changed"]; ok {
+		t.Fatalf("skills[0] carries a changed field, which --json cannot know without writing: %v", entry)
+	}
+
+	requireFileAbsent(t, filepath.Join(repo, ".agents"))
+	requireFileAbsent(t, filepath.Join(repo, "AGENTS.md"))
+	requireFileAbsent(t, filepath.Join(home, ".agents"))
+}
+
+// The skills report is a fact about the filesystem, so an already installed skill
+// is reported as existing -- and --json still writes nothing at all, not even a
+// refresh of the file it reported.
+func TestAgentCLIInstallJSONReportsAnInstalledSkill(t *testing.T) {
+	home := skillInstallEnv(t)
+	binary := buildDflowCLI(t)
+	repo := newAgentRepo(t)
+
+	installed := "---\nname: dflow\n---\n\n# installed by an earlier run\n"
+	path := userSkillPath(home, ".agents")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatalf("failed to create %s: %v", filepath.Dir(path), err)
+	}
+	writeRepoFile(t, path, installed)
+
+	output, exitCode := startCLIRawOutput(t, 30*time.Second, repo, binary, "agent", "--install", "--json")
+	if exitCode != 0 {
+		t.Fatalf("dflow agent --install --json exited %d, want 0\n%s", exitCode, output)
+	}
+	assertNoHumanChrome(t, output)
+
+	doc := decodeSingleJSONDocument(t, output)
+	skills := requireJSONArray(t, doc, "skills")
+	if len(skills) != 1 {
+		t.Fatalf("skills has %d entries, want 1 (the portable root):\n%v", len(skills), skills)
+	}
+	entry, ok := skills[0].(map[string]any)
+	if !ok {
+		t.Fatalf("skills[0] = %#v, want an object", skills[0])
+	}
+	requireJSONBool(t, entry, "exists", true)
+
+	requireFileContent(t, path, installed)
+	requireFileAbsent(t, filepath.Join(repo, ".agents"))
+}
+
+// --local only chooses the scope of an install, so on its own it is a request
+// with no effect: it must fail, name the flag that gives it one, and write
+// nothing at all.
+func TestAgentCLILocalWithoutInstallFailsAndWritesNothing(t *testing.T) {
+	cases := []struct {
+		name     string
+		args     []string
+		wantJSON bool
+	}{
+		{name: "human output", args: []string{"agent", "--local"}},
+		{name: "json output", args: []string{"agent", "--local", "--json"}, wantJSON: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := skillInstallEnv(t)
+			binary := buildDflowCLI(t)
+			repo := newAgentRepo(t)
+
+			output, exitCode := startCLIRawOutput(t, 30*time.Second, repo, binary, tc.args...)
+			if exitCode == 0 {
+				t.Fatalf("dflow %v exited 0, want non-zero\n%s", tc.args, output)
+			}
+
+			if tc.wantJSON {
+				assertNoHumanChrome(t, output)
+				doc := decodeSingleJSONDocument(t, output)
+				message, ok := doc["error"].(string)
+				if !ok || !strings.Contains(message, "--install") {
+					t.Fatalf("the failure document must name --install, got: %v", doc)
+				}
+			} else if !strings.Contains(output, "--install") {
+				t.Fatalf("the failure must name the flag that makes --local meaningful, got:\n%s", output)
+			}
+
+			for _, path := range []string{
+				filepath.Join(repo, agentWorkflowDefaultPath),
+				filepath.Join(repo, ".agents"),
+				filepath.Join(repo, "AGENTS.md"),
+				filepath.Join(repo, ".claude"),
+				filepath.Join(home, ".agents"),
+				filepath.Join(home, ".claude"),
+			} {
+				requireFileAbsent(t, path)
+			}
+		})
+	}
 }
 
 // TestInitCLIWiresAgentReferences pins `dflow init` onto the shared writer in
