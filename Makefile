@@ -32,17 +32,30 @@ build-all:
 # 🚀 Release with GoReleaser + .env token. The GitHub release body is only the
 # latest version's section of CHANGELOG.md, extracted to RELEASE_NOTES.md (the
 # dflow update --check digest renders the release body, so old sections do not
-# belong in it).
+# belong in it). The notes step fails fast, so an unpublishable release body
+# stops the release before GoReleaser runs.
 .PHONY: release release-notes
 release: release-notes
 	@echo "🚀 Running GoReleaser with .env"
 	@set -a; . ./.env; set +a; goreleaser release --clean --release-notes=RELEASE_NOTES.md
 
 # 📝 Extract the latest version section from CHANGELOG.md into RELEASE_NOTES.md
-# (generated, gitignored, never committed).
+# (generated, gitignored, never committed). The extraction is validated before
+# the release body is written: an empty or heading-only result would publish a
+# GitHub release with no body, so it goes to a temporary file and only lands as
+# RELEASE_NOTES.md once it holds a version section with content.
 release-notes:
-	@awk '/^## 📦/{if (found) exit; found=1} found' CHANGELOG.md > RELEASE_NOTES.md
-	@echo "📝 RELEASE_NOTES.md written from the latest CHANGELOG.md section (generated, never committed)."
+	@set -eu; \
+	tmp=RELEASE_NOTES.md.tmp; \
+	fail() { rm -f "$$tmp"; echo "❌  $$1" >&2; exit 1; }; \
+	awk '/^## 📦/{if (found) exit; found=1} found' CHANGELOG.md > "$$tmp" \
+		|| fail "Could not extract the latest section from CHANGELOG.md."; \
+	head -n 1 "$$tmp" | grep -q '^## 📦' \
+		|| fail "CHANGELOG.md carries no '## 📦' version section; there is nothing to publish as the release body."; \
+	awk 'NR > 1 && NF { found = 1 } END { exit !found }' "$$tmp" \
+		|| fail "The latest '## 📦' version section in CHANGELOG.md has no content below its heading."; \
+	mv "$$tmp" RELEASE_NOTES.md; \
+	echo "📝 RELEASE_NOTES.md written from the latest CHANGELOG.md section (generated, never committed)."
 
 # 📥 Install local build to $GOPATH/bin with version injected
 .PHONY: install
