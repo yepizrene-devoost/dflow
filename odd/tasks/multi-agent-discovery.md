@@ -54,11 +54,62 @@ Code. `dflow agent --agents claude` creates and wires it on request.
 
 ## Tasks
 
-1. [ ] WU1 — discovery registry + reference writer
+1. [x] WU1 — discovery registry + reference writer
        (`pkg/agent/registry.go`, `registry_test.go`, `reference.go`,
        `reference_test.go`): the four agents with their instruction files and
        skill directories, and an idempotent, marker-based instruction-reference
-       writer. Strict TDD: failing tests first.
+       writer. Tests first — RED observed as a build failure on the new symbols
+       (the behavioral assertions cannot execute before the API exists), then 33
+       tests green after two behavioral fixes (one test-helper bug, one
+       whitespace-only spec wrongly treated as auto). Parent verification: exact
+       scope (4 new files, nothing else), `go test ./...` green on the parent's
+       own run, `gofmt` and `go vet` clean, tests read line by line and found to
+       assert exact bytes rather than restating the implementation.
+
+### WU1 correction pass (defect found in parent review)
+
+`ParseAgentSpec("")` returned `nil, nil` for auto mode. The natural CLI
+composition — `agents, _ := ParseAgentSpec(spec)` then
+`PlanInstructionTargets(agents, exists, explicit)` — would then have built an
+empty selection: no readers on any target and `CLAUDE.md` excluded even when it
+exists. Auto mode would have silently lost the registry's whole point. No test
+covered it. Fixed in the same work unit, together with two refinements:
+
+- `ParseAgentSpec("")` now returns `Agents()`, so auto vs named is expressed by
+the caller's `explicit` flag and the two functions compose totally.
+- `InstructionTarget.Agents` is now a registry fact (every registry agent that
+reads the file), never a projection of the selection, so `--json` reporting can
+name the agents a write serves and the list is never empty.
+- `CLAUDE.md` is created only when claude is named: the gate is the named
+agent's PRIMARY instruction file (the first entry of its `Instructions`), not
+any file it reads. `--agents claude` creates `CLAUDE.md`; `--agents pi` does not,
+even though Pi also reads it. This is decision 2, enforced in the code.
+- `EnsureInstructionReference` reports `changed == false` on every error path
+(it claimed `true` alongside a failed create).
+
+Discriminating-test check by the parent: subtests `b`, `c` and `d` of
+`TestPlanInstructionTargetsSelectionCases` and the auto case of
+`TestParseAgentSpec` cannot pass against the pre-correction rules, so the
+correction is genuinely pinned rather than merely re-described. The correction
+pass did not itself run tests-first; that discipline gap is recorded here rather
+than smoothed over.
+
+Known limitations accepted deliberately:
+
+- A project already carrying the unmarked `## dflow Workflow` block written by
+issue #31 keeps it: rule 6 is a no-op, so it never gains a marker and never gets
+a path update. Not duplicating sections outweighs migrating them.
+- A hand-mangled marker pair (one marker deleted) is a silent no-op, because
+dflow never guesses a block boundary. `changed == false` cannot distinguish
+"already referenced" from "malformed", so the CLI cannot warn about it either.
+- `InstructionTarget.Agents` is registry-derived while the PRIMARY gate reads the
+caller-supplied agent value. The two agree for every selection the CLI can
+produce (both come from `ParseAgentSpec`), and diverge only for synthetic agent
+values no caller constructs.
+The create-failure path added by the correction has no direct test: reaching it
+requires a permission failure, since `os.ReadFile` on a path with a regular-file
+parent returns `ENOTDIR`, which `os.IsNotExist` does not classify as not-exist.
+Verified by inspection.
 2. [ ] WU2 — CLI reference wiring (`cmd/commands/agent.go` default path,
        `cmd/commands/init.go` rewired onto the shared writer,
        `cmd/tests/agent_cli_test.go`): `--agents` selection; `AGENTS.md` always
@@ -71,6 +122,14 @@ Code. `dflow agent --agents claude` creates and wires it on request.
        and the discovery table; `go test ./...`, `golangci-lint run ./...`, and a
        manual smoke run of each new flag combination.
 5. [ ] Commit identity recorded.
+
+## Work-unit commit identity (WU1)
+
+- Review declaration: this commit is the frozen candidate for the native RDD
+  review of work unit 1; the expected outcome is an ordinary review over the
+  diff against `2944582` (develop at branch time).
+- Commit SHA and review outcome: recorded in the next work-unit commit, never
+  pre-written here.
 
 ## Out of scope
 
