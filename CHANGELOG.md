@@ -1,5 +1,14 @@
 # Changelog
 
+## 📦 v0.4.1 – Release Contracts & Version Display
+
+### Changed
+- Release builds now retain the `v`-prefixed tag in their version marker and show that marker alone on a clean build, while dirty builds keep the short revision and `-dirty` suffix for provenance. Snapshot builds continue to include their revision.
+- `dflow finish` is fully non-interactive: passing `--delete` is the complete confirmation, and the work branch is removed only after every automatic target merge and push succeeds, with no manual targets remaining.
+
+### Fixed
+- When an automatic target merge, conflict, non-fast-forward, or target push fails, `dflow finish` leaves the work branch available for manual recovery instead of deleting it or automatically rolling back the merge.
+
 ## 📦 v0.4.0 – Multi-Agent Install, Legible Digests & Release Safeguards
 
 ### Added
