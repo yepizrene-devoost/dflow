@@ -64,4 +64,5 @@ candidate, promotion to `main`, the tag, and the published GitHub release.
 
 ## Commit identity
 
-- Pending work-unit commits.
+- WU1 + WU2 + WU3: `a2a84ee` (`chore(release): prepare the v0.4.1 notes
+  and history entry`), on `release/v0.4.1`.
