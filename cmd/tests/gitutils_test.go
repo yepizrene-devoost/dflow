@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -110,6 +111,46 @@ func TestMergeInProgressAndAbortMerge(t *testing.T) {
 			t.Fatalf("expected merge state to be cleared after abort")
 		}
 	})
+}
+
+func TestPullBranchCachesOriginProbeAndPreservesBranchMessage(t *testing.T) {
+	repoDir := initTempGitRepo(t)
+	remoteDir := initBareGitRepo(t)
+	runGit(t, repoDir, "remote", "add", "origin", remoteDir)
+	runGit(t, repoDir, "push", "-u", "origin", "main")
+
+	tracePath := filepath.Join(t.TempDir(), "git-trace.log")
+	t.Setenv("GIT_TRACE", tracePath)
+	withWorkingDir(t, repoDir, func() {
+		oldStdout := os.Stdout
+		reader, writer, err := os.Pipe()
+		if err != nil {
+			t.Fatalf("failed to capture stdout: %v", err)
+		}
+		os.Stdout = writer
+		pullErr := gitutils.PullBranch("main")
+		_ = writer.Close()
+		os.Stdout = oldStdout
+		output, readErr := io.ReadAll(reader)
+		_ = reader.Close()
+		if readErr != nil {
+			t.Fatalf("failed to read captured stdout: %v", readErr)
+		}
+		if pullErr != nil {
+			t.Fatalf("PullBranch returned error: %v", pullErr)
+		}
+		if !strings.Contains(string(output), "Updated 'main' from origin.") {
+			t.Fatalf("pull output lost branch-specific success text: %s", output)
+		}
+	})
+
+	trace, err := os.ReadFile(tracePath)
+	if err != nil {
+		t.Fatalf("failed to read Git trace: %v", err)
+	}
+	if probes := strings.Count(string(trace), "remote get-url origin"); probes != 1 {
+		t.Fatalf("expected one cached origin probe during PullBranch, got %d\n%s", probes, trace)
+	}
 }
 
 func TestFetchOriginPullBranchAndHasUpstream(t *testing.T) {

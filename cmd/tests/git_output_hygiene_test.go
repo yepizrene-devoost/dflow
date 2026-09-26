@@ -62,6 +62,25 @@ func TestFailingGitOperationMessageCarriesGitExplanation(t *testing.T) {
 	}
 }
 
+func TestPushErrorPreservesOriginContextAndGitDiagnostics(t *testing.T) {
+	repo := initTempGitRepo(t)
+	runGit(t, repo, "remote", "add", "origin", filepath.Join(t.TempDir(), "missing-remote"))
+
+	withWorkingDir(t, repo, func() {
+		err := gitutils.PushBranchUpdate("main")
+		if err == nil {
+			t.Fatal("expected push to fail for an unreachable origin")
+		}
+		message := err.Error()
+		if !strings.Contains(message, `failed to push branch "main" to origin`) {
+			t.Fatalf("push error lost its origin context: %v", err)
+		}
+		if !strings.Contains(message, "does not appear to be a git repository") {
+			t.Fatalf("push error lost Git's diagnostic: %v", err)
+		}
+	})
+}
+
 // TestMergeConflictErrorCarriesGitExplanation covers the merge face of the same
 // WU1 defect: a conflicted `git merge` returned a bare exit status while its
 // explanation (the CONFLICT lines) went to the caller's stdout.
