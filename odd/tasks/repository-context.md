@@ -6,7 +6,7 @@ Centralize Git repository/worktree and `.dflow.yaml` discovery so commands invok
 ## Tasks
 
 - [x] Define canonical repository context and `DFLOW_CWD` semantics
-- [ ] Integrate config loading and saving with repository context
+- [x] Integrate config loading and saving with repository context
 - [ ] Migrate validators and command checks to canonical context
 - [ ] Run full verification and record ODD evidence
 
@@ -21,6 +21,6 @@ Centralize Git repository/worktree and `.dflow.yaml` discovery so commands invok
 ## Evidence
 
 - Branch: `feature/repository-context`
-- Commits: pending (commit authorization still required)
-- Focused tests: `go test ./pkg/repository` — PASS
-- Runtime harness: N/A — package-level repository discovery has no separate runtime boundary
+- Commits: `52487fb` (context discovery); config integration pending commit
+- Focused tests: `go test ./pkg/repository` — PASS; `go test ./cmd/utils ./cmd/tests` — PASS
+- Runtime harness: N/A — repository/config behavior is covered by focused Go tests
