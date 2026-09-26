@@ -106,8 +106,8 @@ func RevisionShort() string {
 
 // isReleaseMarker reports whether the version marker identifies a published
 // release — the same predicate HasReleaseProvenance uses, duplicated here to
-// avoid an import cycle. A release marker is neither empty, nor "dev", nor a
-// GoReleaser snapshot prefix.
+// avoid an import cycle between cmd/utils and cmd/selfupdate. A release marker
+// is neither empty, nor "dev", nor a GoReleaser snapshot prefix (`snapshot-*`).
 func isReleaseMarker(marker string) bool {
 	m := strings.TrimSpace(marker)
 	if m == "" || m == "dev" {
@@ -126,6 +126,9 @@ func isReleaseMarker(marker string) bool {
 // only when it carries information the marker does not: a dirty build keeps its
 // provenance, while a clean build stands alone because the tag already names the
 // commit.
+//
+// A snapshot marker (`snapshot-<short>`) behaves like `dev`: the marker is not
+// a published release, so the revision is always appended to preserve provenance.
 //
 // GetVersion is the single caller of this function and every entry point goes
 // through GetVersion, so `version`, `ver`, the root `--version`/`-V` flag and
