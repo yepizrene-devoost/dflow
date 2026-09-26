@@ -22,7 +22,7 @@ Validate `.dflow.yaml` completely at load time, define legacy/nested precedence,
 ## Evidence
 
 - Branch: `feature/config-hardening-44`
-- Commits: pending user authorization to stage and commit
+- Commits: `5dbeb29` (`fix(config): harden configuration validation and persistence`)
 - Focused tests: `go test ./pkg/flow ./cmd/utils` — PASS
 - Full verification: `go test ./...`, `go vet ./...`, `go build ./...`, `git diff --check` — PASS
 - Runtime harness: N/A — behavior is covered by Go tests
