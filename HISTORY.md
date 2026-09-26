@@ -7,6 +7,19 @@ changes in each release, see [`CHANGELOG.md`](./CHANGELOG.md).
 
 ---
 
+## 📦 v0.4.1 – Release Contracts & Version Display
+
+**Tag:** [`v0.4.1`](https://github.com/yepizrene-devoost/dflow/releases/tag/v0.4.1)<br>
+**Date:** 2026-09-25
+
+**Highlights:**
+
+- Release builds retain their `v`-prefixed tag and omit the redundant revision on clean builds.
+- `dflow finish` is fully non-interactive, with `--delete` as its explicit deletion intent.
+- Failed automatic merges and target pushes leave the work branch available for manual recovery.
+
+---
+
 ## 📦 v0.4.0 – Multi-Agent Install, Legible Digests & Release Safeguards
 
 **Tag:** [`v0.4.0`](https://github.com/yepizrene-devoost/dflow/releases/tag/v0.4.0)  

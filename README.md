@@ -277,10 +277,12 @@ dflow finish --no-push
 - Automatically merges and pushes only the targets with `merge_mode: auto`
 - Reports `manual` targets so they can be completed through PR flow
 - Requires a clean working tree before running
-- Stops immediately if an auto target hits a merge conflict
+- Stops immediately if an auto target merge conflicts, leaving the target's merge state and the work branch available for manual resolution or abort; dflow does not automatically roll back or abort the merge
 - Returns you to the configured `base` branch after a successful finish
+- Is fully non-interactive; `--delete` is explicit intent and never prompts for confirmation
 - Does not delete the source branch automatically
-- Supports `--delete` to remove the finished branch locally and remotely after a successful finish when no manual targets remain
+- Supports `--delete` to remove the finished branch locally and remotely only after every automatic target merge and push succeeds and no manual targets remain
+- Leaves the source branch available after a merge, conflict, non-fast-forward, or target-push failure; dflow does not automatically roll back or abort merges
 - Supports `--no-push` to keep the branch local, for offline repositories and CI sandboxes
 - Supports `--dry-run` to preview the plan without fetching, merging, or pushing
 - Supports `--dry-run --json` to print that plan as a single JSON document for scripts and agents; `--json` requires `--dry-run`, because a mutating finish has no report to serialize and `--json` would only hide the plan
@@ -492,7 +494,9 @@ When you run `dflow finish`, dflow:
 
 Use `dflow finish --delete` if you want dflow to remove the finished branch
 locally and remotely after all automatic targets succeed and no manual follow-up
-remains.
+remains. The command is fully non-interactive: passing `--delete` is the complete
+confirmation, and there is no prompt or additional `--yes` flag. A failed merge,
+conflict, non-fast-forward, or target push leaves the work branch available.
 
 Use `dflow finish --dry-run` to inspect that plan safely before touching any branch.
 

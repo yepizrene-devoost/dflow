@@ -51,7 +51,7 @@ is merged directly by dflow or through a pull request:
 
 | Target `merge_mode` | Agent action |
 | --- | --- |
-| `auto` | direct merge via `dflow finish` (clean tree + human confirmation). No PR. |
+| `auto` | direct merge via `dflow finish` (clean tree; fully non-interactive). No PR. |
 | `manual` | open a PR toward that target. Never use `dflow finish`. |
 
 This repository: `develop = auto`, `main = manual`.
@@ -73,14 +73,18 @@ Consequences:
 
 - the target is `auto`, AND
 - the working tree is clean, AND
-- a human explicitly confirmed a direct merge (or the repo has no `origin`).
+- direct merge is explicitly requested by running `dflow finish` (or the repo has no `origin`).
 
 Do not run `dflow finish` to:
 
 - complete a `manual` target (open a PR instead), or
 - finish a branch that still has stacked children (it would break their merge bases).
 
-Default agent behavior: propose a PR. Direct merge is explicit, never assumed.
+Default agent behavior: propose a PR. Direct merge is explicit, never assumed. `dflow finish`
+is fully non-interactive; `--delete` is the complete confirmation and never prompts.
+The work branch is deleted only after every automatic target merge and push succeeds,
+never when manual targets remain, and never after a merge, conflict, non-fast-forward,
+or target-push failure. There is no automatic rollback or merge abort.
 
 ## Issue lifecycle
 

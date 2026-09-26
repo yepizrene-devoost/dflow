@@ -39,7 +39,11 @@ pull request or manual review flow.
 
 After all automatic merges succeed, dflow switches back to the configured base
 branch for the finished work type. The source branch is not deleted automatically
-unless you explicitly pass --delete and no manual targets remain.
+unless you explicitly pass --delete and no manual targets remain. Finish is fully
+non-interactive: --delete is explicit intent and never prompts for confirmation.
+The source branch is deleted only after every automatic target merge and push
+succeeds; merge, conflict, non-fast-forward, and target-push failures leave it
+available, with no automatic rollback or merge abort.
 
 Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`,
 	Example: `  dflow finish

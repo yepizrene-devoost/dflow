@@ -2,6 +2,7 @@ package utils
 
 import (
 	"runtime/debug"
+	"strings"
 	"sync"
 )
 
@@ -103,11 +104,31 @@ func RevisionShort() string {
 	return revision[:revisionAbbrevLen]
 }
 
+// isReleaseMarker reports whether the version marker identifies a published
+// release — the same predicate HasReleaseProvenance uses, duplicated here to
+// avoid an import cycle between cmd/utils and cmd/selfupdate. A release marker
+// is neither empty, nor "dev", nor a GoReleaser snapshot prefix (`snapshot-*`).
+func isReleaseMarker(marker string) bool {
+	m := strings.TrimSpace(marker)
+	if m == "" || m == "dev" {
+		return false
+	}
+	return !strings.HasPrefix(m, "snapshot")
+}
+
 // VersionDisplay composes the full human-facing version: the channel/version
 // marker (`dev` for a development install, or the release version injected at
 // build time) followed by the commit that binary was installed from, marked
 // `-dirty` when the build tree had uncommitted changes. With no VCS stamp the
 // marker stands alone, which is the behavior such a binary has always shown.
+//
+// For a release marker (the tag form, e.g. `v0.4.0`), the revision is shown
+// only when it carries information the marker does not: a dirty build keeps its
+// provenance, while a clean build stands alone because the tag already names the
+// commit.
+//
+// A snapshot marker (`snapshot-<short>`) behaves like `dev`: the marker is not
+// a published release, so the revision is always appended to preserve provenance.
 //
 // GetVersion is the single caller of this function and every entry point goes
 // through GetVersion, so `version`, `ver`, the root `--version`/`-V` flag and
@@ -115,6 +136,12 @@ func RevisionShort() string {
 func VersionDisplay() string {
 	stamp := currentVCSStamp()
 	if stamp.revision == "" {
+		return version
+	}
+
+	// A release marker on a clean build: the tag names the commit, so the
+	// revision is redundant. A dirty build keeps its provenance.
+	if isReleaseMarker(version) && !stamp.modified {
 		return version
 	}
 

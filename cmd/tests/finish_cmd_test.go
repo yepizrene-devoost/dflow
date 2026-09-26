@@ -134,6 +134,9 @@ func TestFinishDryRunDoesNotModifyBranches(t *testing.T) {
 	})
 }
 
+// TestFinishDeleteRemovesBranchWhenNoManualTargetsRemain also proves the
+// in-process command path is fully non-interactive: --delete is explicit intent
+// and must not wait for a confirmation prompt.
 func TestFinishDeleteRemovesBranchWhenNoManualTargetsRemain(t *testing.T) {
 	repoDir := initTempGitRepo(t)
 	remoteDir := initBareGitRepo(t)
@@ -257,6 +260,80 @@ func TestFinishDeleteSkipsBranchRemovalWhenManualTargetsRemain(t *testing.T) {
 
 		if !remoteBranchExists(t, repoDir, "feature/keep-me") {
 			t.Fatalf("expected remote feature/keep-me branch to remain because manual targets are pending")
+		}
+	})
+}
+
+func TestFinishDeleteKeepsBranchAfterMergeConflict(t *testing.T) {
+	repoDir, _ := finishPublishRepo(t)
+
+	withWorkingDir(t, repoDir, func() {
+		runGit(t, repoDir, "checkout", "develop")
+		writeFileAndCommit(t, repoDir, "app.txt", "develop conflict\n", "conflict on develop")
+		runGit(t, repoDir, "checkout", "feature/publish-me")
+		finishPublishConfig(t, repoDir, []string{"develop"}, map[string]flow.WorkflowBranchRule{
+			"develop": {MergeMode: "auto"},
+		})
+
+		if err := commands.FinishCmd.Flags().Set("delete", "true"); err != nil {
+			t.Fatalf("failed to enable delete flag: %v", err)
+		}
+		defer func() {
+			_ = commands.FinishCmd.Flags().Set("delete", "false")
+		}()
+
+		err := commands.FinishCmd.RunE(commands.FinishCmd, []string{})
+		if err == nil {
+			t.Fatalf("expected FinishCmd to fail on a merge conflict")
+		}
+		if !strings.Contains(err.Error(), "Merge conflict") {
+			t.Fatalf("expected conflict error, got: %v", err)
+		}
+		if !branchExists(t, repoDir, "feature/publish-me") {
+			t.Fatalf("expected the work branch to remain after a merge conflict")
+		}
+		if !remoteBranchExists(t, repoDir, "feature/publish-me") {
+			t.Fatalf("expected the published work branch to remain after a merge conflict")
+		}
+	})
+}
+
+func TestFinishDeleteKeepsBranchAfterLaterAutoTargetConflict(t *testing.T) {
+	repoDir, _ := finishPublishRepo(t)
+
+	withWorkingDir(t, repoDir, func() {
+		runGit(t, repoDir, "checkout", "develop")
+		runGit(t, repoDir, "checkout", "-b", "uat")
+		writeFileAndCommit(t, repoDir, "app.txt", "uat conflict\n", "conflict on uat")
+		runGit(t, repoDir, "push", "-u", "origin", "uat")
+		runGit(t, repoDir, "checkout", "feature/publish-me")
+		finishPublishConfig(t, repoDir, []string{"develop", "uat"}, map[string]flow.WorkflowBranchRule{
+			"develop": {MergeMode: "auto"},
+			"uat":     {MergeMode: "auto"},
+		})
+
+		if err := commands.FinishCmd.Flags().Set("delete", "true"); err != nil {
+			t.Fatalf("failed to enable delete flag: %v", err)
+		}
+		defer func() {
+			_ = commands.FinishCmd.Flags().Set("delete", "false")
+		}()
+
+		err := commands.FinishCmd.RunE(commands.FinishCmd, []string{})
+		if err == nil {
+			t.Fatalf("expected FinishCmd to fail on the later auto-target conflict")
+		}
+		if !strings.Contains(err.Error(), "Merge conflict") {
+			t.Fatalf("expected conflict error, got: %v", err)
+		}
+		if !branchExists(t, repoDir, "feature/publish-me") {
+			t.Fatalf("expected the work branch to remain after a later target failure")
+		}
+		if !remoteBranchExists(t, repoDir, "feature/publish-me") {
+			t.Fatalf("expected the published work branch to remain after a later target failure")
+		}
+		if current := currentBranchName(t, repoDir); current != "uat" {
+			t.Fatalf("expected to remain on failed target uat, got %q", current)
 		}
 	})
 }
