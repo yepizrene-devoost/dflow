@@ -277,7 +277,7 @@ dflow finish --no-push
 - Automatically merges and pushes only the targets with `merge_mode: auto`
 - Reports `manual` targets so they can be completed through PR flow
 - Requires a clean working tree before running
-- Stops immediately if an auto target hits a merge conflict
+- Stops immediately if an auto target merge conflicts, leaving the target's merge state and the work branch available for manual resolution or abort; dflow does not automatically roll back or abort the merge
 - Returns you to the configured `base` branch after a successful finish
 - Is fully non-interactive; `--delete` is explicit intent and never prompts for confirmation
 - Does not delete the source branch automatically
