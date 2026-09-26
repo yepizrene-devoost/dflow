@@ -34,4 +34,5 @@ Implementation is complete on `feature/git-execution-45`.
 - Regression coverage includes push diagnostics/context, branch-specific pull output, and a traced assertion that `PullBranch` performs one origin probe.
 - Checks: `go test ./...`, `go vet ./...`, `go build ./...`, `git diff --check` — PASS.
 - Runtime harness: N/A — existing real temporary-repository integration tests exercise Git behavior.
-- Commit identity: recorded in the follow-up ODD evidence commit after the work-unit commit.
+- Work-unit commit: `bcbd5b6` (`chore(git): unify execution and remote operations`).
+- Commit identity: recorded by the follow-up ODD evidence commit.
