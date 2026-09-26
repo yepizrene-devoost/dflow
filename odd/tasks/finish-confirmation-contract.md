@@ -75,4 +75,4 @@ OUTCOME: done. Focused verification: `gofmt -l cmd/commands/finish.go cmd/tests/
 
 ### WU4 — review and delivery bookkeeping
 
-OUTCOME: done for the implementation candidate. The implementation and verification evidence are complete, and all checklist stages are closed before staging. Recording the work-unit commit identity remains the permitted commit-identity follow-up; native review evidence is derived from the committed candidate and is not written into it.
+OUTCOME: done for the implementation candidate. The implementation and verification evidence are complete, and all checklist stages are closed before staging. Implementation work-unit commit: `e59b7db docs(finish): define non-interactive completion contract`. Native review evidence is derived from the committed candidate and is not written into it.
