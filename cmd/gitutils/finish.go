@@ -3,7 +3,6 @@ package gitutils
 import (
 	"bytes"
 	"fmt"
-	"os/exec"
 	"strings"
 
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
@@ -11,7 +10,10 @@ import (
 
 // CurrentBranch returns the currently checked out Git branch name.
 func CurrentBranch() (string, error) {
-	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd, err := gitCommand("rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return "", err
+	}
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to determine current branch: %w", err)
@@ -22,8 +24,8 @@ func CurrentBranch() (string, error) {
 
 // BranchExists reports whether the given local branch exists.
 func BranchExists(branch string) bool {
-	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
-	return cmd.Run() == nil
+	cmd, err := gitCommand("rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	return err == nil && cmd.Run() == nil
 }
 
 // CheckoutExistingBranch switches to an existing local branch.
@@ -45,7 +47,10 @@ func CheckoutExistingBranch(branch string) error {
 // `--quiet` keeps a successful switch silent at the source so its status advice
 // never reaches the caller's stdout.
 func CheckoutTrackingBranch(branch string) error {
-	cmd := exec.Command("git", "checkout", "--quiet", "--track", "-b", branch, "origin/"+branch)
+	cmd, err := gitCommand("checkout", "--quiet", "--track", "-b", branch, "origin/"+branch)
+	if err != nil {
+		return fmt.Errorf("failed to create tracking branch %q from origin/%s: %w", branch, branch, err)
+	}
 	if err := runCapturingGit(cmd); err != nil {
 		return fmt.Errorf("failed to create tracking branch %q from origin/%s: %w", branch, branch, err)
 	}
@@ -55,7 +60,10 @@ func CheckoutTrackingBranch(branch string) error {
 // IsWorkingTreeClean reports whether the repository has no staged, unstaged,
 // or untracked changes.
 func IsWorkingTreeClean() (bool, error) {
-	cmd := exec.Command("git", "status", "--porcelain")
+	cmd, err := gitCommand("status", "--porcelain")
+	if err != nil {
+		return false, err
+	}
 	output, err := cmd.Output()
 	if err != nil {
 		return false, fmt.Errorf("failed to inspect working tree: %w", err)
@@ -78,8 +86,8 @@ func EnsureWorkingTreeClean() error {
 
 // MergeInProgress reports whether Git currently has an unfinished merge.
 func MergeInProgress() bool {
-	cmd := exec.Command("git", "rev-parse", "-q", "--verify", "MERGE_HEAD")
-	return cmd.Run() == nil
+	cmd, err := gitCommand("rev-parse", "-q", "--verify", "MERGE_HEAD")
+	return err == nil && cmd.Run() == nil
 }
 
 // MergeBranchIntoCurrent merges the source branch into the current branch.
@@ -87,7 +95,10 @@ func MergeInProgress() bool {
 // Git's own output is captured rather than wired to the CLI's streams, so a
 // conflict reports what Git found instead of only its exit status.
 func MergeBranchIntoCurrent(sourceBranch string) error {
-	cmd := exec.Command("git", "merge", "--no-ff", "--no-edit", sourceBranch)
+	cmd, err := gitCommand("merge", "--no-ff", "--no-edit", sourceBranch)
+	if err != nil {
+		return fmt.Errorf("failed to merge branch %q into current branch: %w", sourceBranch, err)
+	}
 	if err := runCapturingGit(cmd); err != nil {
 		return fmt.Errorf("failed to merge branch %q into current branch: %w", sourceBranch, err)
 	}
@@ -98,7 +109,10 @@ func MergeBranchIntoCurrent(sourceBranch string) error {
 //
 // Git's own output is captured rather than wired to the CLI's streams.
 func AbortMerge() error {
-	cmd := exec.Command("git", "merge", "--abort")
+	cmd, err := gitCommand("merge", "--abort")
+	if err != nil {
+		return fmt.Errorf("failed to abort merge: %w", err)
+	}
 	if err := runCapturingGit(cmd); err != nil {
 		return fmt.Errorf("failed to abort merge: %w", err)
 	}
@@ -115,7 +129,11 @@ func FetchOrigin() error {
 	spinner := utils.NewSpinner("Fetching updates from origin...")
 	spinner.Start()
 
-	cmd := exec.Command("git", "fetch", "origin", "--prune")
+	cmd, err := gitCommand("fetch", "origin", "--prune")
+	if err != nil {
+		spinner.Clear()
+		return err
+	}
 	if err := cmd.Run(); err != nil {
 		spinner.Clear()
 		return fmt.Errorf("failed to fetch origin: %w", err)
@@ -127,8 +145,8 @@ func FetchOrigin() error {
 
 // HasUpstream reports whether the given local branch has an upstream configured.
 func HasUpstream(branch string) bool {
-	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", branch+"@{upstream}")
-	return cmd.Run() == nil
+	cmd, err := gitCommand("rev-parse", "--abbrev-ref", "--symbolic-full-name", branch+"@{upstream}")
+	return err == nil && cmd.Run() == nil
 }
 
 // CheckoutBranch switches to an existing branch without pulling or merging.
@@ -197,7 +215,11 @@ func PullBranch(branch string) error {
 	spinner := utils.NewSpinner(fmt.Sprintf("Pulling '%s' from origin...", branch))
 	spinner.Start()
 
-	cmd := exec.Command("git", "pull", "origin", branch)
+	cmd, err := gitCommand("pull", "origin", branch)
+	if err != nil {
+		spinner.Clear()
+		return fmt.Errorf("failed to update branch %q from origin: %w", branch, err)
+	}
 	if err := cmd.Run(); err != nil {
 		spinner.Clear()
 		return fmt.Errorf("failed to update branch %q from origin: %w", branch, err)
@@ -217,7 +239,11 @@ func PushBranchUpdate(branch string) error {
 	spinner := utils.NewSpinner(fmt.Sprintf("Pushing updates for '%s' to origin...", branch))
 	spinner.Start()
 
-	cmd := exec.Command("git", "push", "origin", branch)
+	cmd, err := gitCommand("push", "origin", branch)
+	if err != nil {
+		spinner.Clear()
+		return fmt.Errorf("failed to push branch %q to origin: %w", branch, err)
+	}
 	if err := cmd.Run(); err != nil {
 		spinner.Clear()
 		return fmt.Errorf("failed to push branch %q: %w", branch, err)
@@ -259,7 +285,10 @@ func PushWorkBranch(branch string) error {
 	if lookupErr != nil {
 		utils.Warn("Could not compare '%s' with origin (%v); attempting the publish anyway.", branch, lookupErr)
 	} else {
-		localCmd := exec.Command("git", "rev-parse", "--verify", "refs/heads/"+branch)
+		localCmd, err := gitCommand("rev-parse", "--verify", "refs/heads/"+branch)
+		if err != nil {
+			return fmt.Errorf("failed to resolve local branch '%s': %w", branch, err)
+		}
 		localOutput, err := localCmd.Output()
 		if err != nil {
 			return fmt.Errorf("failed to resolve local branch '%s': %w", branch, err)
@@ -274,7 +303,11 @@ func PushWorkBranch(branch string) error {
 	spinner := utils.NewSpinner(fmt.Sprintf("Publishing '%s' to origin...", branch))
 	spinner.Start()
 
-	cmd := exec.Command("git", "push", "-u", "origin", branch)
+	cmd, err := gitCommand("push", "-u", "origin", branch)
+	if err != nil {
+		spinner.Clear()
+		return fmt.Errorf("failed to push branch '%s': %w", branch, err)
+	}
 	if err := cmd.Run(); err != nil {
 		spinner.Clear()
 		return fmt.Errorf("failed to push branch '%s': %w", branch, err)

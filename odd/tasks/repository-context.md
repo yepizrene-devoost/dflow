@@ -8,7 +8,7 @@ Centralize Git repository/worktree and `.dflow.yaml` discovery so commands invok
 - [x] Define canonical repository context and `DFLOW_CWD` semantics
 - [x] Integrate config loading and saving with repository context
 - [x] Migrate validators and command checks to canonical context
-- [ ] Migrate Git utilities and raw Git calls to canonical context
+- [x] Migrate Git utilities and raw Git calls to canonical context
 - [ ] Run full verification and record ODD evidence
 
 ## Acceptance criteria
@@ -22,6 +22,6 @@ Centralize Git repository/worktree and `.dflow.yaml` discovery so commands invok
 ## Evidence
 
 - Branch: `feature/repository-context`
-- Commits: `52487fb` (context), `dc77286` (config); validator migration pending commit
-- Focused tests: `go test ./pkg/repository` — PASS; `go test ./cmd/utils ./cmd/tests` — PASS; `go test ./pkg/validators ./cmd/tests -run 'Test(Ensure|Dflow|Init)'` — PASS
-- Runtime harness: N/A — repository/config/validator behavior is covered by focused Go tests
+- Commits: `52487fb` (context), `dc77286` (config), `5dfbf07` (validators); Git migration pending commit
+- Focused tests: `go test ./pkg/repository` — PASS; `go test ./cmd/utils ./cmd/tests` — PASS; `go test ./pkg/validators ./cmd/tests -run 'Test(Ensure|Dflow|Init)'` — PASS; `go test ./cmd/gitutils ./cmd/utils ./pkg/validators ./cmd/tests` — PASS
+- Runtime harness: N/A — repository/config/validator/Git behavior is covered by focused Go tests
