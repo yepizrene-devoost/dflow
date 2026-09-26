@@ -14,6 +14,7 @@ package utils
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/yepizrene-devoost/dflow/pkg/flow"
 	"github.com/yepizrene-devoost/dflow/pkg/repository"
@@ -48,7 +49,10 @@ func LoadConfig() (*flow.Config, error) {
 
 	var cfg flow.Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("error parsing .dflow.yaml: %v", err)
+		return nil, fmt.Errorf("error parsing .dflow.yaml: %w", err)
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid .dflow.yaml: %w", err)
 	}
 
 	return &cfg, nil
@@ -61,6 +65,10 @@ func LoadConfig() (*flow.Config, error) {
 // The file will be overwritten if it already exists.
 // A banner header is included for identification.
 func SaveConfig(cfg *flow.Config) error {
+	if cfg == nil {
+		return fmt.Errorf("cannot save nil config")
+	}
+
 	context, err := repository.Discover()
 	if err != nil {
 		return fmt.Errorf("failed to discover repository context: %w", err)
@@ -68,13 +76,34 @@ func SaveConfig(cfg *flow.Config) error {
 
 	yamlData, err := yaml.Marshal(cfg)
 	if err != nil {
-		return fmt.Errorf("error generating YAML: %v", err)
+		return fmt.Errorf("error generating YAML: %w", err)
 	}
 
 	finalContent := []byte(bannerToConfig + "\n" + string(yamlData))
 
-	if err := os.WriteFile(context.ConfigPath, finalContent, 0644); err != nil {
-		return fmt.Errorf("error writing .dflow.yaml: %v", err)
+	temporary, err := os.CreateTemp(filepath.Dir(context.ConfigPath), ".dflow.yaml.tmp-*")
+	if err != nil {
+		return fmt.Errorf("error creating temporary .dflow.yaml: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0644); err != nil {
+		temporary.Close()
+		return fmt.Errorf("error setting temporary .dflow.yaml permissions: %w", err)
+	}
+	if _, err := temporary.Write(finalContent); err != nil {
+		temporary.Close()
+		return fmt.Errorf("error writing temporary .dflow.yaml: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		temporary.Close()
+		return fmt.Errorf("error syncing temporary .dflow.yaml: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("error closing temporary .dflow.yaml: %w", err)
+	}
+	if err := os.Rename(temporaryPath, context.ConfigPath); err != nil {
+		return fmt.Errorf("error replacing .dflow.yaml: %w", err)
 	}
 
 	return nil
