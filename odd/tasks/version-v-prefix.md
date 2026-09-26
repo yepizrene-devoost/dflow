@@ -14,3 +14,11 @@ Issue: [#40](https://github.com/yepizrene-devoost/dflow/issues/40)
   `cmd/utils/version_test.go`.
 - [x] **WU3**: Verify snapshot build still reports `snapshot-<short>` and
   `HasReleaseProvenance` classifies it correctly.
+- [x] **WU4**: Document snapshot marker behavior in `VersionDisplay` (triggered
+  by review finding R3-MISSING-SNAPSHOT-PROVENANCE).
+
+## Review
+
+- Lineage: `review-bcf6a156e66703f3`
+- Outcome: **APPROVED**
+- Authority burned: `gentle-ai.review-acknowledged/v1`
