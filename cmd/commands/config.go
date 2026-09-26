@@ -14,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/repository"
 	"github.com/yepizrene-devoost/dflow/pkg/validators"
 )
 
@@ -115,11 +116,20 @@ The email can be passed with --email or entered interactively when omitted.`,
 		}
 
 		// save local config
-		if err = exec.Command("git", "config", "dflow.author", name).Run(); err != nil {
+		context, err := repository.Discover()
+		if err != nil {
+			return fmt.Errorf("discover repository context: %w", err)
+		}
+
+		authorCmd := exec.Command("git", "config", "dflow.author", name)
+		authorCmd.Dir = context.WorktreeRoot
+		if err = authorCmd.Run(); err != nil {
 			return fmt.Errorf("failed to set dflow.author: %w", err)
 		}
 
-		if err = exec.Command("git", "config", "dflow.email", email).Run(); err != nil {
+		emailCmd := exec.Command("git", "config", "dflow.email", email)
+		emailCmd.Dir = context.WorktreeRoot
+		if err = emailCmd.Run(); err != nil {
 			return fmt.Errorf("failed to set dflow.email: %w", err)
 		}
 
@@ -140,8 +150,17 @@ var getAuthorCmd = &cobra.Command{
 configuration for this repository.`,
 	Example: `  dflow config get-author`,
 	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
-		author, err1 := exec.Command("git", "config", "--get", "dflow.author").Output()
-		email, err2 := exec.Command("git", "config", "--get", "dflow.email").Output()
+		context, err := repository.Discover()
+		if err != nil {
+			return fmt.Errorf("discover repository context: %w", err)
+		}
+
+		authorCmd := exec.Command("git", "config", "--get", "dflow.author")
+		authorCmd.Dir = context.WorktreeRoot
+		author, err1 := authorCmd.Output()
+		emailCmd := exec.Command("git", "config", "--get", "dflow.email")
+		emailCmd.Dir = context.WorktreeRoot
+		email, err2 := emailCmd.Output()
 
 		if err1 != nil || err2 != nil {
 			return fmt.Errorf("Author or email not set. Use `dflow config set-author`")
@@ -165,7 +184,14 @@ var listCmd = &cobra.Command{
 namespace for the current repository.`,
 	Example: `  dflow config list`,
 	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
-		output, err := exec.Command("git", "config", "--get-regexp", "^dflow\\.").Output()
+		context, err := repository.Discover()
+		if err != nil {
+			return fmt.Errorf("discover repository context: %w", err)
+		}
+
+		configCmd := exec.Command("git", "config", "--get-regexp", "^dflow\\.")
+		configCmd.Dir = context.WorktreeRoot
+		output, err := configCmd.Output()
 
 		if err != nil {
 			utils.Warn("No dflow configuration found in this project.")

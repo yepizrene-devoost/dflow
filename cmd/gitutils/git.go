@@ -12,17 +12,35 @@ import (
 	"strings"
 
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/repository"
 )
+
+func gitCommand(args ...string) (*exec.Cmd, error) {
+	context, err := repository.Discover()
+	if err != nil {
+		return nil, fmt.Errorf("discover repository context: %w", err)
+	}
+
+	cmd := exec.Command("git", args...)
+	cmd.Dir = context.WorktreeRoot
+	return cmd, nil
+}
 
 // CheckOrCreateBranch verifies whether the given branch exists locally.
 //
 // If the branch does not exist, it creates it using `git branch <branch>`.
 // This operation does not switch to the branch; it only ensures its presence.
 func CheckOrCreateBranch(branch string) error {
-	cmd := exec.Command("git", "rev-parse", "--verify", branch)
+	cmd, err := gitCommand("rev-parse", "--verify", branch)
+	if err != nil {
+		return err
+	}
 	if err := cmd.Run(); err != nil {
 		utils.Info("Branch '%s' does not exist. Creating...", branch)
-		create := exec.Command("git", "branch", branch)
+		create, err := gitCommand("branch", branch)
+		if err != nil {
+			return err
+		}
 		if err := create.Run(); err != nil {
 			return fmt.Errorf("failed to create branch '%s': %w", branch, err)
 		}
@@ -42,7 +60,10 @@ func PushBranch(branch string) error {
 	spinner := utils.NewSpinner(fmt.Sprintf("Pushing branch '%s' to origin...", branch))
 	spinner.Start()
 
-	cmd := exec.Command("git", "push", "-u", "origin", branch)
+	cmd, err := gitCommand("push", "-u", "origin", branch)
+	if err != nil {
+		return err
+	}
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to push branch '%s': %w", branch, err)
 	}
@@ -102,7 +123,11 @@ func runCapturingGit(cmd *exec.Cmd) error {
 //
 // Returns an error if the checkout operation fails.
 func Checkout(branch string) error {
-	return runCapturingGit(exec.Command("git", "checkout", "--quiet", branch))
+	cmd, err := gitCommand("checkout", "--quiet", branch)
+	if err != nil {
+		return err
+	}
+	return runCapturingGit(cmd)
 }
 
 // CheckoutNew creates and checks out a new branch from the current HEAD.
@@ -113,7 +138,11 @@ func Checkout(branch string) error {
 //
 // It returns an error if the operation fails.
 func CheckoutNew(branch string) error {
-	return runCapturingGit(exec.Command("git", "checkout", "--quiet", "-b", branch))
+	cmd, err := gitCommand("checkout", "--quiet", "-b", branch)
+	if err != nil {
+		return err
+	}
+	return runCapturingGit(cmd)
 }
 
 // Pull updates the current branch with the latest changes from the remote 'origin'.
@@ -132,7 +161,11 @@ func Pull() error {
 	spinner := utils.NewSpinner("Pulling latest changes from origin...")
 	spinner.Start()
 
-	cmd := exec.Command("git", "pull")
+	cmd, err := gitCommand("pull")
+	if err != nil {
+		spinner.Clear()
+		return err
+	}
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	if err := cmd.Run(); err != nil {
@@ -229,7 +262,10 @@ func Delete(branch string) error {
 
 	if remoteExisted {
 		var stderr bytes.Buffer
-		cmd := exec.Command("git", "push", "origin", "--delete", branch)
+		cmd, err := gitCommand("push", "origin", "--delete", branch)
+		if err != nil {
+			return err
+		}
 		cmd.Stdout = nil
 		cmd.Stderr = &stderr
 		if err := cmd.Run(); err != nil {
@@ -282,7 +318,10 @@ func remoteDeleteFailure(branch string, localExisted bool, diagnostics string) e
 // remote half could not be checked) cannot drift apart in what they report.
 func deleteLocalBranch(branch string) error {
 	var stderr bytes.Buffer
-	cmd := exec.Command("git", "branch", "-D", branch)
+	cmd, err := gitCommand("branch", "-D", branch)
+	if err != nil {
+		return err
+	}
 	cmd.Stdout = nil
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -316,7 +355,10 @@ func remoteBranchRevision(branch string) (string, error) {
 		return "", nil
 	}
 
-	cmd := exec.Command("git", "ls-remote", "--heads", "origin", branch)
+	cmd, err := gitCommand("ls-remote", "--heads", "origin", branch)
+	if err != nil {
+		return "", err
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -366,7 +408,10 @@ func RemoteBranchExists(branch string) (bool, error) {
 //
 // It runs `git branch --format=%(refname:short)` and parses the output line by line.
 func GetLocalBranches() []string {
-	cmd := exec.Command("git", "branch", "--format=%(refname:short)")
+	cmd, err := gitCommand("branch", "--format=%(refname:short)")
+	if err != nil {
+		return []string{}
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		return []string{}
@@ -391,7 +436,9 @@ func GetLocalBranches() []string {
 //
 // This is useful to avoid pull/push errors in local-only Git repositories.
 func HasOriginRemote() bool {
-	cmd := exec.Command("git", "remote", "get-url", "origin")
-	err := cmd.Run()
-	return err == nil
+	cmd, err := gitCommand("remote", "get-url", "origin")
+	if err != nil {
+		return false
+	}
+	return cmd.Run() == nil
 }
