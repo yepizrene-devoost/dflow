@@ -9,10 +9,12 @@ Repository instructions for coding agents working in this project.
   1. Read the recent memory context (`mem_context`, project `dflow`) and the
      latest session summary — that is where the previous session recorded
      decisions, discoveries and pending steps.
-  2. List the open backlog: `gh issue list --state open`.
+  2. List the open backlog and its labels: `gh issue list --state open --json number,title,body,labels`.
 - Open the conversation with one line on where the last session left off, then show
-  the current open backlog in a table with issue number, title, and a useful description,
-  and ask what to pick up. A list of numbers alone is not sufficient. Do not start work
+  the current open backlog in a table with issue number, title, priority, and a useful
+  description. Show the value of a `priority:*` label when present; otherwise leave
+  the priority cell empty. Do not infer priority from the issue text or ordering.
+  Ask what to pick up. A list of numbers alone is not sufficient. Do not start work
   without that anchor.
 
 ## Commit Messages

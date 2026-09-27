@@ -44,8 +44,9 @@ branch types, bases, finish targets, and merge modes.
   inferred from tentative phrasing or bundled into another approval. See the
   "Closure and External-Action Confirmations" section in `AGENTS.md`.
 - Session-start backlog presentation: show the previous-session status, then an
-  open-issues table with number, title, and useful description; issue numbers
-  alone are insufficient. See `AGENTS.md`.
+  open-issues table with number, title, optional `priority:*` label, and useful
+  description; leave priority blank if absent. Issue numbers alone are
+  insufficient. See `AGENTS.md`.
 - Rule ownership: ODD stage closing, and the ordering that closes every stage
   before the commit carrying its work, are owned by the global
   `~/.pi/agent/AGENTS.md`. The task-tracking section here only points at them, so
