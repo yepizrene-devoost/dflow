@@ -18,6 +18,36 @@ type Context struct {
 	ConfigPath   string
 }
 
+// Session reuses a discovered repository context for a sequence of Git
+// operations. Commands created by the session are non-interactive so callers
+// receive deterministic failures in automation and CI.
+type Session struct {
+	Context
+}
+
+// NewSession discovers the repository once for a multi-step workflow.
+func NewSession() (Session, error) {
+	context, err := Discover()
+	if err != nil {
+		return Session{}, err
+	}
+	return Session{Context: context}, nil
+}
+
+// Command creates a Git command rooted at the session's worktree.
+func (s Session) Command(args ...string) *exec.Cmd {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = s.WorktreeRoot
+	cmd.Env = make([]string, 0, len(os.Environ())+1)
+	for _, value := range os.Environ() {
+		if !strings.HasPrefix(value, "GIT_TERMINAL_PROMPT=") {
+			cmd.Env = append(cmd.Env, value)
+		}
+	}
+	cmd.Env = append(cmd.Env, "GIT_TERMINAL_PROMPT=0")
+	return cmd
+}
+
 // Discover resolves the repository containing the invocation directory.
 // DFLOW_CWD, when non-empty, is resolved relative to the process working
 // directory; otherwise the process working directory is used.

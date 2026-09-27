@@ -8,6 +8,30 @@ import (
 	"testing"
 )
 
+func TestSessionCommandUsesRepositoryRootAndNonInteractiveGit(t *testing.T) {
+	repo := initRepository(t)
+	t.Setenv("DFLOW_CWD", repo)
+
+	session, err := NewSession()
+	if err != nil {
+		t.Fatalf("NewSession returned error: %v", err)
+	}
+	cmd := session.Command("config", "--get", "user.name")
+	if cmd.Dir != canonicalPath(t, repo) {
+		t.Fatalf("command Dir = %q, want %q", cmd.Dir, canonicalPath(t, repo))
+	}
+	found := false
+	for _, value := range cmd.Env {
+		if value == "GIT_TERMINAL_PROMPT=0" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("session command must disable Git terminal prompts")
+	}
+}
+
 func TestDiscoverUsesDFLOWCWDRelativeToProcessWorkingDirectory(t *testing.T) {
 	repo := initRepository(t)
 	subdir := filepath.Join(repo, "nested")
