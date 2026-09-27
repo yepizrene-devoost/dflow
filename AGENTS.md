@@ -10,9 +10,10 @@ Repository instructions for coding agents working in this project.
      latest session summary — that is where the previous session recorded
      decisions, discoveries and pending steps.
   2. List the open backlog: `gh issue list --state open`.
-- Open the conversation with one line on where the last session left off and
-  the current backlog, then ask what to pick up. Do not start work without
-  that anchor.
+- Open the conversation with one line on where the last session left off, then show
+  the current open backlog in a table with issue number, title, and a useful description,
+  and ask what to pick up. A list of numbers alone is not sufficient. Do not start work
+  without that anchor.
 
 ## Commit Messages
 

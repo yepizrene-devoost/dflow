@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/yepizrene-devoost/dflow/cmd/commands"
+	"github.com/yepizrene-devoost/dflow/cmd/gitutils"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
 	"github.com/yepizrene-devoost/dflow/pkg/flow"
 )
@@ -326,14 +327,20 @@ func TestFinishDeleteKeepsBranchAfterLaterAutoTargetConflict(t *testing.T) {
 		if !strings.Contains(err.Error(), "Merge conflict") {
 			t.Fatalf("expected conflict error, got: %v", err)
 		}
+		if !strings.Contains(err.Error(), "completed auto targets: develop") {
+			t.Fatalf("expected completed target list to include develop, got: %v", err)
+		}
 		if !branchExists(t, repoDir, "feature/publish-me") {
 			t.Fatalf("expected the work branch to remain after a later target failure")
 		}
 		if !remoteBranchExists(t, repoDir, "feature/publish-me") {
 			t.Fatalf("expected the published work branch to remain after a later target failure")
 		}
-		if current := currentBranchName(t, repoDir); current != "uat" {
-			t.Fatalf("expected to remain on failed target uat, got %q", current)
+		if current := currentBranchName(t, repoDir); current != "feature/publish-me" {
+			t.Fatalf("expected restoration to original work branch, got %q", current)
+		}
+		if gitutils.MergeInProgress() {
+			t.Fatalf("expected merge-abort cleanup to clear the active merge")
 		}
 	})
 }
@@ -595,6 +602,52 @@ func TestFinishFailsWhenTheWorkBranchCannotBePublished(t *testing.T) {
 
 		if origin := remoteRevision(t, repoDir, "develop"); origin != developBefore {
 			t.Fatalf("expected origin develop to stay at %s, got %q", developBefore, origin)
+		}
+	})
+}
+
+func TestFinishRestoresWorkBranchAfterTargetPullFailure(t *testing.T) {
+	repoDir, _ := finishPublishRepo(t)
+
+	withWorkingDir(t, repoDir, func() {
+		finishPublishConfig(t, repoDir, []string{"missing"}, map[string]flow.WorkflowBranchRule{
+			"missing": {MergeMode: "auto"},
+		})
+
+		err := commands.FinishCmd.RunE(commands.FinishCmd, []string{})
+		if err == nil {
+			t.Fatalf("expected FinishCmd to fail when the target cannot be synced")
+		}
+		if !strings.Contains(err.Error(), "pull/sync") || !strings.Contains(err.Error(), "completed auto targets: none") {
+			t.Fatalf("expected explicit pull/sync failure state, got: %v", err)
+		}
+		if current := currentBranchName(t, repoDir); current != "feature/publish-me" {
+			t.Fatalf("expected restoration to original work branch, got %q", current)
+		}
+	})
+}
+
+func TestFinishRestoresWorkBranchAfterTargetPushFailure(t *testing.T) {
+	repoDir, _ := finishPublishRepo(t)
+
+	withWorkingDir(t, repoDir, func() {
+		finishPublishConfig(t, repoDir, []string{"develop"}, map[string]flow.WorkflowBranchRule{
+			"develop": {MergeMode: "auto"},
+		})
+		// Publish first so the work-branch publish is an idempotent no-op. The
+		// unreachable push URL then fails only when the target is pushed.
+		runGit(t, repoDir, "push", "-u", "origin", "feature/publish-me")
+		setUnreachablePushURL(t, repoDir)
+
+		err := commands.FinishCmd.RunE(commands.FinishCmd, []string{})
+		if err == nil {
+			t.Fatalf("expected FinishCmd to fail when the target cannot be pushed")
+		}
+		if !strings.Contains(err.Error(), "push") || !strings.Contains(err.Error(), "completed auto targets: none") {
+			t.Fatalf("expected explicit target push failure state, got: %v", err)
+		}
+		if current := currentBranchName(t, repoDir); current != "feature/publish-me" {
+			t.Fatalf("expected restoration to original work branch, got %q", current)
 		}
 	})
 }
