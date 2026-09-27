@@ -19,6 +19,7 @@ import (
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
 	"github.com/yepizrene-devoost/dflow/pkg/agent"
 	"github.com/yepizrene-devoost/dflow/pkg/flow"
+	"github.com/yepizrene-devoost/dflow/pkg/repository"
 	"github.com/yepizrene-devoost/dflow/pkg/validators"
 )
 
@@ -101,6 +102,7 @@ var InitCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		draft.force = force
 		if err := applyInitDraft(draft, defaultInitOperations()); err != nil {
 			return err
 		}
@@ -127,14 +129,22 @@ type initDraft struct {
 	branches      []string
 	push          bool
 	generateAgent bool
+	force         bool
+}
+
+type initRemoteBranch struct {
+	exists         bool
+	localRevision  string
+	remoteRevision string
 }
 
 type initOperations struct {
-	validateBranch     func(string) error
-	ensureBranch       func(string) error
-	pushBranch         func(string) error
-	generateAgentFiles func(*flow.Config) error
-	saveConfig         func(*flow.Config) error
+	validateBranch      func(string) error
+	ensureBranch        func(string) error
+	inspectRemoteBranch func(string) (initRemoteBranch, error)
+	pushBranch          func(string) error
+	generateAgentFiles  func(*flow.Config) error
+	saveConfig          func(*flow.Config) error
 }
 
 func collectInitDraft() (initDraft, error) {
@@ -209,11 +219,12 @@ func collectInitDraft() (initDraft, error) {
 
 func defaultInitOperations() initOperations {
 	return initOperations{
-		validateBranch:     validateInitBranch,
-		ensureBranch:       gitutils.CheckOrCreateBranch,
-		pushBranch:         gitutils.PushBranch,
-		generateAgentFiles: generateInitAgentFiles,
-		saveConfig:         utils.SaveConfig,
+		validateBranch:      validateInitBranch,
+		ensureBranch:        gitutils.CheckOrCreateBranch,
+		inspectRemoteBranch: inspectInitRemoteBranch,
+		pushBranch:          gitutils.PushBranch,
+		generateAgentFiles:  generateInitAgentFiles,
+		saveConfig:          utils.SaveConfig,
 	}
 }
 
@@ -232,27 +243,40 @@ func applyInitDraft(draft initDraft, ops initOperations) error {
 		}
 	}
 
-	// Preserve the established success sequence for this refactor: persist the
-	// validated draft, then create and optionally publish its branches.
-	if err := ops.saveConfig(&draft.config); err != nil {
-		return err
-	}
+	var local, remote []string
 	for _, branch := range draft.branches {
 		if err := ops.ensureBranch(branch); err != nil {
-			return err
+			return initProgressError(draft.force, fmt.Sprintf("create or reuse local branch %q", branch), err, local, remote)
 		}
+		local = append(local, branch)
 	}
 	if draft.push {
 		for _, branch := range draft.branches {
-			if err := ops.pushBranch(branch); err != nil {
-				return fmt.Errorf("failed to push %q: %w", branch, err)
+			state, err := ops.inspectRemoteBranch(branch)
+			if err != nil {
+				return initProgressError(draft.force, fmt.Sprintf("check remote branch %q", branch), err, local, remote)
 			}
+			if state.exists {
+				remote = append(remote, branch)
+				if state.localRevision != state.remoteRevision {
+					cause := fmt.Errorf("local revision %s differs from remote revision %s; refusing to overwrite the existing remote branch", state.localRevision, state.remoteRevision)
+					return initProgressError(draft.force, fmt.Sprintf("verify existing remote branch %q", branch), cause, local, remote)
+				}
+				continue
+			}
+			if err := ops.pushBranch(branch); err != nil {
+				return initProgressError(draft.force, fmt.Sprintf("publish branch %q", branch), err, local, remote)
+			}
+			remote = append(remote, branch)
 		}
 	}
 	if draft.generateAgent && ops.generateAgentFiles != nil {
 		if err := ops.generateAgentFiles(&draft.config); err != nil {
-			return err
+			return initProgressError(draft.force, "generate agent workflow", err, local, remote)
 		}
+	}
+	if err := ops.saveConfig(&draft.config); err != nil {
+		return initProgressError(draft.force, "write final .dflow.yaml", err, local, remote)
 	}
 	return nil
 }
@@ -267,6 +291,45 @@ func validateInitBranch(branch string) error {
 		return err
 	}
 	return fmt.Errorf("%s: %w", diagnostic, err)
+}
+
+func inspectInitRemoteBranch(branch string) (initRemoteBranch, error) {
+	session, err := repository.NewSession()
+	if err != nil {
+		return initRemoteBranch{}, fmt.Errorf("discover repository for remote inspection: %w", err)
+	}
+	localRevision, err := gitutils.RunGit(session.Command("rev-parse", "refs/heads/"+branch))
+	if err != nil {
+		return initRemoteBranch{}, fmt.Errorf("read local revision for %q: %w", branch, err)
+	}
+	remoteOutput, err := gitutils.RunGit(session.Command("ls-remote", "--heads", "origin", "refs/heads/"+branch))
+	if err != nil {
+		return initRemoteBranch{}, fmt.Errorf("read remote revision for %q: %w", branch, err)
+	}
+	state := initRemoteBranch{localRevision: strings.TrimSpace(localRevision)}
+	fields := strings.Fields(remoteOutput)
+	if len(fields) == 0 {
+		return state, nil
+	}
+	state.exists = true
+	state.remoteRevision = fields[0]
+	return state, nil
+}
+
+func initProgressError(force bool, stage string, cause error, local, remote []string) error {
+	localState := "No local branches were confirmed"
+	if len(local) > 0 {
+		localState = "Local branches retained: " + strings.Join(local, ", ")
+	}
+	remoteState := "No remote branches were published"
+	if len(remote) > 0 {
+		remoteState = "Remote branches retained: " + strings.Join(remote, ", ")
+	}
+	retryCommand := "dflow init"
+	if force {
+		retryCommand += " --force"
+	}
+	return fmt.Errorf("onboarding stopped while attempting to %s: %w. %s. %s. .dflow.yaml was not changed; resolve the reported error and rerun `%s` to reuse existing refs", stage, cause, localState, remoteState, retryCommand)
 }
 
 func generateInitAgentFiles(cfg *flow.Config) error {
