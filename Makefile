@@ -36,8 +36,10 @@ build-all:
 # stops the release before GoReleaser runs. The release step then preflights
 # .env/GITHUB_TOKEN and refuses to run off-tag or when the newest CHANGELOG.md
 # section does not belong to the tag being published, so a stale changelog can
-# never overwrite an already correct release body.
-.PHONY: release release-notes
+# never overwrite an already correct release body. After GoReleaser succeeds,
+# the public module proxy is warmed through the same standalone target used for
+# manual retries.
+.PHONY: release release-notes warm-module-proxy
 release: release-notes
 	@set -eu; \
 	fail() { echo "❌  $$1" >&2; exit 1; }; \
@@ -54,7 +56,25 @@ release: release-notes
 	[ "$$notes_version" = "$(VERSION)" ] \
 		|| fail "RELEASE_NOTES.md carries the $$notes_version section but the tag being released is $(VERSION): curate CHANGELOG.md so its newest '## 📦' section matches the tag."; \
 	echo "🚀 Running GoReleaser with .env"; \
-	goreleaser release --clean --release-notes=RELEASE_NOTES.md
+	goreleaser release --clean --release-notes=RELEASE_NOTES.md; \
+	if ! make --no-print-directory warm-module-proxy VERSION="$(VERSION)"; then \
+		echo "⚠️  GoReleaser succeeded, but the public module proxy warm-up failed. The release may already exist; retry with: make warm-module-proxy VERSION=$(VERSION)" >&2; \
+		exit 1; \
+	fi
+
+# 🌐 Request the tagged version directly from the public Go module proxy. This
+# deliberately bypasses the local Go module cache so a successful request proves
+# that proxy.golang.org can resolve the published tag.
+warm-module-proxy:
+	@set -eu; \
+	fail() { echo "❌  $$1" >&2; exit 1; }; \
+	[ "$(VERSION)" != dev ] \
+		|| fail "make warm-module-proxy needs an explicit release tag: retry with VERSION=vX.Y.Z."; \
+	url="https://proxy.golang.org/github.com/yepizrene-devoost/dflow/@v/$(VERSION).info"; \
+	echo "🌐 Warming public Go module proxy: $$url"; \
+	curl --fail --silent --show-error --retry 4 --retry-delay 2 --retry-all-errors --connect-timeout 10 --max-time 30 "$$url"; \
+	echo; \
+	echo "✅ Public Go module proxy resolved $(VERSION)."
 
 # 📝 Extract the latest version section from CHANGELOG.md into RELEASE_NOTES.md
 # (generated, gitignored, never committed). The extraction is validated before
