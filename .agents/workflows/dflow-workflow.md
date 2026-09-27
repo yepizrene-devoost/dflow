@@ -7,6 +7,18 @@ description: dflow usage and branch/merge workflow for agents
 Source of truth for how to use `dflow` in this repository. The authoritative
 configuration lives in `.dflow.yaml`; this file explains how to read and apply it.
 
+## Branch authoring policy
+
+Before creating or modifying any repository file, an agent must use `dflow start`
+to create and switch to its own work branch. This applies to every repository
+write, including instruction, planning, and tracking files.
+
+Base branches such as `develop`, `uat`, and `main` are integration targets, not
+authoring branches. Do not create direct authoring commits on them. A separately
+authorized `dflow finish` is the explicit exception for configured `auto` targets:
+it integrates a completed work branch and is not direct authoring on the base.
+Manual targets still require a pull request.
+
 ## Commands
 
 | Command | Purpose |
