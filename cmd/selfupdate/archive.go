@@ -67,13 +67,13 @@ func extractBinaryFromTarGz(archivePath, destPath, goos string) error {
 	if err != nil {
 		return fmt.Errorf("could not open the archive %s: %w", archivePath, err)
 	}
-	defer archive.Close()
+	defer func() { _ = archive.Close() }()
 
 	gzipReader, err := gzip.NewReader(archive)
 	if err != nil {
 		return fmt.Errorf("could not read %s as a gzip archive: %w", archivePath, err)
 	}
-	defer gzipReader.Close()
+	defer func() { _ = gzipReader.Close() }()
 
 	reader := tar.NewReader(gzipReader)
 	for {
@@ -115,7 +115,7 @@ func extractBinaryFromZip(archivePath, destPath, goos string) error {
 	if err != nil {
 		return fmt.Errorf("could not open %s as a zip archive: %w", archivePath, err)
 	}
-	defer archive.Close()
+	defer func() { _ = archive.Close() }()
 
 	for _, entry := range archive.File {
 		if _, err := safeEntryPath(filepath.Dir(destPath), entry.Name); err != nil {
@@ -132,7 +132,7 @@ func extractBinaryFromZip(archivePath, destPath, goos string) error {
 		if err != nil {
 			return fmt.Errorf("could not read the %q entry from %s: %w", entry.Name, archivePath, err)
 		}
-		defer body.Close()
+		defer func() { _ = body.Close() }()
 
 		return writeBinary(destPath, body)
 	}

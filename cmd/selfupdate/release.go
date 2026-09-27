@@ -1,6 +1,7 @@
 package selfupdate
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -133,7 +134,7 @@ func NewReleaseClientWithBaseURL(baseURL string, httpClient *http.Client) *Relea
 func (c *ReleaseClient) LatestRelease() (*Release, error) {
 	endpoint := fmt.Sprintf("%s/repos/%s/releases/latest", c.baseURL, releaseRepository)
 
-	request, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("could not build the GitHub API request: %w", err)
 	}
@@ -145,7 +146,7 @@ func (c *ReleaseClient) LatestRelease() (*Release, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not reach the GitHub API at %s: %w", endpoint, err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	if response.StatusCode != http.StatusOK {
 		return nil, releaseStatusError(response.StatusCode, endpoint)

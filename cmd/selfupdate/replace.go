@@ -161,7 +161,7 @@ func copyIntoStage(stage *os.File, newBinaryPath string) error {
 	if err != nil {
 		return fmt.Errorf("could not open the new dflow binary %s: %w", newBinaryPath, err)
 	}
-	defer source.Close()
+	defer func() { _ = source.Close() }()
 
 	if _, err := io.Copy(stage, source); err != nil {
 		return fmt.Errorf("could not stage the new dflow binary at %s: %w", stage.Name(), err)

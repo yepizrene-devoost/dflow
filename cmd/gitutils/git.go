@@ -39,7 +39,7 @@ func newGitSession() (*GitSession, error) {
 }
 
 func (s *GitSession) command(args ...string) *exec.Cmd {
-	return s.Session.Command(args...)
+	return s.Command(args...)
 }
 
 func gitCommand(args ...string) (*exec.Cmd, error) {

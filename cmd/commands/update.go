@@ -460,7 +460,7 @@ func installLatest(target string, latest *selfupdate.Release) error {
 	if err != nil {
 		return fmt.Errorf("could not create a temporary directory for the update: %w", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	archivePath := filepath.Join(tempDir, archiveName)
 	checksumsPath := filepath.Join(tempDir, checksumsName)

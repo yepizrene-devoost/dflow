@@ -157,7 +157,7 @@ configuration for this repository.`,
 		email, err2 := gitutils.RunGit(session.Command("config", "--get", "dflow.email"))
 
 		if err1 != nil || err2 != nil {
-			return fmt.Errorf("Author or email not set. Use `dflow config set-author`")
+			return fmt.Errorf("author or email not set. Use `dflow config set-author`")
 		}
 
 		utils.Plain("👤 Author: %s", strings.TrimSpace(string(author)))

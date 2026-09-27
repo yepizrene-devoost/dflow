@@ -19,6 +19,9 @@
   <a href="https://pkg.go.dev/github.com/yepizrene-devoost/dflow">
     <img src="https://pkg.go.dev/badge/github.com/yepizrene-devoost/dflow.svg" alt="Go Reference">
   </a>
+  <a href="https://github.com/yepizrene-devoost/dflow/actions/workflows/golangci-lint.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/yepizrene-devoost/dflow/golangci-lint.yml?branch=main&label=lint" alt="Lint">
+  </a>
   <a href="https://github.com/yepizrene-devoost/dflow/actions/workflows/go.yml">
     <img src="https://img.shields.io/github/actions/workflow/status/yepizrene-devoost/dflow/go.yml?branch=main&label=build:%20main" alt="Build: main">
   </a>

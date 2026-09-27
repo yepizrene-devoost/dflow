@@ -1,6 +1,7 @@
 package selfupdate
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,11 +43,15 @@ func DownloadFile(url, destPath string, client *http.Client) error {
 		client = &http.Client{Timeout: defaultDownloadTimeout}
 	}
 
-	response, err := client.Get(url)
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("could not build the download request for %s: %w", url, err)
+	}
+	response, err := client.Do(request)
 	if err != nil {
 		return fmt.Errorf("could not download %s: %w", url, err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	if response.StatusCode != http.StatusOK {
 		return fmt.Errorf("could not download %s: the server returned HTTP %d %s", url, response.StatusCode, http.StatusText(response.StatusCode))
