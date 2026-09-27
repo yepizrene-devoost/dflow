@@ -2,6 +2,7 @@
 package repository
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -36,7 +37,7 @@ func NewSession() (Session, error) {
 
 // Command creates a Git command rooted at the session's worktree.
 func (s Session) Command(args ...string) *exec.Cmd {
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(context.Background(), "git", args...)
 	cmd.Dir = s.WorktreeRoot
 	cmd.Env = make([]string, 0, len(os.Environ())+1)
 	for _, value := range os.Environ() {
@@ -104,7 +105,7 @@ func resolveStartPath(configured, cwd string) (string, error) {
 }
 
 func resolveGit(start string) (string, string, error) {
-	cmd := exec.Command("git", "-C", start, "rev-parse", "--show-toplevel", "--git-dir")
+	cmd := exec.CommandContext(context.Background(), "git", "-C", start, "rev-parse", "--show-toplevel", "--git-dir")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		diagnostics := strings.TrimSpace(string(output))

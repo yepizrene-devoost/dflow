@@ -196,7 +196,7 @@ func TestStartCLI(t *testing.T) {
 				if exitCode == 0 {
 					t.Fatalf("start with invalid normalized name exited 0, want non-zero\n%s", output)
 				}
-				if !strings.Contains(output, "Invalid branch name") {
+				if !strings.Contains(output, "invalid branch name") {
 					t.Fatalf("invalid-name failure missing validation reason:\n%s", output)
 				}
 				if branchExists(t, repo, tt.fullName) {
@@ -250,7 +250,7 @@ func TestStartCLI(t *testing.T) {
 		if exitCode == 0 {
 			t.Fatalf("start with a failing pull exited 0, want non-zero\n%s", output)
 		}
-		if !strings.Contains(output, "Failed to pull latest changes from 'develop'") {
+		if !strings.Contains(output, "failed to pull latest changes from 'develop'") {
 			t.Fatalf("failure message must keep the base-pull wording:\n%s", output)
 		}
 		if !strings.Contains(output, "no tracking information") {

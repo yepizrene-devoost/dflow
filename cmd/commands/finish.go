@@ -106,7 +106,7 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 		}
 
 		if gitSession.MergeInProgress() {
-			return fmt.Errorf("A merge is already in progress. Resolve or abort it before running `dflow finish`.")
+			return fmt.Errorf("a merge is already in progress. Resolve or abort it before running `dflow finish`")
 		}
 
 		cfg, err := utils.LoadConfig()

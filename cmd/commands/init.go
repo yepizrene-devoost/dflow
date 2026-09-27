@@ -6,6 +6,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -282,7 +283,7 @@ func applyInitDraft(draft initDraft, ops initOperations) error {
 }
 
 func validateInitBranch(branch string) error {
-	output, err := exec.Command("git", "check-ref-format", "--branch", branch).CombinedOutput()
+	output, err := exec.CommandContext(context.Background(), "git", "check-ref-format", "--branch", branch).CombinedOutput()
 	if err == nil {
 		return nil
 	}

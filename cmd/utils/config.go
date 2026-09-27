@@ -86,17 +86,17 @@ func SaveConfig(cfg *flow.Config) error {
 		return fmt.Errorf("error creating temporary .dflow.yaml: %w", err)
 	}
 	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
+	defer func() { _ = os.Remove(temporaryPath) }()
 	if err := temporary.Chmod(0644); err != nil {
-		temporary.Close()
+		_ = temporary.Close()
 		return fmt.Errorf("error setting temporary .dflow.yaml permissions: %w", err)
 	}
 	if _, err := temporary.Write(finalContent); err != nil {
-		temporary.Close()
+		_ = temporary.Close()
 		return fmt.Errorf("error writing temporary .dflow.yaml: %w", err)
 	}
 	if err := temporary.Sync(); err != nil {
-		temporary.Close()
+		_ = temporary.Close()
 		return fmt.Errorf("error syncing temporary .dflow.yaml: %w", err)
 	}
 	if err := temporary.Close(); err != nil {

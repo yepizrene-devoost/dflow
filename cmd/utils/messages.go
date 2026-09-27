@@ -150,7 +150,7 @@ func Prompt(label string, args ...interface{}) {
 	if CurrentFormat() == FormatJSON {
 		return
 	}
-	fmt.Print(fmt.Sprintf(label, args...))
+	fmt.Printf(label, args...)
 }
 
 // printWithIcon renders one icon-prefixed message. The icon is always the one
