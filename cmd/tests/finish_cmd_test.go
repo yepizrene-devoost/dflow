@@ -450,6 +450,38 @@ func remoteRevision(t *testing.T, repoDir, branch string) string {
 	return fields[0]
 }
 
+func TestFinishReusesOneGitSessionAcrossTheWorkflow(t *testing.T) {
+	repoDir, _ := finishPublishRepo(t)
+
+	withWorkingDir(t, repoDir, func() {
+		finishPublishConfig(t, repoDir, []string{"develop"}, map[string]flow.WorkflowBranchRule{
+			"develop": {MergeMode: "auto"},
+		})
+
+		tracePath := filepath.Join(t.TempDir(), "git-trace.log")
+		t.Setenv("GIT_TRACE", tracePath)
+
+		if err := commands.FinishCmd.RunE(commands.FinishCmd, []string{}); err != nil {
+			t.Fatalf("FinishCmd returned error: %v", err)
+		}
+
+		trace, err := os.ReadFile(tracePath)
+		if err != nil {
+			t.Fatalf("failed to read Git trace: %v", err)
+		}
+		traceText := string(trace)
+		if probes := strings.Count(traceText, "remote get-url origin"); probes != 1 {
+			t.Fatalf("expected one cached origin probe during finish, got %d\n%s", probes, traceText)
+		}
+		// The command wrapper performs two repository checks and config loading does
+		// one discovery. The finish Git workflow itself must add only the one
+		// discovery made by NewGitSession, regardless of how many Git steps follow.
+		if discoveries := strings.Count(traceText, "rev-parse --show-toplevel --git-dir"); discoveries != 4 {
+			t.Fatalf("expected four fixed repository discoveries during finish, got %d\n%s", discoveries, traceText)
+		}
+	})
+}
+
 func TestFinishPublishesTheWorkBranchBeforeMerging(t *testing.T) {
 	repoDir, _ := finishPublishRepo(t)
 

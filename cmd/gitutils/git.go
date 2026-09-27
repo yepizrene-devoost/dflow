@@ -15,21 +15,30 @@ import (
 	"github.com/yepizrene-devoost/dflow/pkg/repository"
 )
 
-type gitSession struct {
+// GitSession reuses one repository context and cached remote discovery across
+// a multi-step Git workflow. Public helper functions remain available for
+// callers that only need one operation.
+type GitSession struct {
 	repository.Session
 	originKnown bool
 	origin      bool
 }
 
-func newGitSession() (*gitSession, error) {
+// NewGitSession discovers the repository context once for a sequence of Git
+// operations.
+func NewGitSession() (*GitSession, error) {
 	session, err := repository.NewSession()
 	if err != nil {
 		return nil, fmt.Errorf("discover repository context: %w", err)
 	}
-	return &gitSession{Session: session}, nil
+	return &GitSession{Session: session}, nil
 }
 
-func (s *gitSession) command(args ...string) *exec.Cmd {
+func newGitSession() (*GitSession, error) {
+	return NewGitSession()
+}
+
+func (s *GitSession) command(args ...string) *exec.Cmd {
 	return s.Session.Command(args...)
 }
 
@@ -41,7 +50,7 @@ func gitCommand(args ...string) (*exec.Cmd, error) {
 	return session.command(args...), nil
 }
 
-func (s *gitSession) hasOriginRemote() bool {
+func (s *GitSession) hasOriginRemote() bool {
 	if s.originKnown {
 		return s.origin
 	}
@@ -241,6 +250,16 @@ func Pull() error {
 // is deleted first and the lookup error names what remains unknown, and with no
 // local copy nothing is touched.
 func Delete(branch string) error {
+	session, err := newGitSession()
+	if err != nil {
+		return err
+	}
+	return session.Delete(branch)
+}
+
+// Delete removes the branch using the repository context and origin lookup
+// cached by this session.
+func (s *GitSession) Delete(branch string) error {
 	// Refuse before anything is announced: this is a condition dflow can check
 	// without asking Git, and letting Git answer would surface its refusal as a
 	// foreign message. A branch checked out in another worktree stays Git's call,
@@ -250,7 +269,7 @@ func Delete(branch string) error {
 	// branch cannot be determined the guard stands aside and lets Git decide,
 	// because propagating that error would turn a deletion Git would have allowed
 	// into a refusal caused by an unrelated problem.
-	if current, err := CurrentBranch(); err == nil && current == branch {
+	if current, err := s.CurrentBranch(); err == nil && current == branch {
 		return fmt.Errorf("cannot delete branch '%s' because it is the branch you are currently on", branch)
 	}
 
@@ -258,8 +277,8 @@ func Delete(branch string) error {
 	// local half untouched when only the remote branch is left. A branch absent
 	// from both places is the one case with nothing to delete, and reporting
 	// success there would be a lie.
-	localExisted := BranchExists(branch)
-	remoteExisted, remoteErr := RemoteBranchExists(branch)
+	localExisted := s.BranchExists(branch)
+	remoteExisted, remoteErr := remoteBranchExists(s, branch)
 
 	// The two outcomes that touch nothing are settled before the spinner exists,
 	// which is what leaves the operation below a single creation site: with no local
@@ -289,7 +308,7 @@ func Delete(branch string) error {
 		// finish. Deleting it keeps the two halves independent, and the error below
 		// reports the operation as unfinished: the local half is gone and the remote
 		// half could not be checked.
-		if err := deleteLocalBranch(branch); err != nil {
+		if err := s.deleteLocalBranch(branch); err != nil {
 			return err
 		}
 
@@ -303,17 +322,13 @@ func Delete(branch string) error {
 	// deleted; a partial success is unfinished work, never a no-op and never a
 	// success.
 	if localExisted {
-		if err := deleteLocalBranch(branch); err != nil {
+		if err := s.deleteLocalBranch(branch); err != nil {
 			return err
 		}
 	}
 
 	if remoteExisted {
-		cmd, err := gitCommand("push", "origin", "--delete", branch)
-		if err != nil {
-			return err
-		}
-		result, err := runGit(cmd, false)
+		result, err := runGit(s.command("push", "origin", "--delete", branch), false)
 		if err != nil {
 			return remoteDeleteFailure(branch, localExisted, result.stderr)
 		}
@@ -362,12 +377,8 @@ func remoteDeleteFailure(branch string, localExisted bool, diagnostics string) e
 // Git's refusal in dflow's own words. It is a named step so the two call sites
 // that may need the local half deleted (the ordinary path and the path where the
 // remote half could not be checked) cannot drift apart in what they report.
-func deleteLocalBranch(branch string) error {
-	cmd, err := gitCommand("branch", "-D", branch)
-	if err != nil {
-		return err
-	}
-	result, err := runGit(cmd, false)
+func (s *GitSession) deleteLocalBranch(branch string) error {
+	result, err := runGit(s.command("branch", "-D", branch), false)
 	if err != nil {
 		return fmt.Errorf("failed to delete local branch '%s': %s", branch, strings.TrimSpace(result.stderr))
 	}
@@ -400,7 +411,7 @@ func remoteBranchRevision(branch string) (string, error) {
 	return remoteBranchRevisionIn(session, branch)
 }
 
-func remoteBranchRevisionIn(session *gitSession, branch string) (string, error) {
+func remoteBranchRevisionIn(session *GitSession, branch string) (string, error) {
 	// A missing origin is a known absence, not a failed check: a remote copy can
 	// only live in a remote, and with no remote configured there is none to find.
 	if !session.hasOriginRemote() {
@@ -441,7 +452,7 @@ func remoteBranchRevisionIn(session *gitSession, branch string) (string, error) 
 // answers whether that could be determined, keeping the same two states apart as
 // remoteBranchRevision does (a missing `origin` is a known absence, and a
 // configured but unreachable `origin` is an error carrying git's diagnostics).
-func remoteBranchExists(session *gitSession, branch string) (bool, error) {
+func remoteBranchExists(session *GitSession, branch string) (bool, error) {
 	revision, err := remoteBranchRevisionIn(session, branch)
 	if err != nil {
 		return false, err

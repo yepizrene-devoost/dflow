@@ -30,11 +30,14 @@ Repository instructions for coding agents working in this project.
 ## Branch Workflow
 
 - Use `dflow` to manage branches, following `.dflow.yaml` and `.agents/workflows/dflow-workflow.md`.
+- Before creating or modifying any repository file, switch to the agent's own dflow work branch. This includes instruction, planning, and tracking files.
+- Treat base branches as integration targets, not authoring branches: do not create direct authoring commits on `develop`, `uat`, or `main`.
 - For `feat` branches, use `develop` as the base branch.
 - For `release` branches, use `develop` as the base branch.
 - For `bugfix` branches, use `uat` as the base branch.
 - For `hotfix` branches, use `main` as the base branch.
 - `develop` merges directly (`auto`); `main` requires a PR (`manual`). Never suggest a PR toward an `auto` target.
+- A separately authorized `dflow finish` may merge a completed work branch into configured `auto` targets; that integration merge is not direct authoring on a base branch.
 
 ## Relevant Skills
 

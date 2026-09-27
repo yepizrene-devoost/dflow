@@ -97,11 +97,15 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 		}
 
 		publishWorkBranch := !noPush
-		if err := gitutils.EnsureWorkingTreeClean(); err != nil {
+		gitSession, err := gitutils.NewGitSession()
+		if err != nil {
+			return err
+		}
+		if err := gitSession.EnsureWorkingTreeClean(); err != nil {
 			return err
 		}
 
-		if gitutils.MergeInProgress() {
+		if gitSession.MergeInProgress() {
 			return fmt.Errorf("A merge is already in progress. Resolve or abort it before running `dflow finish`.")
 		}
 
@@ -110,7 +114,7 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 			return err
 		}
 
-		currentBranch, err := gitutils.CurrentBranch()
+		currentBranch, err := gitSession.CurrentBranch()
 		if err != nil {
 			return err
 		}
@@ -174,7 +178,7 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 				return nil
 			}
 
-			return gitutils.PushWorkBranch(plan.CurrentBranch)
+			return gitSession.PushWorkBranch(plan.CurrentBranch)
 		}
 
 		if dryRun {
@@ -201,14 +205,14 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 			return nil
 		}
 
-		if err := gitutils.FetchOrigin(); err != nil {
+		if err := gitSession.FetchOrigin(); err != nil {
 			return err
 		}
 
 		// The publish comes before the first merge so a merge that fails still
 		// leaves the candidate on origin.
 		if publishWorkBranch {
-			if err := gitutils.PushWorkBranch(plan.CurrentBranch); err != nil {
+			if err := gitSession.PushWorkBranch(plan.CurrentBranch); err != nil {
 				return err
 			}
 		}
@@ -217,7 +221,7 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 		allSucceeded := false
 		defer func() {
 			if allSucceeded {
-				if err := gitutils.CheckoutExistingBranch(returnBranch); err != nil {
+				if err := gitSession.CheckoutExistingBranch(returnBranch); err != nil {
 					utils.Warn("Finished all auto merges, but could not switch to '%s': %v", returnBranch, err)
 				}
 			}
@@ -226,24 +230,24 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 		for _, target := range autoTargets {
 			utils.Info("Processing auto target '%s'...", target)
 
-			if err := gitutils.PullBranch(target); err != nil {
-				return finishTargetFailure(plan.CurrentBranch, target, "pull/sync", mergedTargets, false, err)
+			if err := gitSession.PullBranch(target); err != nil {
+				return finishTargetFailure(gitSession, plan.CurrentBranch, target, "pull/sync", mergedTargets, false, err)
 			}
 
-			if err := gitutils.MergeBranchIntoCurrent(plan.CurrentBranch); err != nil {
-				conflict := gitutils.MergeInProgress()
+			if err := gitSession.MergeBranchIntoCurrent(plan.CurrentBranch); err != nil {
+				conflict := gitSession.MergeInProgress()
 				if conflict {
 					// A failed merge owns the index and working tree. Clean it up before
 					// attempting restoration so the caller is not stranded on a target.
-					if abortErr := gitutils.AbortMerge(); abortErr != nil {
-						return finishTargetFailure(plan.CurrentBranch, target, "merge conflict (abort)", mergedTargets, true, fmt.Errorf("%v; merge-abort cleanup failed: %w", err, abortErr))
+					if abortErr := gitSession.AbortMerge(); abortErr != nil {
+						return finishTargetFailure(gitSession, plan.CurrentBranch, target, "merge conflict (abort)", mergedTargets, true, fmt.Errorf("%v; merge-abort cleanup failed: %w", err, abortErr))
 					}
 				}
-				return finishTargetFailure(plan.CurrentBranch, target, "merge", mergedTargets, conflict, err)
+				return finishTargetFailure(gitSession, plan.CurrentBranch, target, "merge", mergedTargets, conflict, err)
 			}
 
-			if err := gitutils.PushBranchUpdate(target); err != nil {
-				return finishTargetFailure(plan.CurrentBranch, target, "push", mergedTargets, false, err)
+			if err := gitSession.PushBranchUpdate(target); err != nil {
+				return finishTargetFailure(gitSession, plan.CurrentBranch, target, "push", mergedTargets, false, err)
 			}
 
 			mergedTargets = append(mergedTargets, target)
@@ -265,7 +269,7 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 				return nil
 			}
 
-			if err := gitutils.Delete(plan.CurrentBranch); err != nil {
+			if err := gitSession.Delete(plan.CurrentBranch); err != nil {
 				return err
 			}
 			utils.Success("Deleted finished branch '%s'", plan.CurrentBranch)
@@ -278,9 +282,9 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 // finishTargetFailure makes target-side failures actionable without hiding the
 // original command error. Restoration is best effort, but its failure is called
 // out as a separate state because the operator may still be on the target.
-func finishTargetFailure(workBranch, target, phase string, completed []string, conflict bool, cause error) error {
+func finishTargetFailure(gitSession *gitutils.GitSession, workBranch, target, phase string, completed []string, conflict bool, cause error) error {
 	completedText := formatBranchList(completed)
-	restoreErr := gitutils.CheckoutExistingBranch(workBranch)
+	restoreErr := gitSession.CheckoutExistingBranch(workBranch)
 
 	state := "target-side command failure"
 	if conflict {
