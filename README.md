@@ -16,9 +16,6 @@
   <a href="https://opensource.org/licenses/MIT">
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT">
   </a>
-  <a href="https://goreportcard.com/report/github.com/yepizrene-devoost/dflow">
-    <img src="https://goreportcard.com/badge/github.com/yepizrene-devoost/dflow" alt="Go Report Card">
-  </a>
   <a href="https://pkg.go.dev/github.com/yepizrene-devoost/dflow">
     <img src="https://pkg.go.dev/badge/github.com/yepizrene-devoost/dflow.svg" alt="Go Reference">
   </a>
