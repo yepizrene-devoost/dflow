@@ -107,15 +107,6 @@ func PushBranch(branch string) error {
 	return nil
 }
 
-// runCapturingGit runs cmd with both streams captured, so Git's own text never
-// reaches the caller's stdout directly.
-//
-// On failure the captured diagnostics are attached to the returned error, because
-// the reason a Git command failed is exactly what the caller needs and the exit
-// status alone never carries it. On success the captured stderr is discarded as
-// progress and advice noise, and any captured stdout is reported through the shared
-// CLI output helper, so it stays inside the single output choke point and a
-// machine-readable mode can silence it.
 type gitResult struct {
 	stdout string
 	stderr string
@@ -155,6 +146,15 @@ func runGit(cmd *exec.Cmd, publishOutput bool) (gitResult, error) {
 	return result, nil
 }
 
+// runCapturingGit runs cmd with both streams captured, so Git's own text never
+// reaches the caller's stdout directly.
+//
+// On failure the captured diagnostics are attached to the returned error, because
+// the reason a Git command failed is exactly what the caller needs and the exit
+// status alone never carries it. On success the captured stderr is discarded as
+// progress and advice noise, and any captured stdout is reported through the shared
+// CLI output helper, so it stays inside the single output choke point and a
+// machine-readable mode can silence it.
 func runCapturingGit(cmd *exec.Cmd) error {
 	_, err := runGit(cmd, true)
 	return err
