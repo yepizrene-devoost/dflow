@@ -445,13 +445,6 @@ func remoteBranchRevisionIn(session *GitSession, branch string) (string, error) 
 	return fields[0], nil
 }
 
-// RemoteBranchExists reports whether a branch exists on the remote `origin`.
-//
-// Existence is the remote revision being present, so this asks the one lookup
-// that the publish check also uses: the bool answers existence and the error
-// answers whether that could be determined, keeping the same two states apart as
-// remoteBranchRevision does (a missing `origin` is a known absence, and a
-// configured but unreachable `origin` is an error carrying git's diagnostics).
 func remoteBranchExists(session *GitSession, branch string) (bool, error) {
 	revision, err := remoteBranchRevisionIn(session, branch)
 	if err != nil {
@@ -460,6 +453,13 @@ func remoteBranchExists(session *GitSession, branch string) (bool, error) {
 	return revision != "", nil
 }
 
+// RemoteBranchExists reports whether a branch exists on the remote `origin`.
+//
+// Existence is the remote revision being present, so this asks the one lookup
+// that the publish check also uses: the bool answers existence and the error
+// answers whether that could be determined, keeping the same two states apart as
+// remoteBranchRevision does (a missing `origin` is a known absence, and a
+// configured but unreachable `origin` is an error carrying git's diagnostics).
 func RemoteBranchExists(branch string) (bool, error) {
 	revision, err := remoteBranchRevision(branch)
 	if err != nil {

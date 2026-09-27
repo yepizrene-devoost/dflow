@@ -17,7 +17,7 @@ Forecast: #50 and #51 <20 authored lines each; #48 likely >400 total, so deliver
 ## Tasks
 
 - [x] C50 — Relocate `runCapturingGit` comment from `gitResult` to its function; verify attachment and package checks. Work unit: docs(gitutils), issue #50.
-- [ ] C51 — Relocate `RemoteBranchExists` comment from private helper to exported function; verify attachment and package checks. Work unit: docs(gitutils), issue #51.
+- [x] C51 — Relocate `RemoteBranchExists` comment from private helper to exported function; verify attachment and package checks. Work unit: docs(gitutils), issue #51.
 - [ ] T48a — Establish isolated CLI test state boundaries with flag/output-format leak guards, choosing the smallest safe reset design; retain existing test behavior. Work unit: test(cli), issue #48.
 - [ ] T48b — Move pure planning/validation/error-format contracts into targeted unit tests; retain representative real-Git integration coverage. Work unit: test(cli), issue #48.
 - [ ] T48c — Add explicit stderr/failure/platform-capability and remote-heavy command-count regression assertions; streamline redundant integration cases only when equivalent coverage remains. Work unit: test(cli), issue #48.
@@ -25,4 +25,6 @@ Forecast: #50 and #51 <20 authored lines each; #48 likely >400 total, so deliver
 
 ## Evidence and next step
 
-Branch created clean from develop. C50: comment now immediately precedes `runCapturingGit`; only comments moved. Independent verifier observed `go test -count=1 ./...`, `go vet ./...`, `go build ./...`, `git diff --check` pass. Freeze declaration: assess this work-unit commit from the branch base; request native review if offered, with no approval presumed. Next: commit C50, assess/review its candidate, then C51. Commit identity and review outcome pending.
+C50: `36c51a871dbfd3b615a5a6346730d3f90b19104c`, comment relocation only; independent verifier observed `go test -count=1 ./...`, `go vet ./...`, `go build ./...`, `git diff --check` pass. Native review `review-3641ce1111dbe24c` approved and acknowledged; authority burned, not delivery permission.
+
+C51: comment now immediately precedes exported `RemoteBranchExists`; executable code unchanged. Independent verifier observed the same four checks pass. Freeze declaration: assess C51's own commit from C50's boundary and request native review if offered, without presuming approval. Next: commit/review C51, then T48a. C51 identity and review outcome pending.
