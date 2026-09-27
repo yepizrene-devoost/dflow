@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -289,6 +290,8 @@ func TestStartCLI(t *testing.T) {
 	})
 
 	t.Run("restoration failure reports the current branch", func(t *testing.T) {
+		probeExecutablePostCheckoutHook(t)
+
 		repo := setupStartRepo(t)
 		saveStartCLIConfig(t, repo)
 		runGit(t, repo, "branch", "feature/existing", "develop")
@@ -387,6 +390,123 @@ func TestStartCLI(t *testing.T) {
 			t.Fatalf("init failure message must say it needs a terminal:\n%s", output)
 		}
 	})
+}
+
+type executableHookProbeResult int
+
+const (
+	executableHookSupported executableHookProbeResult = iota
+	executableHookUnsupported
+	executableHookBroken
+)
+
+func classifyExecutableHookProbe(hookErr, controlErr error, markerPresent bool, hookOutput string) executableHookProbeResult {
+	if hookErr == nil {
+		if markerPresent {
+			return executableHookSupported
+		}
+		return executableHookUnsupported
+	}
+	if controlErr == nil && isUnavailablePostCheckoutHookDiagnostic(hookOutput) {
+		return executableHookUnsupported
+	}
+	return executableHookBroken
+}
+
+func isUnavailablePostCheckoutHookDiagnostic(output string) bool {
+	diagnostic := strings.ToLower(output)
+	if !strings.Contains(diagnostic, "post-checkout") {
+		return false
+	}
+	return strings.Contains(diagnostic, "cannot run") ||
+		strings.Contains(diagnostic, "cannot spawn") ||
+		strings.Contains(diagnostic, "no such file or directory") ||
+		strings.Contains(diagnostic, "not found")
+}
+
+func TestClassifyExecutableHookProbe(t *testing.T) {
+	hookErr := errors.New("checkout with hook failed")
+	controlErr := errors.New("checkout without hook failed")
+
+	tests := []struct {
+		name          string
+		hookErr       error
+		controlErr    error
+		markerPresent bool
+		diagnostic    string
+		want          executableHookProbeResult
+	}{
+		{name: "supported", markerPresent: true, want: executableHookSupported},
+		{name: "hook ignored", want: executableHookUnsupported},
+		{name: "hook execution unavailable", hookErr: hookErr, diagnostic: "fatal: cannot run .git/hooks/post-checkout: No such file or directory", want: executableHookUnsupported},
+		{name: "unrelated failure despite successful control", hookErr: hookErr, diagnostic: "fatal: cannot lock ref", want: executableHookBroken},
+		{name: "unrelated checkout failure", hookErr: hookErr, controlErr: controlErr, diagnostic: "fatal: cannot run .git/hooks/post-checkout: No such file or directory", want: executableHookBroken},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := classifyExecutableHookProbe(tt.hookErr, tt.controlErr, tt.markerPresent, tt.diagnostic)
+			if got != tt.want {
+				t.Fatalf("classifyExecutableHookProbe() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func probeExecutablePostCheckoutHook(t *testing.T) {
+	t.Helper()
+
+	repo := initTempGitRepo(t)
+	runGit(t, repo, "branch", "hook-probe")
+
+	marker := filepath.Join(t.TempDir(), "post-checkout-ran")
+	hook := filepath.Join(repo, ".git", "hooks", "post-checkout")
+	hookScript := "#!/bin/sh\nprintf 'executed\\n' > \"$DFLOW_HOOK_PROBE_MARKER\"\n"
+	if err := os.WriteFile(hook, []byte(hookScript), 0755); err != nil {
+		t.Fatalf("write executable post-checkout capability probe: %v", err)
+	}
+
+	checkout := exec.Command("git", "checkout", "hook-probe")
+	checkout.Dir = repo
+	checkout.Env = append(os.Environ(), "DFLOW_HOOK_PROBE_MARKER="+marker)
+	checkoutOutput, checkoutErr := checkout.CombinedOutput()
+
+	markerPresent := false
+	if _, err := os.Stat(marker); err == nil {
+		markerPresent = true
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("inspect executable post-checkout capability marker: %v", err)
+	}
+
+	var controlErr error
+	var controlOutput []byte
+	if checkoutErr != nil {
+		resetHead := exec.Command("git", "symbolic-ref", "HEAD", "refs/heads/main")
+		resetHead.Dir = repo
+		resetOutput, resetErr := resetHead.CombinedOutput()
+		if resetErr != nil {
+			t.Fatalf("post-checkout hook probe failed and its same-branch control could not reset HEAD: %v\n%s\nprobe failure: %v\n%s", resetErr, resetOutput, checkoutErr, checkoutOutput)
+		}
+
+		emptyHooksDir := t.TempDir()
+		control := exec.Command("git", "-c", "core.hooksPath="+emptyHooksDir, "checkout", "hook-probe")
+		control.Dir = repo
+		controlOutput, controlErr = control.CombinedOutput()
+	}
+
+	switch classifyExecutableHookProbe(checkoutErr, controlErr, markerPresent, string(checkoutOutput)) {
+	case executableHookSupported:
+		return
+	case executableHookUnsupported:
+		if checkoutErr != nil {
+			t.Skipf("host cannot execute the required POSIX post-checkout hook: %v\n%s", checkoutErr, checkoutOutput)
+		}
+		t.Skip("host did not execute the required POSIX post-checkout hook")
+	case executableHookBroken:
+		t.Fatalf("post-checkout hook probe failed for an unrelated Git or host error: %v\n%s\nhook-disabled checkout also failed: %v\n%s", checkoutErr, checkoutOutput, controlErr, controlOutput)
+	default:
+		t.Fatal("executable post-checkout hook probe returned an inconsistent result")
+	}
 }
 
 func saveStartCLIConfig(t *testing.T, repo string) {
