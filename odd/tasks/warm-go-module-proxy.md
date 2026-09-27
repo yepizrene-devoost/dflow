@@ -22,7 +22,7 @@ Make each locally published release visible to the public Go module proxy and do
 - [x] W1: Inspect the publication path, resolve an independent post-release proxy warm-up design, and create the work branch. Evidence: Makefile release recipe, RELEASING.md, read-only exploration; `dflow start feat warm-go-module-proxy --no-push` completed on a clean branch.
 - [x] W2: Implement a standalone warm-up Makefile target, reuse it after successful GoReleaser publication, and document manual retry and verification. RED: `make -n warm-module-proxy VERSION=v0.4.1` failed before the target existed. GREEN: mocked curl success captured the exact `.info` URL and expected flags; mocked curl failure exited nonzero; `VERSION=dev` failed before curl. `make -n warm-module-proxy VERSION=v0.4.1`, `make -n release VERSION=v0.4.1`, `make test` and `git diff --check -- Makefile RELEASING.md` passed; no live request or release was made. Native risk assessment/review status: pending.
 - [x] W3: Read back the completed candidate and close pre-commit bookkeeping. Evidence: parent inspected the Makefile and release-guide diff; parent spot-check `make -n warm-module-proxy VERSION=v0.4.1` displayed the exact `.info` request; `git diff --check` passed. Freeze declaration: expect native review of the complete candidate (Makefile, RELEASING.md, this closed checklist); no review outcome is claimed here. Commit/staging and external delivery remain separate human decisions.
-- [ ] W4: Record work-unit commit identity in a short follow-up `docs(odd)` commit before the committed-range review. This is the sole ODD commit-identity exception; do not claim a review result in the tree.
+- [x] W4: Record work-unit commit identity in a short follow-up `docs(odd)` commit before the committed-range review. Work unit: `2ad7711f4e75b95e690117cf1472394be2f45f08` (`chore(release): warm public go module proxy after publishing`). This is the sole ODD commit-identity exception; no review result is claimed in the tree.
 
 ## Acceptance
 
@@ -33,4 +33,4 @@ Make each locally published release visible to the public Go module proxy and do
 
 ## Progress
 
-W1, W2 and W3 completed. The human authorized a work-unit commit and committed-range review. W4 stays open only for the commit-identity exception; the earlier working-tree lineage is open and not approved.
+W1–W4 completed. The complete ODD checklist and work-unit identity are recorded before the committed-range freeze; the earlier working-tree lineage remains unapproved. No review outcome or delivery is claimed.
