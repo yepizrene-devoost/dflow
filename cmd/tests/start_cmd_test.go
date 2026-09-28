@@ -47,6 +47,7 @@ func startTestConfig() *flow.Config {
 }
 
 func TestStartFromCreatesChainedBranch(t *testing.T) {
+	defer withCLIState(t)()
 	repoDir := setupStartRepo(t)
 
 	withWorkingDir(t, repoDir, func() {
@@ -60,10 +61,6 @@ func TestStartFromCreatesChainedBranch(t *testing.T) {
 		if err := commands.StartCmd.Flags().Set("no-push", "true"); err != nil {
 			t.Fatalf("failed to set --no-push: %v", err)
 		}
-		defer func() {
-			_ = commands.StartCmd.Flags().Set("from", "")
-			_ = commands.StartCmd.Flags().Set("no-push", "false")
-		}()
 
 		if err := commands.StartCmd.RunE(commands.StartCmd, []string{"feat", "child"}); err != nil {
 			t.Fatalf("StartCmd returned error: %v", err)
@@ -86,6 +83,7 @@ func TestStartFromCreatesChainedBranch(t *testing.T) {
 }
 
 func TestStartFromUnknownParentDoesNotCreateBranch(t *testing.T) {
+	defer withCLIState(t)()
 	repoDir := setupStartRepo(t)
 
 	withWorkingDir(t, repoDir, func() {
@@ -99,10 +97,6 @@ func TestStartFromUnknownParentDoesNotCreateBranch(t *testing.T) {
 		if err := commands.StartCmd.Flags().Set("no-push", "true"); err != nil {
 			t.Fatalf("failed to set --no-push: %v", err)
 		}
-		defer func() {
-			_ = commands.StartCmd.Flags().Set("from", "")
-			_ = commands.StartCmd.Flags().Set("no-push", "false")
-		}()
 
 		if err := commands.StartCmd.RunE(commands.StartCmd, []string{"feat", "child"}); err == nil {
 			t.Fatalf("expected StartCmd to return an error for an unknown parent")
@@ -115,6 +109,7 @@ func TestStartFromUnknownParentDoesNotCreateBranch(t *testing.T) {
 }
 
 func TestStartNoPushDoesNotPublishRemote(t *testing.T) {
+	defer withCLIState(t)()
 	repoDir := setupStartRepo(t)
 
 	withWorkingDir(t, repoDir, func() {
@@ -125,9 +120,6 @@ func TestStartNoPushDoesNotPublishRemote(t *testing.T) {
 		if err := commands.StartCmd.Flags().Set("no-push", "true"); err != nil {
 			t.Fatalf("failed to set --no-push: %v", err)
 		}
-		defer func() {
-			_ = commands.StartCmd.Flags().Set("no-push", "false")
-		}()
 
 		if err := commands.StartCmd.RunE(commands.StartCmd, []string{"feat", "child"}); err != nil {
 			t.Fatalf("StartCmd returned error: %v", err)
@@ -144,6 +136,7 @@ func TestStartNoPushDoesNotPublishRemote(t *testing.T) {
 }
 
 func TestStartPushPublishesRemote(t *testing.T) {
+	defer withCLIState(t)()
 	repoDir := setupStartRepo(t)
 
 	withWorkingDir(t, repoDir, func() {
@@ -154,9 +147,6 @@ func TestStartPushPublishesRemote(t *testing.T) {
 		if err := commands.StartCmd.Flags().Set("push", "true"); err != nil {
 			t.Fatalf("failed to set --push: %v", err)
 		}
-		defer func() {
-			_ = commands.StartCmd.Flags().Set("push", "false")
-		}()
 
 		if err := commands.StartCmd.RunE(commands.StartCmd, []string{"feat", "child"}); err != nil {
 			t.Fatalf("StartCmd returned error: %v", err)
@@ -173,6 +163,7 @@ func TestStartPushPublishesRemote(t *testing.T) {
 }
 
 func TestStartFromLocalParentWithUnreachableOrigin(t *testing.T) {
+	defer withCLIState(t)()
 	repoDir := initTempGitRepo(t)
 
 	runGit(t, repoDir, "checkout", "-b", "develop")
@@ -195,10 +186,6 @@ func TestStartFromLocalParentWithUnreachableOrigin(t *testing.T) {
 		if err := commands.StartCmd.Flags().Set("no-push", "true"); err != nil {
 			t.Fatalf("failed to set --no-push: %v", err)
 		}
-		defer func() {
-			_ = commands.StartCmd.Flags().Set("from", "")
-			_ = commands.StartCmd.Flags().Set("no-push", "false")
-		}()
 
 		if err := commands.StartCmd.RunE(commands.StartCmd, []string{"feat", "child"}); err != nil {
 			t.Fatalf("StartCmd returned error: %v", err)
@@ -217,6 +204,7 @@ func TestStartFromLocalParentWithUnreachableOrigin(t *testing.T) {
 }
 
 func TestStartRejectsConflictingPushFlagsBeforeMutation(t *testing.T) {
+	defer withCLIState(t)()
 	repoDir := setupStartRepo(t)
 
 	withWorkingDir(t, repoDir, func() {
@@ -233,11 +221,6 @@ func TestStartRejectsConflictingPushFlagsBeforeMutation(t *testing.T) {
 		if err := commands.StartCmd.Flags().Set("no-push", "true"); err != nil {
 			t.Fatalf("failed to set --no-push: %v", err)
 		}
-		defer func() {
-			_ = commands.StartCmd.Flags().Set("from", "")
-			_ = commands.StartCmd.Flags().Set("push", "false")
-			_ = commands.StartCmd.Flags().Set("no-push", "false")
-		}()
 
 		if err := commands.StartCmd.RunE(commands.StartCmd, []string{"feat", "child"}); err == nil {
 			t.Fatalf("expected StartCmd to return an error when --push and --no-push conflict")

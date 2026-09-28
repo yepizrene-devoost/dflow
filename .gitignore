@@ -1,8 +1,11 @@
-dist/
-.DS_Store
-.env
 # Local Pi runtime state
 .atl/
+.env
+/dflow
+/bin/
+*.exe
+/dist/
+.DS_Store
 
 # Generated changelog draft (make changelog) — curated into CHANGELOG.md, never committed
 CHANGELOG.draft.md

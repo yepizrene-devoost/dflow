@@ -450,6 +450,22 @@ func remoteRevision(t *testing.T, repoDir, branch string) string {
 	return fields[0]
 }
 
+func countGitTraceCommand(trace, command string) int {
+	const builtInPrefix = "trace: built-in: git "
+
+	count := 0
+	for _, line := range strings.Split(trace, "\n") {
+		prefixIndex := strings.Index(line, builtInPrefix)
+		if prefixIndex < 0 {
+			continue
+		}
+		if strings.TrimSpace(line[prefixIndex+len(builtInPrefix):]) == command {
+			count++
+		}
+	}
+	return count
+}
+
 func TestFinishReusesOneGitSessionAcrossTheWorkflow(t *testing.T) {
 	repoDir, _ := finishPublishRepo(t)
 
@@ -565,11 +581,29 @@ func TestFinishSkipsThePublishWhenOriginAlreadyHoldsTheCommit(t *testing.T) {
 
 		setUnreachablePushURL(t, repoDir)
 
+		tracePath := filepath.Join(t.TempDir(), "git-trace.log")
+		t.Setenv("GIT_TRACE", tracePath)
+
 		// Succeeding is the proof: with the identity check removed, PushWorkBranch
 		// would attempt the push and the unreachable push URL would reject it, so the
 		// whole finish would fail.
 		if err := commands.FinishCmd.RunE(commands.FinishCmd, []string{}); err != nil {
 			t.Fatalf("FinishCmd returned error: %v", err)
+		}
+
+		trace, err := os.ReadFile(tracePath)
+		if err != nil {
+			t.Fatalf("failed to read Git trace: %v", err)
+		}
+		traceText := string(trace)
+		if probes := countGitTraceCommand(traceText, "remote get-url origin"); probes != 1 {
+			t.Fatalf("expected one origin probe during finish, got %d\n%s", probes, traceText)
+		}
+		if comparisons := countGitTraceCommand(traceText, "ls-remote --heads origin feature/publish-me"); comparisons != 1 {
+			t.Fatalf("expected one remote branch comparison during finish, got %d\n%s", comparisons, traceText)
+		}
+		if publishes := countGitTraceCommand(traceText, "push -u origin feature/publish-me"); publishes != 0 {
+			t.Fatalf("expected no work-branch publish during finish, got %d\n%s", publishes, traceText)
 		}
 
 		if origin := remoteRevision(t, repoDir, "feature/publish-me"); origin != publishedRevision {

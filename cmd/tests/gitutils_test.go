@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -289,16 +290,105 @@ func TestPullBranchSurfacesARemoteLookupFailure(t *testing.T) {
 	})
 }
 
+type gitInitBranchProbeResult int
+
+const (
+	gitInitBranchSupported gitInitBranchProbeResult = iota
+	gitInitBranchUnsupported
+	gitInitBranchBroken
+)
+
+func classifyGitInitBranchProbe(probeErr, controlErr error, helpSupportsInitialBranch bool, probeOutput string) gitInitBranchProbeResult {
+	if probeErr == nil {
+		return gitInitBranchSupported
+	}
+	if controlErr == nil && !helpSupportsInitialBranch && isUnsupportedInitBranchDiagnostic(probeOutput) {
+		return gitInitBranchUnsupported
+	}
+	return gitInitBranchBroken
+}
+
+func isUnsupportedInitBranchDiagnostic(output string) bool {
+	diagnostic := strings.ToLower(output)
+	return strings.Contains(diagnostic, "unknown option") || strings.Contains(diagnostic, "unknown switch")
+}
+
+func TestClassifyGitInitBranchProbe(t *testing.T) {
+	probeErr := errors.New("git init -b failed")
+	controlErr := errors.New("plain git init failed")
+
+	tests := []struct {
+		name         string
+		probe        error
+		control      error
+		helpSupports bool
+		diagnostic   string
+		want         gitInitBranchProbeResult
+	}{
+		{name: "supported", want: gitInitBranchSupported},
+		{name: "unsupported option", probe: probeErr, diagnostic: "error: unknown switch 'b'", want: gitInitBranchUnsupported},
+		{name: "advertised option failure", probe: probeErr, helpSupports: true, diagnostic: "error: unknown switch 'b'", want: gitInitBranchBroken},
+		{name: "unrelated failure despite successful control", probe: probeErr, diagnostic: "fatal: transient repository failure", want: gitInitBranchBroken},
+		{name: "unrelated Git failure", probe: probeErr, control: controlErr, diagnostic: "error: unknown switch 'b'", want: gitInitBranchBroken},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := classifyGitInitBranchProbe(tt.probe, tt.control, tt.helpSupports, tt.diagnostic); got != tt.want {
+				t.Fatalf("classifyGitInitBranchProbe() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func initTempGitRepo(t *testing.T) string {
 	t.Helper()
 
 	repoDir := t.TempDir()
-	runGit(t, repoDir, "init", "-b", "main")
+	initGitRepoWithMainBranchOrSkipUnsupported(t, repoDir)
 	runGit(t, repoDir, "config", "user.name", "Dflow Test")
 	runGit(t, repoDir, "config", "user.email", "test@example.com")
 	runGit(t, repoDir, "config", "commit.gpgsign", "false")
 	writeFileAndCommit(t, repoDir, ".gitkeep", "seed\n", "seed repository")
 	return repoDir
+}
+
+func initGitRepoWithMainBranchOrSkipUnsupported(t *testing.T, repoDir string) {
+	t.Helper()
+
+	probe := exec.Command("git", "init", "-b", "main")
+	probe.Dir = repoDir
+	probeOutput, probeErr := probe.CombinedOutput()
+	if probeErr == nil {
+		return
+	}
+
+	help := exec.Command("git", "init", "-h")
+	help.Dir = repoDir
+	helpOutput, helpErr := help.CombinedOutput()
+	if helpErr != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(helpErr, &exitErr) {
+			t.Fatalf("could not inspect git init capabilities: %v\n%s", helpErr, helpOutput)
+		}
+	}
+	if len(helpOutput) == 0 {
+		t.Fatalf("git init -h returned no capability evidence after git init -b main failed: %v\n%s", probeErr, probeOutput)
+	}
+	helpSupportsInitialBranch := strings.Contains(string(helpOutput), "--initial-branch")
+
+	control := exec.Command("git", "init")
+	control.Dir = repoDir
+	controlOutput, controlErr := control.CombinedOutput()
+
+	switch classifyGitInitBranchProbe(probeErr, controlErr, helpSupportsInitialBranch, string(probeOutput)) {
+	case gitInitBranchUnsupported:
+		t.Skipf("Git does not support the required `git init -b main` capability: %v\n%s", probeErr, probeOutput)
+	case gitInitBranchBroken:
+		t.Fatalf("git init -b main failed without option-specific unsupported evidence: %v\n%s\ngit init -h advertised --initial-branch: %t\n%s\nplain git init in the same directory returned: %v\n%s", probeErr, probeOutput, helpSupportsInitialBranch, helpOutput, controlErr, controlOutput)
+	default:
+		t.Fatal("git init -b main probe returned an inconsistent result")
+	}
 }
 
 func initBareGitRepo(t *testing.T) string {

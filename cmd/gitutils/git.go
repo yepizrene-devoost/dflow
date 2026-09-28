@@ -107,15 +107,6 @@ func PushBranch(branch string) error {
 	return nil
 }
 
-// runCapturingGit runs cmd with both streams captured, so Git's own text never
-// reaches the caller's stdout directly.
-//
-// On failure the captured diagnostics are attached to the returned error, because
-// the reason a Git command failed is exactly what the caller needs and the exit
-// status alone never carries it. On success the captured stderr is discarded as
-// progress and advice noise, and any captured stdout is reported through the shared
-// CLI output helper, so it stays inside the single output choke point and a
-// machine-readable mode can silence it.
 type gitResult struct {
 	stdout string
 	stderr string
@@ -155,6 +146,15 @@ func runGit(cmd *exec.Cmd, publishOutput bool) (gitResult, error) {
 	return result, nil
 }
 
+// runCapturingGit runs cmd with both streams captured, so Git's own text never
+// reaches the caller's stdout directly.
+//
+// On failure the captured diagnostics are attached to the returned error, because
+// the reason a Git command failed is exactly what the caller needs and the exit
+// status alone never carries it. On success the captured stderr is discarded as
+// progress and advice noise, and any captured stdout is reported through the shared
+// CLI output helper, so it stays inside the single output choke point and a
+// machine-readable mode can silence it.
 func runCapturingGit(cmd *exec.Cmd) error {
 	_, err := runGit(cmd, true)
 	return err
@@ -445,13 +445,6 @@ func remoteBranchRevisionIn(session *GitSession, branch string) (string, error) 
 	return fields[0], nil
 }
 
-// RemoteBranchExists reports whether a branch exists on the remote `origin`.
-//
-// Existence is the remote revision being present, so this asks the one lookup
-// that the publish check also uses: the bool answers existence and the error
-// answers whether that could be determined, keeping the same two states apart as
-// remoteBranchRevision does (a missing `origin` is a known absence, and a
-// configured but unreachable `origin` is an error carrying git's diagnostics).
 func remoteBranchExists(session *GitSession, branch string) (bool, error) {
 	revision, err := remoteBranchRevisionIn(session, branch)
 	if err != nil {
@@ -460,6 +453,13 @@ func remoteBranchExists(session *GitSession, branch string) (bool, error) {
 	return revision != "", nil
 }
 
+// RemoteBranchExists reports whether a branch exists on the remote `origin`.
+//
+// Existence is the remote revision being present, so this asks the one lookup
+// that the publish check also uses: the bool answers existence and the error
+// answers whether that could be determined, keeping the same two states apart as
+// remoteBranchRevision does (a missing `origin` is a known absence, and a
+// configured but unreachable `origin` is an error carrying git's diagnostics).
 func RemoteBranchExists(branch string) (bool, error) {
 	revision, err := remoteBranchRevision(branch)
 	if err != nil {
