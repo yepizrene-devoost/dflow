@@ -24,8 +24,8 @@ branch types, bases, finish targets, and merge modes.
 
 ## Branch and merge model
 
-- `develop` is the integration branch (`auto` — direct merges, no PR).
-- `main` is the release branch (`manual` — PR only).
+- `develop` is the configured integration branch (`auto` — direct merges, no PR).
+- `main` is the release branch (`manual` — PR only) and GitHub's actual default branch; `.dflow.yaml` does not declare the forge default.
 - `uat` is an alias of `develop` in `.dflow.yaml`, so targets deduplicate.
 - Conventional Commits, English; rules in `.agents/workflows/commit-rules.md`.
 
@@ -41,8 +41,10 @@ branch types, bases, finish targets, and merge modes.
   timeline; this file = current state.
 - Closure confirmations are deterministic and standalone: closing an issue,
   merging, pushing or publishing always gets its own explicit yes — never
-  inferred from tentative phrasing or bundled into another approval. See the
-  "Closure and External-Action Confirmations" section in `AGENTS.md`.
+  inferred from tentative phrasing or bundled into another approval. A release
+  PR uses `References #N` while its issue still tracks tagging or publication;
+  close the issue only after that scope is complete. See the "Closure and
+  External-Action Confirmations" section in `AGENTS.md`.
 - Session-start backlog presentation: show the previous-session status, then an
   open-issues table with number, title, optional `priority:*` label, and useful
   description; leave priority blank if absent. Issue numbers alone are

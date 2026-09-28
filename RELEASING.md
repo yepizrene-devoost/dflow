@@ -82,10 +82,17 @@ but you still need a PR from `release/*` into `main`.
 
 ### 5. Merge to main
 
+- Confirm the release issue is approved and retains its required `type:` label
 - Open a PR from the release branch to `main`
-- Merge it
+- If the issue still tracks tagging or publication, reference it with
+  `References #N`; do not use `Closes`, `Fixes`, or `Resolves`
+- Merge the PR
 - Check out `main`
 - Pull the merged changes
+
+GitHub's default branch is `main`, while `develop` is dflow's configured `auto`
+integration target. A closing keyword in the `main` PR can therefore close an
+incomplete release issue. Keep that issue open through tagging and publication.
 
 At this point, `main` should contain the exact state you want to publish.
 
@@ -156,6 +163,10 @@ The release target:
 - after GoReleaser succeeds, requests the tagged module's `.info` endpoint from
   `proxy.golang.org`; if this post-publish step fails, the release may already
   exist and the command prints the standalone retry command
+
+After all tracked release work is complete, ask separately for explicit approval
+to close the release issue. The merge, tag, or publication does not grant that
+approval.
 
 ### Retry and verify Go module discovery
 
