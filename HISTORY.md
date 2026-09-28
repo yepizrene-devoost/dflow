@@ -2,15 +2,16 @@
 
 > 🔄 Reverse chronological order — newest first.
 
-This document is a timeline of **tagged releases**. For the detailed list of
-changes in each release, see [`CHANGELOG.md`](./CHANGELOG.md).
+This document is a timeline of **release versions**, including candidates
+prepared before tagging. A candidate's tag link becomes available after
+publication. For the detailed changes, see [`CHANGELOG.md`](./CHANGELOG.md).
 
 ---
 
 ## 📦 v0.5.0 – Repository Context & Safer Recovery
 
-**Status:** Planned release<br>
-**Date:** Pending publication
+**Tag:** [`v0.5.0`](https://github.com/yepizrene-devoost/dflow/releases/tag/v0.5.0)<br>
+**Date:** 2026-09-27
 
 **Highlights:**
 
