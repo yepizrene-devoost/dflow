@@ -95,7 +95,7 @@ var StartCmd = &cobra.Command{
 
 		branchType, err := flow.ParseBranchType(args[0])
 		if err != nil {
-			return fmt.Errorf("Unknown type. Use: feat, release, hotfix, bugfix")
+			return fmt.Errorf("unknown type. Use: feat, release, hotfix, bugfix")
 		}
 
 		//normalize name of branch, change "word with word" or multiple void spaaces to "word-with-word"
@@ -137,7 +137,7 @@ var StartCmd = &cobra.Command{
 		fullName := fmt.Sprintf("%s%s", prefix, branchName)
 
 		if valid, reason := validators.IsValidGitBranchName(fullName); !valid {
-			return fmt.Errorf("Invalid branch name '%s': %s", fullName, reason)
+			return fmt.Errorf("invalid branch name '%s': %s", fullName, reason)
 		}
 
 		// Capture the caller's branch before any checkout, so a failure that has
@@ -172,18 +172,18 @@ var StartCmd = &cobra.Command{
 			}
 		} else {
 			if err := gitutils.Checkout(base); err != nil {
-				return restoreOriginalBranch(fmt.Errorf("Could not checkout base branch '%s'", base))
+				return restoreOriginalBranch(fmt.Errorf("could not checkout base branch '%s': %w", base, err))
 			}
 
 			if err := gitutils.Pull(); err != nil {
-				return restoreOriginalBranch(fmt.Errorf("Failed to pull latest changes from '%s'", base))
+				return restoreOriginalBranch(fmt.Errorf("failed to pull latest changes from '%s': %w", base, err))
 			}
 		}
 
 		if err := gitutils.CheckoutNew(fullName); err != nil {
 			// The new branch was not created, so the repository can still be left
 			// exactly as the caller found it.
-			return restoreOriginalBranch(fmt.Errorf("Failed to create branch '%s'", fullName))
+			return restoreOriginalBranch(fmt.Errorf("failed to create branch '%s': %w", fullName, err))
 		}
 
 		utils.Success("Created and switched to branch '%s' from '%s'", fullName, base)
@@ -209,7 +209,7 @@ var StartCmd = &cobra.Command{
 				// that sees a non-zero exit does not blindly retry into an
 				// "already exists" failure. PushBranch already names the branch and
 				// the operation, so only the consequence is added here.
-				return fmt.Errorf("%v; the branch '%s' was created and remains", err, fullName)
+				return fmt.Errorf("%w; the branch '%s' was created and remains; after fixing origin, publish it with: git push -u origin %s", err, fullName, fullName)
 			}
 		}
 

@@ -9,10 +9,13 @@ Repository instructions for coding agents working in this project.
   1. Read the recent memory context (`mem_context`, project `dflow`) and the
      latest session summary — that is where the previous session recorded
      decisions, discoveries and pending steps.
-  2. List the open backlog: `gh issue list --state open`.
-- Open the conversation with one line on where the last session left off and
-  the current backlog, then ask what to pick up. Do not start work without
-  that anchor.
+  2. List the open backlog and its labels: `gh issue list --state open --json number,title,body,labels`.
+- Open the conversation with one line on where the last session left off, then show
+  the current open backlog in a table with issue number, title, priority, and a useful
+  description. Show the value of a `priority:*` label when present; otherwise leave
+  the priority cell empty. Do not infer priority from the issue text or ordering.
+  Ask what to pick up. A list of numbers alone is not sufficient. Do not start work
+  without that anchor.
 
 ## Commit Messages
 
@@ -29,11 +32,14 @@ Repository instructions for coding agents working in this project.
 ## Branch Workflow
 
 - Use `dflow` to manage branches, following `.dflow.yaml` and `.agents/workflows/dflow-workflow.md`.
+- Before creating or modifying any repository file, switch to the agent's own dflow work branch. This includes instruction, planning, and tracking files.
+- Treat base branches as integration targets, not authoring branches: do not create direct authoring commits on `develop`, `uat`, or `main`.
 - For `feat` branches, use `develop` as the base branch.
 - For `release` branches, use `develop` as the base branch.
 - For `bugfix` branches, use `uat` as the base branch.
 - For `hotfix` branches, use `main` as the base branch.
 - `develop` merges directly (`auto`); `main` requires a PR (`manual`). Never suggest a PR toward an `auto` target.
+- A separately authorized `dflow finish` may merge a completed work branch into configured `auto` targets; that integration merge is not direct authoring on a base branch.
 
 ## Relevant Skills
 

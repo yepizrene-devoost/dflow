@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -175,9 +176,72 @@ func TestStartCLI(t *testing.T) {
 		}
 	})
 
+	t.Run("invalid normalized names do not mutate repository state", func(t *testing.T) {
+		tests := []struct {
+			name       string
+			branchName string
+			fullName   string
+		}{
+			{name: "empty after whitespace normalization", branchName: "   ", fullName: "feature/"},
+			{name: "double dot", branchName: "bad..name", fullName: "feature/bad..name"},
+			{name: "lock suffix", branchName: "topic.lock", fullName: "feature/topic.lock"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				repo := setupStartRepo(t)
+				saveStartCLIConfig(t, repo)
+				before := startCLICommand(t, 10*time.Second, repo, "git", "rev-parse", "HEAD")
+
+				output, exitCode := startCLIRawOutput(t, 15*time.Second, repo, binary, "start", "feat", tt.branchName, "--no-push")
+				if exitCode == 0 {
+					t.Fatalf("start with invalid normalized name exited 0, want non-zero\n%s", output)
+				}
+				if !strings.Contains(output, "invalid branch name") {
+					t.Fatalf("invalid-name failure missing validation reason:\n%s", output)
+				}
+				if branchExists(t, repo, tt.fullName) {
+					t.Fatalf("invalid normalized name created %q", tt.fullName)
+				}
+				if got := startCLICommand(t, 10*time.Second, repo, "git", "branch", "--show-current"); got != "feature/parent" {
+					t.Fatalf("current branch = %q, want untouched feature/parent", got)
+				}
+				if got := startCLICommand(t, 10*time.Second, repo, "git", "rev-parse", "HEAD"); got != before {
+					t.Fatalf("HEAD = %s, want untouched %s", got, before)
+				}
+			})
+		}
+	})
+
 	// A non-zero exit either leaves the repository as it was, or states
 	// explicitly what it created. The base checkout and the pull happen before
 	// the new branch exists, so a failure there must restore the caller's branch.
+	t.Run("base checkout failure preserves diagnostics and state", func(t *testing.T) {
+		repo := setupStartRepo(t)
+		saveStartCLIConfig(t, repo)
+		before := startCLICommand(t, 10*time.Second, repo, "git", "rev-parse", "HEAD")
+		if err := os.WriteFile(filepath.Join(repo, "app.txt"), []byte("dirty local work\n"), 0644); err != nil {
+			t.Fatalf("dirty checkout fixture: %v", err)
+		}
+
+		output, exitCode := startCLIRawOutput(t, 15*time.Second, repo, binary, "start", "feat", "checkout-failure", "--no-push")
+		if exitCode == 0 {
+			t.Fatalf("start with a blocked base checkout exited 0, want non-zero\n%s", output)
+		}
+		if !strings.Contains(output, "would be overwritten by checkout") {
+			t.Fatalf("checkout failure lost Git's diagnostic:\n%s", output)
+		}
+		if got := startCLICommand(t, 10*time.Second, repo, "git", "branch", "--show-current"); got != "feature/parent" {
+			t.Fatalf("current branch = %q, want original feature/parent", got)
+		}
+		if branchExists(t, repo, "feature/checkout-failure") {
+			t.Fatal("blocked base checkout created the requested branch")
+		}
+		if got := startCLICommand(t, 10*time.Second, repo, "git", "rev-parse", "HEAD"); got != before {
+			t.Fatalf("HEAD = %s, want original %s", got, before)
+		}
+	})
+
 	t.Run("pull failure restores the original branch", func(t *testing.T) {
 		repo := setupStartRepoLocalDevelop(t)
 		saveStartCLIConfig(t, repo)
@@ -187,8 +251,11 @@ func TestStartCLI(t *testing.T) {
 		if exitCode == 0 {
 			t.Fatalf("start with a failing pull exited 0, want non-zero\n%s", output)
 		}
-		if !strings.Contains(output, "Failed to pull latest changes from 'develop'") {
+		if !strings.Contains(output, "failed to pull latest changes from 'develop'") {
 			t.Fatalf("failure message must keep the base-pull wording:\n%s", output)
+		}
+		if !strings.Contains(output, "no tracking information") {
+			t.Fatalf("pull failure lost Git's diagnostic:\n%s", output)
 		}
 		if got := startCLICommand(t, 10*time.Second, repo, "git", "branch", "--show-current"); got != "feature/parent" {
 			t.Fatalf("current branch = %q, want the original 'feature/parent'", got)
@@ -198,6 +265,56 @@ func TestStartCLI(t *testing.T) {
 		}
 		if got := startCLICommand(t, 10*time.Second, repo, "git", "rev-parse", "HEAD"); got != before {
 			t.Fatalf("HEAD = %s, want the untouched %s", got, before)
+		}
+	})
+
+	t.Run("branch creation failure restores the original branch", func(t *testing.T) {
+		repo := setupStartRepo(t)
+		saveStartCLIConfig(t, repo)
+		runGit(t, repo, "branch", "feature/existing", "develop")
+		before := startCLICommand(t, 10*time.Second, repo, "git", "rev-parse", "HEAD")
+
+		output, exitCode := startCLIRawOutput(t, 15*time.Second, repo, binary, "start", "feat", "existing", "--no-push")
+		if exitCode == 0 {
+			t.Fatalf("start with an existing target exited 0, want non-zero\n%s", output)
+		}
+		if !strings.Contains(output, "already exists") {
+			t.Fatalf("branch creation failure lost Git's diagnostic:\n%s", output)
+		}
+		if got := startCLICommand(t, 10*time.Second, repo, "git", "branch", "--show-current"); got != "feature/parent" {
+			t.Fatalf("current branch = %q, want restored feature/parent", got)
+		}
+		if got := startCLICommand(t, 10*time.Second, repo, "git", "rev-parse", "HEAD"); got != before {
+			t.Fatalf("HEAD = %s, want restored %s", got, before)
+		}
+	})
+
+	t.Run("restoration failure reports the current branch", func(t *testing.T) {
+		probeExecutablePostCheckoutHook(t)
+
+		repo := setupStartRepo(t)
+		saveStartCLIConfig(t, repo)
+		runGit(t, repo, "branch", "feature/existing", "develop")
+
+		hook := filepath.Join(repo, ".git", "hooks", "post-checkout")
+		hookScript := "#!/bin/sh\nif [ \"$(git branch --show-current)\" = develop ]; then\n  printf 'dirty after checkout\\n' > app.txt\nfi\n"
+		if err := os.WriteFile(hook, []byte(hookScript), 0755); err != nil {
+			t.Fatalf("write post-checkout hook: %v", err)
+		}
+
+		output, exitCode := startCLIRawOutput(t, 15*time.Second, repo, binary, "start", "feat", "existing", "--no-push")
+		if exitCode == 0 {
+			t.Fatalf("start with failed creation and restoration exited 0, want non-zero\n%s", output)
+		}
+		if !strings.Contains(output, "already exists") {
+			t.Fatalf("failure lost the original branch-creation diagnostic:\n%s", output)
+		}
+		if !strings.Contains(output, "Could not restore the original branch 'feature/parent'") ||
+			!strings.Contains(output, "caller is now on 'develop'") {
+			t.Fatalf("restoration failure did not identify the original and current branches:\n%s", output)
+		}
+		if got := startCLICommand(t, 10*time.Second, repo, "git", "branch", "--show-current"); got != "develop" {
+			t.Fatalf("current branch = %q, want reported develop", got)
 		}
 	})
 
@@ -217,6 +334,12 @@ func TestStartCLI(t *testing.T) {
 		}
 		if !strings.Contains(output, "was created and remains") {
 			t.Fatalf("failure message must state the branch was created and remains:\n%s", output)
+		}
+		if !strings.Contains(output, "does not appear to be a git repository") {
+			t.Fatalf("push failure lost Git's diagnostic:\n%s", output)
+		}
+		if !strings.Contains(output, "git push -u origin feature/post-create") {
+			t.Fatalf("push failure must explain how to publish the retained branch:\n%s", output)
 		}
 		if !branchExists(t, repo, "feature/post-create") {
 			t.Fatalf("the created branch must remain after a failed push")
@@ -267,6 +390,123 @@ func TestStartCLI(t *testing.T) {
 			t.Fatalf("init failure message must say it needs a terminal:\n%s", output)
 		}
 	})
+}
+
+type executableHookProbeResult int
+
+const (
+	executableHookSupported executableHookProbeResult = iota
+	executableHookUnsupported
+	executableHookBroken
+)
+
+func classifyExecutableHookProbe(hookErr, controlErr error, markerPresent bool, hookOutput string) executableHookProbeResult {
+	if hookErr == nil {
+		if markerPresent {
+			return executableHookSupported
+		}
+		return executableHookUnsupported
+	}
+	if controlErr == nil && isUnavailablePostCheckoutHookDiagnostic(hookOutput) {
+		return executableHookUnsupported
+	}
+	return executableHookBroken
+}
+
+func isUnavailablePostCheckoutHookDiagnostic(output string) bool {
+	diagnostic := strings.ToLower(output)
+	if !strings.Contains(diagnostic, "post-checkout") {
+		return false
+	}
+	return strings.Contains(diagnostic, "cannot run") ||
+		strings.Contains(diagnostic, "cannot spawn") ||
+		strings.Contains(diagnostic, "no such file or directory") ||
+		strings.Contains(diagnostic, "not found")
+}
+
+func TestClassifyExecutableHookProbe(t *testing.T) {
+	hookErr := errors.New("checkout with hook failed")
+	controlErr := errors.New("checkout without hook failed")
+
+	tests := []struct {
+		name          string
+		hookErr       error
+		controlErr    error
+		markerPresent bool
+		diagnostic    string
+		want          executableHookProbeResult
+	}{
+		{name: "supported", markerPresent: true, want: executableHookSupported},
+		{name: "hook ignored", want: executableHookUnsupported},
+		{name: "hook execution unavailable", hookErr: hookErr, diagnostic: "fatal: cannot run .git/hooks/post-checkout: No such file or directory", want: executableHookUnsupported},
+		{name: "unrelated failure despite successful control", hookErr: hookErr, diagnostic: "fatal: cannot lock ref", want: executableHookBroken},
+		{name: "unrelated checkout failure", hookErr: hookErr, controlErr: controlErr, diagnostic: "fatal: cannot run .git/hooks/post-checkout: No such file or directory", want: executableHookBroken},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := classifyExecutableHookProbe(tt.hookErr, tt.controlErr, tt.markerPresent, tt.diagnostic)
+			if got != tt.want {
+				t.Fatalf("classifyExecutableHookProbe() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func probeExecutablePostCheckoutHook(t *testing.T) {
+	t.Helper()
+
+	repo := initTempGitRepo(t)
+	runGit(t, repo, "branch", "hook-probe")
+
+	marker := filepath.Join(t.TempDir(), "post-checkout-ran")
+	hook := filepath.Join(repo, ".git", "hooks", "post-checkout")
+	hookScript := "#!/bin/sh\nprintf 'executed\\n' > \"$DFLOW_HOOK_PROBE_MARKER\"\n"
+	if err := os.WriteFile(hook, []byte(hookScript), 0755); err != nil {
+		t.Fatalf("write executable post-checkout capability probe: %v", err)
+	}
+
+	checkout := exec.Command("git", "checkout", "hook-probe")
+	checkout.Dir = repo
+	checkout.Env = append(os.Environ(), "DFLOW_HOOK_PROBE_MARKER="+marker)
+	checkoutOutput, checkoutErr := checkout.CombinedOutput()
+
+	markerPresent := false
+	if _, err := os.Stat(marker); err == nil {
+		markerPresent = true
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("inspect executable post-checkout capability marker: %v", err)
+	}
+
+	var controlErr error
+	var controlOutput []byte
+	if checkoutErr != nil {
+		resetHead := exec.Command("git", "symbolic-ref", "HEAD", "refs/heads/main")
+		resetHead.Dir = repo
+		resetOutput, resetErr := resetHead.CombinedOutput()
+		if resetErr != nil {
+			t.Fatalf("post-checkout hook probe failed and its same-branch control could not reset HEAD: %v\n%s\nprobe failure: %v\n%s", resetErr, resetOutput, checkoutErr, checkoutOutput)
+		}
+
+		emptyHooksDir := t.TempDir()
+		control := exec.Command("git", "-c", "core.hooksPath="+emptyHooksDir, "checkout", "hook-probe")
+		control.Dir = repo
+		controlOutput, controlErr = control.CombinedOutput()
+	}
+
+	switch classifyExecutableHookProbe(checkoutErr, controlErr, markerPresent, string(checkoutOutput)) {
+	case executableHookSupported:
+		return
+	case executableHookUnsupported:
+		if checkoutErr != nil {
+			t.Skipf("host cannot execute the required POSIX post-checkout hook: %v\n%s", checkoutErr, checkoutOutput)
+		}
+		t.Skip("host did not execute the required POSIX post-checkout hook")
+	case executableHookBroken:
+		t.Fatalf("post-checkout hook probe failed for an unrelated Git or host error: %v\n%s\nhook-disabled checkout also failed: %v\n%s", checkoutErr, checkoutOutput, controlErr, controlOutput)
+	default:
+		t.Fatal("executable post-checkout hook probe returned an inconsistent result")
+	}
 }
 
 func saveStartCLIConfig(t *testing.T, repo string) {

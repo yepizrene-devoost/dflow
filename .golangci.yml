@@ -1,0 +1,37 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - gosec
+    - noctx
+  settings:
+    gosec:
+      excludes:
+        - G115 # uintptr-to-int conversions in the TTY window-size probe cannot overflow in practice.
+        - G301 # Public repository documentation and scripts require intentionally readable directory permissions.
+        - G306 # Public repository documentation and scripts require intentionally readable file permissions.
+        - G304 # Operators intentionally select the local paths dflow reads and writes.
+        - G204 # Git commands are invoked through the repository's controlled wrapper.
+        - G703 # Operators intentionally control repository discovery through DFLOW_CWD.
+  exclusions:
+    rules:
+      - path: _test\.go$
+        linters:
+          - bodyclose
+          - errcheck
+          - gosec
+          - noctx
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

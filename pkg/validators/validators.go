@@ -11,37 +11,52 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/yepizrene-devoost/dflow/pkg/repository"
 )
 
-// EnsureGitRepo returns an error if the current directory is not a Git repository.
+// EnsureGitRepo returns an error if the selected directory is not a Git repository.
 //
-// It checks for the existence of a `.git` folder in the current working directory.
+// Discovery starts from DFLOW_CWD when set, otherwise from the process working
+// directory, and resolves the canonical worktree root. This supports nested
+// directories and linked worktrees whose `.git` entry is a file.
 func EnsureGitRepo() error {
-	if _, err := os.Stat(".git"); os.IsNotExist(err) {
+	if _, err := repository.Discover(); err != nil {
 		return errors.New("this is not a Git repository")
 	}
 	return nil
 }
 
-// EnsureDflowInitialized returns an error if `.dflow.yaml` is not found in the current directory.
-//
-// This check ensures that the user has run `dflow init` before using other commands.
+// EnsureDflowInitialized returns an error if `.dflow.yaml` is not found at the
+// selected repository's canonical root.
 func EnsureDflowInitialized() error {
-	if _, err := os.Stat(".dflow.yaml"); os.IsNotExist(err) {
-		return errors.New("dflow is not initialized in this repository. Run `dflow init` first")
+	context, err := repository.Discover()
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(context.ConfigPath); err != nil {
+		if os.IsNotExist(err) {
+			return errors.New("dflow is not initialized in this repository. Run `dflow init` first")
+		}
+		return fmt.Errorf("inspect .dflow.yaml: %w", err)
 	}
 	return nil
 }
 
-// EnsureDflowNotInitialized returns an error if `.dflow.yaml` already exists in the current directory.
-//
-// This check lets `dflow init` refuse to regenerate the hand-edited project
-// contract unless the caller explicitly opts in with `--force`.
+// EnsureDflowNotInitialized returns an error if `.dflow.yaml` already exists at
+// the selected repository's canonical root.
 func EnsureDflowNotInitialized() error {
-	if _, err := os.Stat(".dflow.yaml"); err == nil {
+	context, err := repository.Discover()
+	if err != nil {
+		return err
+	}
+	_, err = os.Stat(context.ConfigPath)
+	if err == nil {
 		return errors.New("this project is already initialized with .dflow.yaml; use --force to regenerate it")
 	}
-	return nil
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return fmt.Errorf("inspect .dflow.yaml: %w", err)
 }
 
 // WithChecks wraps a Cobra command handler function (`RunE`) with repository and config validations.

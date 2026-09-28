@@ -133,14 +133,14 @@ func TestInitFirstRunStillReachesPrompt(t *testing.T) {
 // repo's manual os.Chdir pattern (withWorkingDir), because Go 1.21 has no
 // t.Chdir.
 func TestEnsureDflowNotInitializedUnit(t *testing.T) {
-	empty := t.TempDir()
+	empty := initTempGitRepo(t)
 	withWorkingDir(t, empty, func() {
 		if err := validators.EnsureDflowNotInitialized(); err != nil {
 			t.Fatalf("EnsureDflowNotInitialized() in an empty dir = %v, want nil", err)
 		}
 	})
 
-	initialized := t.TempDir()
+	initialized := initTempGitRepo(t)
 	if err := os.WriteFile(filepath.Join(initialized, ".dflow.yaml"), []byte("branches: {}\n"), 0644); err != nil {
 		t.Fatalf("failed to write .dflow.yaml: %v", err)
 	}

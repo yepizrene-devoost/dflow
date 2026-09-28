@@ -9,11 +9,12 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/yepizrene-devoost/dflow/cmd/gitutils"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/repository"
 	"github.com/yepizrene-devoost/dflow/pkg/validators"
 )
 
@@ -115,11 +116,18 @@ The email can be passed with --email or entered interactively when omitted.`,
 		}
 
 		// save local config
-		if err = exec.Command("git", "config", "dflow.author", name).Run(); err != nil {
+		session, err := repository.NewSession()
+		if err != nil {
+			return fmt.Errorf("discover repository context: %w", err)
+		}
+
+		authorCmd := session.Command("config", "dflow.author", name)
+		if _, err = gitutils.RunGit(authorCmd); err != nil {
 			return fmt.Errorf("failed to set dflow.author: %w", err)
 		}
 
-		if err = exec.Command("git", "config", "dflow.email", email).Run(); err != nil {
+		emailCmd := session.Command("config", "dflow.email", email)
+		if _, err = gitutils.RunGit(emailCmd); err != nil {
 			return fmt.Errorf("failed to set dflow.email: %w", err)
 		}
 
@@ -140,11 +148,16 @@ var getAuthorCmd = &cobra.Command{
 configuration for this repository.`,
 	Example: `  dflow config get-author`,
 	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
-		author, err1 := exec.Command("git", "config", "--get", "dflow.author").Output()
-		email, err2 := exec.Command("git", "config", "--get", "dflow.email").Output()
+		session, err := repository.NewSession()
+		if err != nil {
+			return fmt.Errorf("discover repository context: %w", err)
+		}
+
+		author, err1 := gitutils.RunGit(session.Command("config", "--get", "dflow.author"))
+		email, err2 := gitutils.RunGit(session.Command("config", "--get", "dflow.email"))
 
 		if err1 != nil || err2 != nil {
-			return fmt.Errorf("Author or email not set. Use `dflow config set-author`")
+			return fmt.Errorf("author or email not set. Use `dflow config set-author`")
 		}
 
 		utils.Plain("👤 Author: %s", strings.TrimSpace(string(author)))
@@ -165,7 +178,12 @@ var listCmd = &cobra.Command{
 namespace for the current repository.`,
 	Example: `  dflow config list`,
 	RunE: validators.WithChecks(false, func(cmd *cobra.Command, args []string) error {
-		output, err := exec.Command("git", "config", "--get-regexp", "^dflow\\.").Output()
+		session, err := repository.NewSession()
+		if err != nil {
+			return fmt.Errorf("discover repository context: %w", err)
+		}
+
+		output, err := gitutils.RunGit(session.Command("config", "--get-regexp", "^dflow\\."))
 
 		if err != nil {
 			utils.Warn("No dflow configuration found in this project.")

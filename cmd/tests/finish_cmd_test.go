@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/yepizrene-devoost/dflow/cmd/commands"
+	"github.com/yepizrene-devoost/dflow/cmd/gitutils"
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
 	"github.com/yepizrene-devoost/dflow/pkg/flow"
 )
@@ -326,14 +327,20 @@ func TestFinishDeleteKeepsBranchAfterLaterAutoTargetConflict(t *testing.T) {
 		if !strings.Contains(err.Error(), "Merge conflict") {
 			t.Fatalf("expected conflict error, got: %v", err)
 		}
+		if !strings.Contains(err.Error(), "completed auto targets: develop") {
+			t.Fatalf("expected completed target list to include develop, got: %v", err)
+		}
 		if !branchExists(t, repoDir, "feature/publish-me") {
 			t.Fatalf("expected the work branch to remain after a later target failure")
 		}
 		if !remoteBranchExists(t, repoDir, "feature/publish-me") {
 			t.Fatalf("expected the published work branch to remain after a later target failure")
 		}
-		if current := currentBranchName(t, repoDir); current != "uat" {
-			t.Fatalf("expected to remain on failed target uat, got %q", current)
+		if current := currentBranchName(t, repoDir); current != "feature/publish-me" {
+			t.Fatalf("expected restoration to original work branch, got %q", current)
+		}
+		if gitutils.MergeInProgress() {
+			t.Fatalf("expected merge-abort cleanup to clear the active merge")
 		}
 	})
 }
@@ -443,6 +450,54 @@ func remoteRevision(t *testing.T, repoDir, branch string) string {
 	return fields[0]
 }
 
+func countGitTraceCommand(trace, command string) int {
+	const builtInPrefix = "trace: built-in: git "
+
+	count := 0
+	for _, line := range strings.Split(trace, "\n") {
+		prefixIndex := strings.Index(line, builtInPrefix)
+		if prefixIndex < 0 {
+			continue
+		}
+		if strings.TrimSpace(line[prefixIndex+len(builtInPrefix):]) == command {
+			count++
+		}
+	}
+	return count
+}
+
+func TestFinishReusesOneGitSessionAcrossTheWorkflow(t *testing.T) {
+	repoDir, _ := finishPublishRepo(t)
+
+	withWorkingDir(t, repoDir, func() {
+		finishPublishConfig(t, repoDir, []string{"develop"}, map[string]flow.WorkflowBranchRule{
+			"develop": {MergeMode: "auto"},
+		})
+
+		tracePath := filepath.Join(t.TempDir(), "git-trace.log")
+		t.Setenv("GIT_TRACE", tracePath)
+
+		if err := commands.FinishCmd.RunE(commands.FinishCmd, []string{}); err != nil {
+			t.Fatalf("FinishCmd returned error: %v", err)
+		}
+
+		trace, err := os.ReadFile(tracePath)
+		if err != nil {
+			t.Fatalf("failed to read Git trace: %v", err)
+		}
+		traceText := string(trace)
+		if probes := strings.Count(traceText, "remote get-url origin"); probes != 1 {
+			t.Fatalf("expected one cached origin probe during finish, got %d\n%s", probes, traceText)
+		}
+		// The command wrapper performs two repository checks and config loading does
+		// one discovery. The finish Git workflow itself must add only the one
+		// discovery made by NewGitSession, regardless of how many Git steps follow.
+		if discoveries := strings.Count(traceText, "rev-parse --show-toplevel --git-dir"); discoveries != 4 {
+			t.Fatalf("expected four fixed repository discoveries during finish, got %d\n%s", discoveries, traceText)
+		}
+	})
+}
+
 func TestFinishPublishesTheWorkBranchBeforeMerging(t *testing.T) {
 	repoDir, _ := finishPublishRepo(t)
 
@@ -526,11 +581,29 @@ func TestFinishSkipsThePublishWhenOriginAlreadyHoldsTheCommit(t *testing.T) {
 
 		setUnreachablePushURL(t, repoDir)
 
+		tracePath := filepath.Join(t.TempDir(), "git-trace.log")
+		t.Setenv("GIT_TRACE", tracePath)
+
 		// Succeeding is the proof: with the identity check removed, PushWorkBranch
 		// would attempt the push and the unreachable push URL would reject it, so the
 		// whole finish would fail.
 		if err := commands.FinishCmd.RunE(commands.FinishCmd, []string{}); err != nil {
 			t.Fatalf("FinishCmd returned error: %v", err)
+		}
+
+		trace, err := os.ReadFile(tracePath)
+		if err != nil {
+			t.Fatalf("failed to read Git trace: %v", err)
+		}
+		traceText := string(trace)
+		if probes := countGitTraceCommand(traceText, "remote get-url origin"); probes != 1 {
+			t.Fatalf("expected one origin probe during finish, got %d\n%s", probes, traceText)
+		}
+		if comparisons := countGitTraceCommand(traceText, "ls-remote --heads origin feature/publish-me"); comparisons != 1 {
+			t.Fatalf("expected one remote branch comparison during finish, got %d\n%s", comparisons, traceText)
+		}
+		if publishes := countGitTraceCommand(traceText, "push -u origin feature/publish-me"); publishes != 0 {
+			t.Fatalf("expected no work-branch publish during finish, got %d\n%s", publishes, traceText)
 		}
 
 		if origin := remoteRevision(t, repoDir, "feature/publish-me"); origin != publishedRevision {
@@ -595,6 +668,52 @@ func TestFinishFailsWhenTheWorkBranchCannotBePublished(t *testing.T) {
 
 		if origin := remoteRevision(t, repoDir, "develop"); origin != developBefore {
 			t.Fatalf("expected origin develop to stay at %s, got %q", developBefore, origin)
+		}
+	})
+}
+
+func TestFinishRestoresWorkBranchAfterTargetPullFailure(t *testing.T) {
+	repoDir, _ := finishPublishRepo(t)
+
+	withWorkingDir(t, repoDir, func() {
+		finishPublishConfig(t, repoDir, []string{"missing"}, map[string]flow.WorkflowBranchRule{
+			"missing": {MergeMode: "auto"},
+		})
+
+		err := commands.FinishCmd.RunE(commands.FinishCmd, []string{})
+		if err == nil {
+			t.Fatalf("expected FinishCmd to fail when the target cannot be synced")
+		}
+		if !strings.Contains(err.Error(), "pull/sync") || !strings.Contains(err.Error(), "completed auto targets: none") {
+			t.Fatalf("expected explicit pull/sync failure state, got: %v", err)
+		}
+		if current := currentBranchName(t, repoDir); current != "feature/publish-me" {
+			t.Fatalf("expected restoration to original work branch, got %q", current)
+		}
+	})
+}
+
+func TestFinishRestoresWorkBranchAfterTargetPushFailure(t *testing.T) {
+	repoDir, _ := finishPublishRepo(t)
+
+	withWorkingDir(t, repoDir, func() {
+		finishPublishConfig(t, repoDir, []string{"develop"}, map[string]flow.WorkflowBranchRule{
+			"develop": {MergeMode: "auto"},
+		})
+		// Publish first so the work-branch publish is an idempotent no-op. The
+		// unreachable push URL then fails only when the target is pushed.
+		runGit(t, repoDir, "push", "-u", "origin", "feature/publish-me")
+		setUnreachablePushURL(t, repoDir)
+
+		err := commands.FinishCmd.RunE(commands.FinishCmd, []string{})
+		if err == nil {
+			t.Fatalf("expected FinishCmd to fail when the target cannot be pushed")
+		}
+		if !strings.Contains(err.Error(), "push") || !strings.Contains(err.Error(), "completed auto targets: none") {
+			t.Fatalf("expected explicit target push failure state, got: %v", err)
+		}
+		if current := currentBranchName(t, repoDir); current != "feature/publish-me" {
+			t.Fatalf("expected restoration to original work branch, got %q", current)
 		}
 	})
 }

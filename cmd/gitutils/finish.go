@@ -3,7 +3,6 @@ package gitutils
 import (
 	"bytes"
 	"fmt"
-	"os/exec"
 	"strings"
 
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
@@ -11,8 +10,15 @@ import (
 
 // CurrentBranch returns the currently checked out Git branch name.
 func CurrentBranch() (string, error) {
-	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
-	output, err := cmd.Output()
+	session, err := newGitSession()
+	if err != nil {
+		return "", err
+	}
+	return session.CurrentBranch()
+}
+
+func (s *GitSession) CurrentBranch() (string, error) {
+	output, err := s.command("rev-parse", "--abbrev-ref", "HEAD").Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to determine current branch: %w", err)
 	}
@@ -22,17 +28,29 @@ func CurrentBranch() (string, error) {
 
 // BranchExists reports whether the given local branch exists.
 func BranchExists(branch string) bool {
-	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
-	return cmd.Run() == nil
+	session, err := newGitSession()
+	return err == nil && session.BranchExists(branch)
+}
+
+func (s *GitSession) BranchExists(branch string) bool {
+	return gitSucceeds(s.command("rev-parse", "--verify", "--quiet", "refs/heads/"+branch))
 }
 
 // CheckoutExistingBranch switches to an existing local branch.
 func CheckoutExistingBranch(branch string) error {
-	if !BranchExists(branch) {
+	session, err := newGitSession()
+	if err != nil {
+		return fmt.Errorf("branch %q does not exist locally", branch)
+	}
+	return session.CheckoutExistingBranch(branch)
+}
+
+func (s *GitSession) CheckoutExistingBranch(branch string) error {
+	if !s.BranchExists(branch) {
 		return fmt.Errorf("branch %q does not exist locally", branch)
 	}
 
-	if err := Checkout(branch); err != nil {
+	if err := runCapturingGit(s.command("checkout", "--quiet", branch)); err != nil {
 		return fmt.Errorf("failed to checkout branch %q: %w", branch, err)
 	}
 
@@ -45,8 +63,15 @@ func CheckoutExistingBranch(branch string) error {
 // `--quiet` keeps a successful switch silent at the source so its status advice
 // never reaches the caller's stdout.
 func CheckoutTrackingBranch(branch string) error {
-	cmd := exec.Command("git", "checkout", "--quiet", "--track", "-b", branch, "origin/"+branch)
-	if err := runCapturingGit(cmd); err != nil {
+	session, err := newGitSession()
+	if err != nil {
+		return fmt.Errorf("failed to create tracking branch %q from origin/%s: %w", branch, branch, err)
+	}
+	return session.checkoutTrackingBranch(branch)
+}
+
+func (s *GitSession) checkoutTrackingBranch(branch string) error {
+	if err := runCapturingGit(s.command("checkout", "--quiet", "--track", "-b", branch, "origin/"+branch)); err != nil {
 		return fmt.Errorf("failed to create tracking branch %q from origin/%s: %w", branch, branch, err)
 	}
 	return nil
@@ -55,8 +80,15 @@ func CheckoutTrackingBranch(branch string) error {
 // IsWorkingTreeClean reports whether the repository has no staged, unstaged,
 // or untracked changes.
 func IsWorkingTreeClean() (bool, error) {
-	cmd := exec.Command("git", "status", "--porcelain")
-	output, err := cmd.Output()
+	session, err := newGitSession()
+	if err != nil {
+		return false, err
+	}
+	return session.IsWorkingTreeClean()
+}
+
+func (s *GitSession) IsWorkingTreeClean() (bool, error) {
+	output, err := s.command("status", "--porcelain").Output()
 	if err != nil {
 		return false, fmt.Errorf("failed to inspect working tree: %w", err)
 	}
@@ -66,7 +98,15 @@ func IsWorkingTreeClean() (bool, error) {
 
 // EnsureWorkingTreeClean returns an error when the working tree is dirty.
 func EnsureWorkingTreeClean() error {
-	clean, err := IsWorkingTreeClean()
+	session, err := newGitSession()
+	if err != nil {
+		return err
+	}
+	return session.EnsureWorkingTreeClean()
+}
+
+func (s *GitSession) EnsureWorkingTreeClean() error {
+	clean, err := s.IsWorkingTreeClean()
 	if err != nil {
 		return err
 	}
@@ -78,8 +118,12 @@ func EnsureWorkingTreeClean() error {
 
 // MergeInProgress reports whether Git currently has an unfinished merge.
 func MergeInProgress() bool {
-	cmd := exec.Command("git", "rev-parse", "-q", "--verify", "MERGE_HEAD")
-	return cmd.Run() == nil
+	session, err := newGitSession()
+	return err == nil && session.MergeInProgress()
+}
+
+func (s *GitSession) MergeInProgress() bool {
+	return gitSucceeds(s.command("rev-parse", "-q", "--verify", "MERGE_HEAD"))
 }
 
 // MergeBranchIntoCurrent merges the source branch into the current branch.
@@ -87,8 +131,15 @@ func MergeInProgress() bool {
 // Git's own output is captured rather than wired to the CLI's streams, so a
 // conflict reports what Git found instead of only its exit status.
 func MergeBranchIntoCurrent(sourceBranch string) error {
-	cmd := exec.Command("git", "merge", "--no-ff", "--no-edit", sourceBranch)
-	if err := runCapturingGit(cmd); err != nil {
+	session, err := newGitSession()
+	if err != nil {
+		return fmt.Errorf("failed to merge branch %q into current branch: %w", sourceBranch, err)
+	}
+	return session.MergeBranchIntoCurrent(sourceBranch)
+}
+
+func (s *GitSession) MergeBranchIntoCurrent(sourceBranch string) error {
+	if err := runCapturingGit(s.command("merge", "--no-ff", "--no-edit", sourceBranch)); err != nil {
 		return fmt.Errorf("failed to merge branch %q into current branch: %w", sourceBranch, err)
 	}
 	return nil
@@ -98,8 +149,15 @@ func MergeBranchIntoCurrent(sourceBranch string) error {
 //
 // Git's own output is captured rather than wired to the CLI's streams.
 func AbortMerge() error {
-	cmd := exec.Command("git", "merge", "--abort")
-	if err := runCapturingGit(cmd); err != nil {
+	session, err := newGitSession()
+	if err != nil {
+		return fmt.Errorf("failed to abort merge: %w", err)
+	}
+	return session.AbortMerge()
+}
+
+func (s *GitSession) AbortMerge() error {
+	if err := runCapturingGit(s.command("merge", "--abort")); err != nil {
 		return fmt.Errorf("failed to abort merge: %w", err)
 	}
 	return nil
@@ -107,7 +165,19 @@ func AbortMerge() error {
 
 // FetchOrigin fetches updates from the remote 'origin' when available.
 func FetchOrigin() error {
-	if !HasOriginRemote() {
+	session, err := newGitSession()
+	if err != nil {
+		return err
+	}
+	return session.FetchOrigin()
+}
+
+func (s *GitSession) FetchOrigin() error {
+	return fetchOrigin(s)
+}
+
+func fetchOrigin(session *GitSession) error {
+	if !session.hasOriginRemote() {
 		utils.Icon("📁", "Remote 'origin' not found. Skipping fetch.")
 		return nil
 	}
@@ -115,8 +185,8 @@ func FetchOrigin() error {
 	spinner := utils.NewSpinner("Fetching updates from origin...")
 	spinner.Start()
 
-	cmd := exec.Command("git", "fetch", "origin", "--prune")
-	if err := cmd.Run(); err != nil {
+	cmd := session.command("fetch", "origin", "--prune")
+	if _, err := runGit(cmd, false); err != nil {
 		spinner.Clear()
 		return fmt.Errorf("failed to fetch origin: %w", err)
 	}
@@ -127,8 +197,12 @@ func FetchOrigin() error {
 
 // HasUpstream reports whether the given local branch has an upstream configured.
 func HasUpstream(branch string) bool {
-	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", branch+"@{upstream}")
-	return cmd.Run() == nil
+	session, err := newGitSession()
+	return err == nil && session.hasUpstream(branch)
+}
+
+func (s *GitSession) hasUpstream(branch string) bool {
+	return gitSucceeds(s.command("rev-parse", "--abbrev-ref", "--symbolic-full-name", branch+"@{upstream}"))
 }
 
 // CheckoutBranch switches to an existing branch without pulling or merging.
@@ -141,23 +215,31 @@ func HasUpstream(branch string) bool {
 // The remote is resolved before the fetch, so a lookup that cannot reach origin
 // returns its own error instead of reporting the branch as absent.
 func CheckoutBranch(branch string) error {
-	if BranchExists(branch) {
-		return CheckoutExistingBranch(branch)
+	session, err := newGitSession()
+	if err != nil {
+		return err
+	}
+	return checkoutBranch(session, branch)
+}
+
+func checkoutBranch(session *GitSession, branch string) error {
+	if session.BranchExists(branch) {
+		return session.CheckoutExistingBranch(branch)
 	}
 
-	if !HasOriginRemote() {
+	if !session.hasOriginRemote() {
 		return fmt.Errorf("branch %q does not exist locally and no 'origin' remote is configured", branch)
 	}
 
 	// The fetch exists only to materialize origin/<branch> for the tracking
 	// checkout, so existence is resolved first: a lookup that cannot check origin
 	// must surface as its own error, not be reduced to "absent".
-	remoteExisted, err := RemoteBranchExists(branch)
+	remoteExisted, err := remoteBranchExists(session, branch)
 	if err != nil {
 		return err
 	}
 
-	if err := FetchOrigin(); err != nil {
+	if err := fetchOrigin(session); err != nil {
 		return err
 	}
 
@@ -165,27 +247,35 @@ func CheckoutBranch(branch string) error {
 		return fmt.Errorf("branch %q does not exist locally nor on 'origin'", branch)
 	}
 
-	return CheckoutTrackingBranch(branch)
+	return session.checkoutTrackingBranch(branch)
 }
 
 // PullBranch checks out the given branch and updates it from origin when possible.
 func PullBranch(branch string) error {
-	if err := CheckoutBranch(branch); err != nil {
+	session, err := newGitSession()
+	if err != nil {
+		return err
+	}
+	return session.PullBranch(branch)
+}
+
+func (s *GitSession) PullBranch(branch string) error {
+	if err := checkoutBranch(s, branch); err != nil {
 		return err
 	}
 
-	if !HasOriginRemote() {
+	if !s.hasOriginRemote() {
 		return nil
 	}
 
-	if HasUpstream(branch) {
-		if err := Pull(); err != nil {
+	if s.hasUpstream(branch) {
+		if err := pullWithSession(s, branch, "pull"); err != nil {
 			return fmt.Errorf("failed to update branch %q: %w", branch, err)
 		}
 		return nil
 	}
 
-	remoteExisted, err := RemoteBranchExists(branch)
+	remoteExisted, err := remoteBranchExists(s, branch)
 	if err != nil {
 		return err
 	}
@@ -194,22 +284,34 @@ func PullBranch(branch string) error {
 		return nil
 	}
 
-	spinner := utils.NewSpinner(fmt.Sprintf("Pulling '%s' from origin...", branch))
-	spinner.Start()
-
-	cmd := exec.Command("git", "pull", "origin", branch)
-	if err := cmd.Run(); err != nil {
-		spinner.Clear()
+	if err := pullWithSession(s, branch, "pull", "origin", branch); err != nil {
 		return fmt.Errorf("failed to update branch %q from origin: %w", branch, err)
 	}
+	return nil
+}
 
+func pullWithSession(session *GitSession, branch string, args ...string) error {
+	spinner := utils.NewSpinner(fmt.Sprintf("Pulling '%s' from origin...", branch))
+	spinner.Start()
+	if _, err := runGit(session.command(args...), false); err != nil {
+		spinner.Clear()
+		return err
+	}
 	spinner.Stop(fmt.Sprintf("Updated '%s' from origin.", branch))
 	return nil
 }
 
 // PushBranchUpdate pushes the given branch to origin without changing upstream tracking.
 func PushBranchUpdate(branch string) error {
-	if !HasOriginRemote() {
+	session, err := newGitSession()
+	if err != nil {
+		return err
+	}
+	return session.PushBranchUpdate(branch)
+}
+
+func (s *GitSession) PushBranchUpdate(branch string) error {
+	if !s.hasOriginRemote() {
 		utils.Icon("📁", "Remote 'origin' not found. Skipping push for '%s'.", branch)
 		return nil
 	}
@@ -217,10 +319,10 @@ func PushBranchUpdate(branch string) error {
 	spinner := utils.NewSpinner(fmt.Sprintf("Pushing updates for '%s' to origin...", branch))
 	spinner.Start()
 
-	cmd := exec.Command("git", "push", "origin", branch)
-	if err := cmd.Run(); err != nil {
+	cmd := s.command("push", "origin", branch)
+	if _, err := runGit(cmd, false); err != nil {
 		spinner.Clear()
-		return fmt.Errorf("failed to push branch %q: %w", branch, err)
+		return fmt.Errorf("failed to push branch %q to origin: %w", branch, err)
 	}
 
 	spinner.Stop(fmt.Sprintf("Pushed updates for '%s'.", branch), "🚀")
@@ -246,7 +348,15 @@ func PushBranchUpdate(branch string) error {
 // warning: the publish is still attempted, so only a failed push fails the
 // finish.
 func PushWorkBranch(branch string) error {
-	if !HasOriginRemote() {
+	session, err := newGitSession()
+	if err != nil {
+		return err
+	}
+	return session.PushWorkBranch(branch)
+}
+
+func (s *GitSession) PushWorkBranch(branch string) error {
+	if !s.hasOriginRemote() {
 		utils.Icon("📁", "Remote 'origin' not found. Skipping push for '%s'.", branch)
 		return nil
 	}
@@ -255,17 +365,16 @@ func PushWorkBranch(branch string) error {
 	// failure is a warning, never a failed finish: the push below is the operation
 	// of record and reports its own failure. A lookup that says nothing must not
 	// turn the cheaper path into a load-bearing one.
-	remoteRevision, lookupErr := remoteBranchRevision(branch)
+	remoteRevision, lookupErr := remoteBranchRevisionIn(s, branch)
 	if lookupErr != nil {
 		utils.Warn("Could not compare '%s' with origin (%v); attempting the publish anyway.", branch, lookupErr)
 	} else {
-		localCmd := exec.Command("git", "rev-parse", "--verify", "refs/heads/"+branch)
-		localOutput, err := localCmd.Output()
+		localResult, err := runGit(s.command("rev-parse", "--verify", "refs/heads/"+branch), false)
 		if err != nil {
 			return fmt.Errorf("failed to resolve local branch '%s': %w", branch, err)
 		}
 
-		if local := strings.TrimSpace(string(localOutput)); local == remoteRevision {
+		if local := strings.TrimSpace(localResult.stdout); local == remoteRevision {
 			utils.Icon("✔", "Branch '%s' is already published and up to date on origin.", branch)
 			return nil
 		}
@@ -274,8 +383,8 @@ func PushWorkBranch(branch string) error {
 	spinner := utils.NewSpinner(fmt.Sprintf("Publishing '%s' to origin...", branch))
 	spinner.Start()
 
-	cmd := exec.Command("git", "push", "-u", "origin", branch)
-	if err := cmd.Run(); err != nil {
+	cmd := s.command("push", "-u", "origin", branch)
+	if _, err := runGit(cmd, false); err != nil {
 		spinner.Clear()
 		return fmt.Errorf("failed to push branch '%s': %w", branch, err)
 	}

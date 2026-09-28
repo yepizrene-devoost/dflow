@@ -2,6 +2,7 @@ package tests
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,8 +15,12 @@ import (
 // to a .dflow.yaml file and loaded back correctly. It checks that the file
 // is created and that loaded values match the original configuration.
 func TestSaveAndLoadConfig(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("DFLOW_CWD", tmpDir)
+	repoDir := initConfigTestRepository(t)
+	subdir := filepath.Join(repoDir, "nested")
+	if err := os.Mkdir(subdir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DFLOW_CWD", subdir)
 
 	original := &flow.Config{}
 	original.Branches.Main = "main"
@@ -46,10 +51,14 @@ func TestSaveAndLoadConfig(t *testing.T) {
 		t.Fatalf("failed to save config: %v", err)
 	}
 
-	// Verifica que el archivo fue creado
-	configPath := filepath.Join(tmpDir, ".dflow.yaml")
+	configPath := filepath.Join(repoDir, ".dflow.yaml")
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		t.Fatalf(".dflow.yaml not found at: %s", configPath)
+		t.Fatalf(".dflow.yaml not found at repository root: %s", configPath)
+	}
+
+	// A config in the invocation subdirectory must not shadow the repository root.
+	if err := os.WriteFile(filepath.Join(subdir, ".dflow.yaml"), []byte("branches:\n  main: wrong\n"), 0644); err != nil {
+		t.Fatal(err)
 	}
 
 	loaded, err := utils.LoadConfig()
@@ -79,8 +88,12 @@ func TestSaveAndLoadConfig(t *testing.T) {
 }
 
 func TestLoadLegacyConfigFormat(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("DFLOW_CWD", tmpDir)
+	repoDir := initConfigTestRepository(t)
+	subdir := filepath.Join(repoDir, "nested")
+	if err := os.Mkdir(subdir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DFLOW_CWD", subdir)
 
 	legacyConfig := `
 branches:
@@ -103,7 +116,7 @@ workflow:
     main: manual
 `
 
-	configPath := filepath.Join(tmpDir, ".dflow.yaml")
+	configPath := filepath.Join(repoDir, ".dflow.yaml")
 	if err := os.WriteFile(configPath, []byte(legacyConfig), 0644); err != nil {
 		t.Fatalf("failed to write legacy config: %v", err)
 	}
@@ -133,4 +146,14 @@ workflow:
 	if !strings.Contains(string(saved), "feature_base") {
 		t.Fatalf("expected fixture to keep legacy content before save")
 	}
+}
+
+func initConfigTestRepository(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	cmd := exec.Command("git", "-C", dir, "init", "-q")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git init failed: %v\n%s", err, output)
+	}
+	return dir
 }

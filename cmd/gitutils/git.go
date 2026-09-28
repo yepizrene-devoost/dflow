@@ -12,18 +12,71 @@ import (
 	"strings"
 
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
+	"github.com/yepizrene-devoost/dflow/pkg/repository"
 )
+
+// GitSession reuses one repository context and cached remote discovery across
+// a multi-step Git workflow. Public helper functions remain available for
+// callers that only need one operation.
+type GitSession struct {
+	repository.Session
+	originKnown bool
+	origin      bool
+}
+
+// NewGitSession discovers the repository context once for a sequence of Git
+// operations.
+func NewGitSession() (*GitSession, error) {
+	session, err := repository.NewSession()
+	if err != nil {
+		return nil, fmt.Errorf("discover repository context: %w", err)
+	}
+	return &GitSession{Session: session}, nil
+}
+
+func newGitSession() (*GitSession, error) {
+	return NewGitSession()
+}
+
+func (s *GitSession) command(args ...string) *exec.Cmd {
+	return s.Command(args...)
+}
+
+func gitCommand(args ...string) (*exec.Cmd, error) {
+	session, err := newGitSession()
+	if err != nil {
+		return nil, err
+	}
+	return session.command(args...), nil
+}
+
+func (s *GitSession) hasOriginRemote() bool {
+	if s.originKnown {
+		return s.origin
+	}
+
+	cmd := s.command("remote", "get-url", "origin")
+	s.origin = gitSucceeds(cmd)
+	s.originKnown = true
+	return s.origin
+}
 
 // CheckOrCreateBranch verifies whether the given branch exists locally.
 //
 // If the branch does not exist, it creates it using `git branch <branch>`.
 // This operation does not switch to the branch; it only ensures its presence.
 func CheckOrCreateBranch(branch string) error {
-	cmd := exec.Command("git", "rev-parse", "--verify", branch)
-	if err := cmd.Run(); err != nil {
+	cmd, err := gitCommand("rev-parse", "--verify", branch)
+	if err != nil {
+		return err
+	}
+	if _, err := runGit(cmd, false); err != nil {
 		utils.Info("Branch '%s' does not exist. Creating...", branch)
-		create := exec.Command("git", "branch", branch)
-		if err := create.Run(); err != nil {
+		create, err := gitCommand("branch", branch)
+		if err != nil {
+			return err
+		}
+		if _, err := runGit(create, false); err != nil {
 			return fmt.Errorf("failed to create branch '%s': %w", branch, err)
 		}
 		utils.Success("Created branch '%s'", branch)
@@ -42,13 +95,55 @@ func PushBranch(branch string) error {
 	spinner := utils.NewSpinner(fmt.Sprintf("Pushing branch '%s' to origin...", branch))
 	spinner.Start()
 
-	cmd := exec.Command("git", "push", "-u", "origin", branch)
-	if err := cmd.Run(); err != nil {
+	cmd, err := gitCommand("push", "-u", "origin", branch)
+	if err != nil {
+		return err
+	}
+	if _, err := runGit(cmd, false); err != nil {
 		return fmt.Errorf("failed to push branch '%s': %w", branch, err)
 	}
 	spinner.Stop(fmt.Sprintf("Pushed branch '%s' to remote", branch), "🚀")
 
 	return nil
+}
+
+type gitResult struct {
+	stdout string
+	stderr string
+}
+
+// runGit is the single subprocess boundary for Git operations. It captures
+// both streams, keeps Git non-interactive, and preserves stderr (or stdout
+// when Git reports a failure there) in the returned error.
+func runGit(cmd *exec.Cmd, publishOutput bool) (gitResult, error) {
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	result := gitResult{}
+	if err := cmd.Run(); err != nil {
+		result.stdout = stdout.String()
+		result.stderr = stderr.String()
+		diagnostics := strings.TrimSpace(result.stderr)
+		if diagnostics == "" {
+			diagnostics = strings.TrimSpace(result.stdout)
+		}
+		if diagnostics == "" {
+			return result, err
+		}
+		return result, fmt.Errorf("%s: %w", diagnostics, err)
+	}
+
+	result.stdout = stdout.String()
+	result.stderr = stderr.String()
+	if publishOutput {
+		for _, line := range strings.Split(strings.TrimSpace(result.stdout), "\n") {
+			if strings.TrimSpace(line) != "" {
+				utils.Plain("%s", strings.TrimRight(line, "\r"))
+			}
+		}
+	}
+	return result, nil
 }
 
 // runCapturingGit runs cmd with both streams captured, so Git's own text never
@@ -61,35 +156,20 @@ func PushBranch(branch string) error {
 // CLI output helper, so it stays inside the single output choke point and a
 // machine-readable mode can silence it.
 func runCapturingGit(cmd *exec.Cmd) error {
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	_, err := runGit(cmd, true)
+	return err
+}
 
-	if err := cmd.Run(); err != nil {
-		diagnostics := strings.TrimSpace(stderr.String())
-		if diagnostics == "" {
-			// Some failures explain themselves on stdout instead (a merge conflict,
-			// for example); prefer stderr so a failure is never bare.
-			diagnostics = strings.TrimSpace(stdout.String())
-		}
-		if diagnostics == "" {
-			return err
-		}
-		return fmt.Errorf("%s: %w", diagnostics, err)
-	}
+// RunGit executes a prepared Git command through the shared capture boundary.
+// It is used by commands that need the captured stdout as a value.
+func RunGit(cmd *exec.Cmd) (string, error) {
+	result, err := runGit(cmd, false)
+	return result.stdout, err
+}
 
-	// A successful command's stderr is progress and advice noise and is dropped.
-	// Its stdout is the operation's result, so it goes through the shared output
-	// helper one line at a time instead of straight to the caller's stdout.
-	captured := strings.TrimSpace(stdout.String())
-	if captured == "" {
-		return nil
-	}
-	for _, line := range strings.Split(captured, "\n") {
-		utils.Plain("%s", strings.TrimRight(line, "\r"))
-	}
-
-	return nil
+func gitSucceeds(cmd *exec.Cmd) bool {
+	_, err := runGit(cmd, false)
+	return err == nil
 }
 
 // Checkout switches the working directory to the given branch using `git checkout <branch>`.
@@ -102,7 +182,11 @@ func runCapturingGit(cmd *exec.Cmd) error {
 //
 // Returns an error if the checkout operation fails.
 func Checkout(branch string) error {
-	return runCapturingGit(exec.Command("git", "checkout", "--quiet", branch))
+	cmd, err := gitCommand("checkout", "--quiet", branch)
+	if err != nil {
+		return err
+	}
+	return runCapturingGit(cmd)
 }
 
 // CheckoutNew creates and checks out a new branch from the current HEAD.
@@ -113,7 +197,11 @@ func Checkout(branch string) error {
 //
 // It returns an error if the operation fails.
 func CheckoutNew(branch string) error {
-	return runCapturingGit(exec.Command("git", "checkout", "--quiet", "-b", branch))
+	cmd, err := gitCommand("checkout", "--quiet", "-b", branch)
+	if err != nil {
+		return err
+	}
+	return runCapturingGit(cmd)
 }
 
 // Pull updates the current branch with the latest changes from the remote 'origin'.
@@ -132,12 +220,14 @@ func Pull() error {
 	spinner := utils.NewSpinner("Pulling latest changes from origin...")
 	spinner.Start()
 
-	cmd := exec.Command("git", "pull")
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	if err := cmd.Run(); err != nil {
+	cmd, err := gitCommand("pull")
+	if err != nil {
 		spinner.Clear()
 		return err
+	}
+	if _, err := runGit(cmd, false); err != nil {
+		spinner.Clear()
+		return fmt.Errorf("failed to pull: %w", err)
 	}
 
 	spinner.Stop("Repository updated.")
@@ -160,6 +250,16 @@ func Pull() error {
 // is deleted first and the lookup error names what remains unknown, and with no
 // local copy nothing is touched.
 func Delete(branch string) error {
+	session, err := newGitSession()
+	if err != nil {
+		return err
+	}
+	return session.Delete(branch)
+}
+
+// Delete removes the branch using the repository context and origin lookup
+// cached by this session.
+func (s *GitSession) Delete(branch string) error {
 	// Refuse before anything is announced: this is a condition dflow can check
 	// without asking Git, and letting Git answer would surface its refusal as a
 	// foreign message. A branch checked out in another worktree stays Git's call,
@@ -169,7 +269,7 @@ func Delete(branch string) error {
 	// branch cannot be determined the guard stands aside and lets Git decide,
 	// because propagating that error would turn a deletion Git would have allowed
 	// into a refusal caused by an unrelated problem.
-	if current, err := CurrentBranch(); err == nil && current == branch {
+	if current, err := s.CurrentBranch(); err == nil && current == branch {
 		return fmt.Errorf("cannot delete branch '%s' because it is the branch you are currently on", branch)
 	}
 
@@ -177,8 +277,8 @@ func Delete(branch string) error {
 	// local half untouched when only the remote branch is left. A branch absent
 	// from both places is the one case with nothing to delete, and reporting
 	// success there would be a lie.
-	localExisted := BranchExists(branch)
-	remoteExisted, remoteErr := RemoteBranchExists(branch)
+	localExisted := s.BranchExists(branch)
+	remoteExisted, remoteErr := remoteBranchExists(s, branch)
 
 	// The two outcomes that touch nothing are settled before the spinner exists,
 	// which is what leaves the operation below a single creation site: with no local
@@ -208,7 +308,7 @@ func Delete(branch string) error {
 		// finish. Deleting it keeps the two halves independent, and the error below
 		// reports the operation as unfinished: the local half is gone and the remote
 		// half could not be checked.
-		if err := deleteLocalBranch(branch); err != nil {
+		if err := s.deleteLocalBranch(branch); err != nil {
 			return err
 		}
 
@@ -222,18 +322,15 @@ func Delete(branch string) error {
 	// deleted; a partial success is unfinished work, never a no-op and never a
 	// success.
 	if localExisted {
-		if err := deleteLocalBranch(branch); err != nil {
+		if err := s.deleteLocalBranch(branch); err != nil {
 			return err
 		}
 	}
 
 	if remoteExisted {
-		var stderr bytes.Buffer
-		cmd := exec.Command("git", "push", "origin", "--delete", branch)
-		cmd.Stdout = nil
-		cmd.Stderr = &stderr
-		if err := cmd.Run(); err != nil {
-			return remoteDeleteFailure(branch, localExisted, stderr.String())
+		result, err := runGit(s.command("push", "origin", "--delete", branch), false)
+		if err != nil {
+			return remoteDeleteFailure(branch, localExisted, result.stderr)
 		}
 	}
 
@@ -280,13 +377,10 @@ func remoteDeleteFailure(branch string, localExisted bool, diagnostics string) e
 // Git's refusal in dflow's own words. It is a named step so the two call sites
 // that may need the local half deleted (the ordinary path and the path where the
 // remote half could not be checked) cannot drift apart in what they report.
-func deleteLocalBranch(branch string) error {
-	var stderr bytes.Buffer
-	cmd := exec.Command("git", "branch", "-D", branch)
-	cmd.Stdout = nil
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to delete local branch '%s': %s", branch, strings.TrimSpace(stderr.String()))
+func (s *GitSession) deleteLocalBranch(branch string) error {
+	result, err := runGit(s.command("branch", "-D", branch), false)
+	if err != nil {
+		return fmt.Errorf("failed to delete local branch '%s': %s", branch, strings.TrimSpace(result.stderr))
 	}
 
 	return nil
@@ -310,21 +404,26 @@ func deleteLocalBranch(branch string) error {
 // The lookup's stderr is captured into the error rather than wired to the CLI's
 // streams, so it never reaches stdout.
 func remoteBranchRevision(branch string) (string, error) {
+	session, err := newGitSession()
+	if err != nil {
+		return "", err
+	}
+	return remoteBranchRevisionIn(session, branch)
+}
+
+func remoteBranchRevisionIn(session *GitSession, branch string) (string, error) {
 	// A missing origin is a known absence, not a failed check: a remote copy can
 	// only live in a remote, and with no remote configured there is none to find.
-	if !HasOriginRemote() {
+	if !session.hasOriginRemote() {
 		return "", nil
 	}
 
-	cmd := exec.Command("git", "ls-remote", "--heads", "origin", branch)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		diagnostics := strings.TrimSpace(stderr.String())
+	cmd := session.command("ls-remote", "--heads", "origin", branch)
+	result, err := runGit(cmd, false)
+	if err != nil {
+		diagnostics := strings.TrimSpace(result.stderr)
 		if diagnostics == "" {
-			diagnostics = strings.TrimSpace(stdout.String())
+			diagnostics = strings.TrimSpace(result.stdout)
 		}
 		// Git's own explanation is the reason, so it ends the sentence: the existing
 		// delete and merge messages do the same and never append the exit status
@@ -338,12 +437,20 @@ func remoteBranchRevision(branch string) (string, error) {
 
 	// An exact ref name yields at most one line; no line means origin does not
 	// have the branch.
-	fields := strings.Fields(stdout.String())
+	fields := strings.Fields(result.stdout)
 	if len(fields) == 0 {
 		return "", nil
 	}
 
 	return fields[0], nil
+}
+
+func remoteBranchExists(session *GitSession, branch string) (bool, error) {
+	revision, err := remoteBranchRevisionIn(session, branch)
+	if err != nil {
+		return false, err
+	}
+	return revision != "", nil
 }
 
 // RemoteBranchExists reports whether a branch exists on the remote `origin`.
@@ -366,7 +473,10 @@ func RemoteBranchExists(branch string) (bool, error) {
 //
 // It runs `git branch --format=%(refname:short)` and parses the output line by line.
 func GetLocalBranches() []string {
-	cmd := exec.Command("git", "branch", "--format=%(refname:short)")
+	cmd, err := gitCommand("branch", "--format=%(refname:short)")
+	if err != nil {
+		return []string{}
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		return []string{}
@@ -391,7 +501,6 @@ func GetLocalBranches() []string {
 //
 // This is useful to avoid pull/push errors in local-only Git repositories.
 func HasOriginRemote() bool {
-	cmd := exec.Command("git", "remote", "get-url", "origin")
-	err := cmd.Run()
-	return err == nil
+	session, err := newGitSession()
+	return err == nil && session.hasOriginRemote()
 }

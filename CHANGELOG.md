@@ -1,5 +1,31 @@
 # Changelog
 
+## 📦 v0.5.0 – Repository Context & Safer Recovery
+
+### Added
+- dflow now discovers the canonical Git worktree from the current directory or `DFLOW_CWD`, so commands work from nested directories and linked worktrees while consistently finding the repository-root `.dflow.yaml`.
+- Configuration is validated before use or persistence. Invalid branch names, blank or overlapping branch prefixes, incomplete flow rules, duplicate finish targets, contradictory legacy and nested flow settings, and invalid merge modes now fail with path-specific diagnostics.
+
+### Changed
+- `dflow init` validates the complete onboarding plan before changing the repository, reuses matching local and remote branches on retry, refuses to overwrite a remote branch at a different revision, and writes `.dflow.yaml` atomically only after branch setup and optional agent-file generation succeed.
+- `dflow finish` uses one repository-scoped Git session for the full workflow, making command execution deterministic and non-interactive across all target operations.
+
+### Fixed
+- When `dflow finish` fails while syncing, merging, or pushing an automatic target, it reports the failed phase and targets already completed, aborts an active conflicted merge, and attempts to restore the original work branch. A restoration failure is reported separately so the remaining repository state is explicit.
+- When `dflow start` fails before branch creation, it preserves the underlying Git diagnostics and restores the original branch. If publishing a newly created branch fails, it keeps the branch and prints the exact recovery command.
+- `dflow init` no longer leaves a partial `.dflow.yaml` after onboarding fails. Its error identifies retained local and remote branches and provides a safe retry command.
+
+### Library API
+- Added the exported `pkg/repository` API: `Context`, `Session`, `Discover`, `NewSession`, and `Session.Command` for canonical repository discovery and repository-scoped, non-interactive Git commands.
+- Added `flow.Config.Validate` for explicit validation of parsed or programmatically constructed configurations.
+- No previously exported symbols under `pkg/*` were removed or renamed in this release.
+
+### Maintenance
+- Added a dedicated golangci-lint configuration and CI quality gate, and aligned existing code with the enforced checks.
+- Added a post-publication module-proxy warm-up step with a standalone retry target for release maintainers.
+- Expanded and reorganized CLI, workflow, configuration, repository-context, and recovery tests without changing their public command surface.
+- Removed the retired Go Report Card badge and refreshed exported Git helper documentation.
+
 ## 📦 v0.4.1 – Release Contracts & Version Display
 
 ### Changed

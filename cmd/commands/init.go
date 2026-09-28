@@ -6,10 +6,13 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/spf13/cobra"
@@ -17,6 +20,7 @@ import (
 	"github.com/yepizrene-devoost/dflow/cmd/utils"
 	"github.com/yepizrene-devoost/dflow/pkg/agent"
 	"github.com/yepizrene-devoost/dflow/pkg/flow"
+	"github.com/yepizrene-devoost/dflow/pkg/repository"
 	"github.com/yepizrene-devoost/dflow/pkg/validators"
 )
 
@@ -91,182 +95,27 @@ var InitCmd = &cobra.Command{
 				return err
 			}
 		}
-
 		if !utils.IsInteractive() {
 			return fmt.Errorf("dflow init is interactive and requires a terminal")
 		}
 
-		var mainBranch, developBranch, uatBranch string
-
-		err = survey.AskOne(&survey.Input{Message: "Main branch name:", Default: "main"}, &mainBranch, survey.WithValidator(survey.Required))
+		draft, err := collectInitDraft()
 		if err != nil {
 			return err
 		}
-
-		err = survey.AskOne(&survey.Input{Message: "Development branch name:", Default: "develop"}, &developBranch, survey.WithValidator(survey.Required))
-		if err != nil {
+		draft.force = force
+		if err := applyInitDraft(draft, defaultInitOperations()); err != nil {
 			return err
 		}
 
-		err = survey.AskOne(&survey.Input{Message: "UAT branch name:", Default: "uat"}, &uatBranch, survey.WithValidator(survey.Required))
-		if err != nil {
-			return err
-		}
-
-		// 🌟 merge modes explain
-		utils.Plain("")
-		utils.Icon("🔧", "Dflow supports two types of merge modes:")
-		utils.Plain("   - manual: you open Pull Requests and merge via your platform (e.g. GitHub, GitLab).")
-		utils.Plain("   - auto: dflow merges branches directly using Git commands (no PRs needed).")
-
-		var mergeModeOption string
-		err = survey.AskOne(&survey.Select{
-			Message: "How do you manage merges by default in this project?",
-			Options: []string{
-				"manual (via Pull Requests)",
-				"auto (direct merge from CLI)",
-			},
-			Default: "manual (via Pull Requests)",
-		}, &mergeModeOption)
-		if err != nil {
-			return err
-		}
-
-		var defaultMode, inverseMode string
-		if mergeModeOption == "auto (direct merge from CLI)" {
-			defaultMode = "auto"
-			inverseMode = "manual"
-		} else {
-			defaultMode = "manual"
-			inverseMode = "auto"
-		}
-
-		cfg := flow.Config{}
-		cfg.Branches.Main = mainBranch
-		cfg.Branches.Develop = developBranch
-		cfg.Branches.Uat = uatBranch
-		cfg.Branches.Features = "feature/"
-		cfg.Branches.Releases = "release/"
-		cfg.Branches.Hotfixes = "hotfix/"
-		cfg.Branches.Bugfixes = "bugfix/"
-
-		cfg.Flow.Feature.Base = developBranch
-		cfg.Flow.Feature.FinishTargets = uniqueBranchNames(developBranch, uatBranch)
-		cfg.Flow.Release.Base = uatBranch
-		cfg.Flow.Release.FinishTargets = uniqueBranchNames(mainBranch, developBranch)
-		cfg.Flow.Hotfix.Base = mainBranch
-		cfg.Flow.Hotfix.FinishTargets = uniqueBranchNames(mainBranch, developBranch, uatBranch)
-		cfg.Flow.Bugfix.Base = uatBranch
-		cfg.Flow.Bugfix.FinishTargets = uniqueBranchNames(uatBranch, developBranch)
-
-		cfg.Workflow.DefaultMergeMode = defaultMode
-		cfg.Workflow.BranchRules = make(map[string]flow.WorkflowBranchRule)
-
-		// 🎯 ask exceptions at the default mode
-		var exceptionBranches []string
-		allBranches := uniqueBranchNames(mainBranch, developBranch, uatBranch)
-
-		err = survey.AskOne(&survey.MultiSelect{
-			Message: fmt.Sprintf("Which branches should behave differently from the default '%s' mode?", defaultMode),
-			Options: allBranches,
-			Help:    fmt.Sprintf("Select the branches that require '%s' instead of the default '%s'", inverseMode, defaultMode),
-		}, &exceptionBranches)
-		if err != nil {
-			return err
-		}
-
-		for _, branch := range allBranches {
-			cfg.Workflow.BranchRules[branch] = flow.WorkflowBranchRule{MergeMode: defaultMode}
-		}
-
-		for _, branch := range exceptionBranches {
-			cfg.Workflow.BranchRules[branch] = flow.WorkflowBranchRule{MergeMode: inverseMode}
-		}
-
-		if err := utils.SaveConfig(&cfg); err != nil {
-			return err
-		}
 		utils.Success("Created .dflow.yaml")
-
-		// 📋 print summary
 		utils.Plain("")
 		utils.Success("Merge behavior summary:")
-		utils.Plain("   Default mode: %s", defaultMode)
-		for _, branch := range allBranches {
-			utils.Plain("   - %s: %s", branch, flow.GetMergeModeForBranch(&cfg, branch))
+		utils.Plain("   Default mode: %s", draft.config.Workflow.DefaultMergeMode)
+		for _, branch := range draft.branches {
+			utils.Plain("   - %s: %s", branch, flow.GetMergeModeForBranch(&draft.config, branch))
 		}
 		utils.Plain("")
-
-		// 🌱 verify if base branches exists
-		if err := gitutils.CheckOrCreateBranch(mainBranch); err != nil {
-			return err
-		}
-		if err := gitutils.CheckOrCreateBranch(developBranch); err != nil {
-			return err
-		}
-		if err := gitutils.CheckOrCreateBranch(uatBranch); err != nil {
-			return err
-		}
-
-		// 🚀 confirm push of branches
-		var pushConfirm bool
-
-		if err := survey.AskOne(&survey.Confirm{
-			Message: "Do you want to push the base branches to 'origin'?",
-			Default: true,
-		}, &pushConfirm); err != nil {
-			fmt.Fprintf(os.Stderr, "Prompt failed: %v\n", err)
-			os.Exit(1)
-		}
-
-		if err != nil {
-			return err
-		}
-
-		if pushConfirm {
-			if err := gitutils.PushBranch(mainBranch); err != nil {
-				return fmt.Errorf("Failed to push '%s': %v", mainBranch, err)
-			}
-			if err := gitutils.PushBranch(developBranch); err != nil {
-				return fmt.Errorf("Failed to push '%s': %v", developBranch, err)
-			}
-			if err := gitutils.PushBranch(uatBranch); err != nil {
-				return fmt.Errorf("Failed to push '%s': %v", uatBranch, err)
-			}
-		}
-
-		// 📝 generate agent workflow file
-		var generateAgent bool
-		if err := survey.AskOne(&survey.Confirm{
-			Message: "Generate an agent workflow file for AI coding assistants?",
-			Default: true,
-		}, &generateAgent); err != nil {
-			fmt.Fprintf(os.Stderr, "Prompt failed: %v\n", err)
-			os.Exit(1)
-		}
-
-		if generateAgent {
-			doc := agent.GenerateAgentDoc(&cfg)
-			agentPath := ".agents/workflows/dflow.md"
-
-			if err := os.MkdirAll(filepath.Dir(agentPath), 0755); err != nil {
-				return fmt.Errorf("failed to create agent workflow directory: %w", err)
-			}
-			if err := os.WriteFile(agentPath, doc, 0644); err != nil {
-				return fmt.Errorf("failed to write agent workflow: %w", err)
-			}
-			utils.Success("Generated agent workflow: %s", agentPath)
-
-			// Wire the same reference `dflow agent` writes, in auto mode: init never
-			// asked which agents this project uses, so every registry agent is
-			// selected with explicit == false, and CLAUDE.md is therefore maintained
-			// only when the project already has one.
-			plan := agent.PlanInstructionTargets(agent.Agents(), instructionFileExists, false)
-			if err := writeInstructionReferences(plan, agentPath); err != nil {
-				utils.Warn("Could not update instruction references: %v", err)
-			}
-		}
-
 		utils.Icon("🎉", "dflow is ready! Use `dflow start` to begin a new branch.")
 		return nil
 	}),
@@ -274,6 +123,231 @@ var InitCmd = &cobra.Command{
 
 func init() {
 	InitCmd.Flags().Bool("force", false, "Regenerate .dflow.yaml even if the project is already initialized")
+}
+
+type initDraft struct {
+	config        flow.Config
+	branches      []string
+	push          bool
+	generateAgent bool
+	force         bool
+}
+
+type initRemoteBranch struct {
+	exists         bool
+	localRevision  string
+	remoteRevision string
+}
+
+type initOperations struct {
+	validateBranch      func(string) error
+	ensureBranch        func(string) error
+	inspectRemoteBranch func(string) (initRemoteBranch, error)
+	pushBranch          func(string) error
+	generateAgentFiles  func(*flow.Config) error
+	saveConfig          func(*flow.Config) error
+}
+
+func collectInitDraft() (initDraft, error) {
+	var mainBranch, developBranch, uatBranch string
+	for _, prompt := range []struct {
+		message, defaultValue string
+		answer                *string
+	}{
+		{"Main branch name:", "main", &mainBranch},
+		{"Development branch name:", "develop", &developBranch},
+		{"UAT branch name:", "uat", &uatBranch},
+	} {
+		if err := survey.AskOne(&survey.Input{Message: prompt.message, Default: prompt.defaultValue}, prompt.answer, survey.WithValidator(survey.Required)); err != nil {
+			return initDraft{}, err
+		}
+	}
+
+	utils.Plain("")
+	utils.Icon("🔧", "Dflow supports two types of merge modes:")
+	utils.Plain("   - manual: you open Pull Requests and merge via your platform (e.g. GitHub, GitLab).")
+	utils.Plain("   - auto: dflow merges branches directly using Git commands (no PRs needed).")
+
+	var mergeModeOption string
+	if err := survey.AskOne(&survey.Select{
+		Message: "How do you manage merges by default in this project?",
+		Options: []string{"manual (via Pull Requests)", "auto (direct merge from CLI)"},
+		Default: "manual (via Pull Requests)",
+	}, &mergeModeOption); err != nil {
+		return initDraft{}, err
+	}
+	defaultMode, inverseMode := "manual", "auto"
+	if mergeModeOption == "auto (direct merge from CLI)" {
+		defaultMode, inverseMode = "auto", "manual"
+	}
+
+	cfg := flow.Config{}
+	cfg.Branches.Main, cfg.Branches.Develop, cfg.Branches.Uat = mainBranch, developBranch, uatBranch
+	cfg.Branches.Features, cfg.Branches.Releases = "feature/", "release/"
+	cfg.Branches.Hotfixes, cfg.Branches.Bugfixes = "hotfix/", "bugfix/"
+	cfg.Flow.Feature = flow.BranchFlowRule{Base: developBranch, FinishTargets: uniqueBranchNames(developBranch, uatBranch)}
+	cfg.Flow.Release = flow.BranchFlowRule{Base: uatBranch, FinishTargets: uniqueBranchNames(mainBranch, developBranch)}
+	cfg.Flow.Hotfix = flow.BranchFlowRule{Base: mainBranch, FinishTargets: uniqueBranchNames(mainBranch, developBranch, uatBranch)}
+	cfg.Flow.Bugfix = flow.BranchFlowRule{Base: uatBranch, FinishTargets: uniqueBranchNames(uatBranch, developBranch)}
+	cfg.Workflow.DefaultMergeMode = defaultMode
+	cfg.Workflow.BranchRules = make(map[string]flow.WorkflowBranchRule)
+
+	branches := uniqueBranchNames(mainBranch, developBranch, uatBranch)
+	var exceptionBranches []string
+	if err := survey.AskOne(&survey.MultiSelect{
+		Message: fmt.Sprintf("Which branches should behave differently from the default '%s' mode?", defaultMode),
+		Options: branches,
+		Help:    fmt.Sprintf("Select the branches that require '%s' instead of the default '%s'", inverseMode, defaultMode),
+	}, &exceptionBranches); err != nil {
+		return initDraft{}, err
+	}
+	for _, branch := range branches {
+		cfg.Workflow.BranchRules[branch] = flow.WorkflowBranchRule{MergeMode: defaultMode}
+	}
+	for _, branch := range exceptionBranches {
+		cfg.Workflow.BranchRules[branch] = flow.WorkflowBranchRule{MergeMode: inverseMode}
+	}
+
+	draft := initDraft{config: cfg, branches: branches}
+	if err := survey.AskOne(&survey.Confirm{Message: "Do you want to push the base branches to 'origin'?", Default: true}, &draft.push); err != nil {
+		return initDraft{}, fmt.Errorf("push prompt failed: %w", err)
+	}
+	if err := survey.AskOne(&survey.Confirm{Message: "Generate an agent workflow file for AI coding assistants?", Default: true}, &draft.generateAgent); err != nil {
+		return initDraft{}, fmt.Errorf("agent workflow prompt failed: %w", err)
+	}
+	return draft, nil
+}
+
+func defaultInitOperations() initOperations {
+	return initOperations{
+		validateBranch:      validateInitBranch,
+		ensureBranch:        gitutils.CheckOrCreateBranch,
+		inspectRemoteBranch: inspectInitRemoteBranch,
+		pushBranch:          gitutils.PushBranch,
+		generateAgentFiles:  generateInitAgentFiles,
+		saveConfig:          utils.SaveConfig,
+	}
+}
+
+func applyInitDraft(draft initDraft, ops initOperations) error {
+	if err := draft.config.Validate(); err != nil {
+		return fmt.Errorf("validate onboarding configuration: %w", err)
+	}
+	primary := []struct{ role, name string }{
+		{"main", draft.config.Branches.Main},
+		{"development", draft.config.Branches.Develop},
+		{"UAT", draft.config.Branches.Uat},
+	}
+	for _, branch := range primary {
+		if err := ops.validateBranch(branch.name); err != nil {
+			return fmt.Errorf("invalid %s branch %q: %w", branch.role, branch.name, err)
+		}
+	}
+
+	var local, remote []string
+	for _, branch := range draft.branches {
+		if err := ops.ensureBranch(branch); err != nil {
+			return initProgressError(draft.force, fmt.Sprintf("create or reuse local branch %q", branch), err, local, remote)
+		}
+		local = append(local, branch)
+	}
+	if draft.push {
+		for _, branch := range draft.branches {
+			state, err := ops.inspectRemoteBranch(branch)
+			if err != nil {
+				return initProgressError(draft.force, fmt.Sprintf("check remote branch %q", branch), err, local, remote)
+			}
+			if state.exists {
+				remote = append(remote, branch)
+				if state.localRevision != state.remoteRevision {
+					cause := fmt.Errorf("local revision %s differs from remote revision %s; refusing to overwrite the existing remote branch", state.localRevision, state.remoteRevision)
+					return initProgressError(draft.force, fmt.Sprintf("verify existing remote branch %q", branch), cause, local, remote)
+				}
+				continue
+			}
+			if err := ops.pushBranch(branch); err != nil {
+				return initProgressError(draft.force, fmt.Sprintf("publish branch %q", branch), err, local, remote)
+			}
+			remote = append(remote, branch)
+		}
+	}
+	if draft.generateAgent && ops.generateAgentFiles != nil {
+		if err := ops.generateAgentFiles(&draft.config); err != nil {
+			return initProgressError(draft.force, "generate agent workflow", err, local, remote)
+		}
+	}
+	if err := ops.saveConfig(&draft.config); err != nil {
+		return initProgressError(draft.force, "write final .dflow.yaml", err, local, remote)
+	}
+	return nil
+}
+
+func validateInitBranch(branch string) error {
+	output, err := exec.CommandContext(context.Background(), "git", "check-ref-format", "--branch", branch).CombinedOutput()
+	if err == nil {
+		return nil
+	}
+	diagnostic := strings.TrimSpace(string(output))
+	if diagnostic == "" {
+		return err
+	}
+	return fmt.Errorf("%s: %w", diagnostic, err)
+}
+
+func inspectInitRemoteBranch(branch string) (initRemoteBranch, error) {
+	session, err := repository.NewSession()
+	if err != nil {
+		return initRemoteBranch{}, fmt.Errorf("discover repository for remote inspection: %w", err)
+	}
+	localRevision, err := gitutils.RunGit(session.Command("rev-parse", "refs/heads/"+branch))
+	if err != nil {
+		return initRemoteBranch{}, fmt.Errorf("read local revision for %q: %w", branch, err)
+	}
+	remoteOutput, err := gitutils.RunGit(session.Command("ls-remote", "--heads", "origin", "refs/heads/"+branch))
+	if err != nil {
+		return initRemoteBranch{}, fmt.Errorf("read remote revision for %q: %w", branch, err)
+	}
+	state := initRemoteBranch{localRevision: strings.TrimSpace(localRevision)}
+	fields := strings.Fields(remoteOutput)
+	if len(fields) == 0 {
+		return state, nil
+	}
+	state.exists = true
+	state.remoteRevision = fields[0]
+	return state, nil
+}
+
+func initProgressError(force bool, stage string, cause error, local, remote []string) error {
+	localState := "No local branches were confirmed"
+	if len(local) > 0 {
+		localState = "Local branches retained: " + strings.Join(local, ", ")
+	}
+	remoteState := "No remote branches were published"
+	if len(remote) > 0 {
+		remoteState = "Remote branches retained: " + strings.Join(remote, ", ")
+	}
+	retryCommand := "dflow init"
+	if force {
+		retryCommand += " --force"
+	}
+	return fmt.Errorf("onboarding stopped while attempting to %s: %w. %s. %s. .dflow.yaml was not changed; resolve the reported error and rerun `%s` to reuse existing refs", stage, cause, localState, remoteState, retryCommand)
+}
+
+func generateInitAgentFiles(cfg *flow.Config) error {
+	doc := agent.GenerateAgentDoc(cfg)
+	agentPath := ".agents/workflows/dflow.md"
+	if err := os.MkdirAll(filepath.Dir(agentPath), 0755); err != nil {
+		return fmt.Errorf("failed to create agent workflow directory: %w", err)
+	}
+	if err := os.WriteFile(agentPath, doc, 0644); err != nil {
+		return fmt.Errorf("failed to write agent workflow: %w", err)
+	}
+	utils.Success("Generated agent workflow: %s", agentPath)
+	plan := agent.PlanInstructionTargets(agent.Agents(), instructionFileExists, false)
+	if err := writeInstructionReferences(plan, agentPath); err != nil {
+		utils.Warn("Could not update instruction references: %v", err)
+	}
+	return nil
 }
 
 func uniqueBranchNames(branches ...string) []string {

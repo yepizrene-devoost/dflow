@@ -42,8 +42,11 @@ branch for the finished work type. The source branch is not deleted automaticall
 unless you explicitly pass --delete and no manual targets remain. Finish is fully
 non-interactive: --delete is explicit intent and never prompts for confirmation.
 The source branch is deleted only after every automatic target merge and push
-succeeds; merge, conflict, non-fast-forward, and target-push failures leave it
-available, with no automatic rollback or merge abort.
+succeeds. If a target step fails, dflow identifies the failed phase, reports the
+auto targets completed so far, aborts an active merge when needed, and attempts
+to restore the original work branch. A restoration failure is reported
+separately from the target failure. Merge conflicts are reported distinctly from
+ordinary command failures.
 
 Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`,
 	Example: `  dflow finish
@@ -94,12 +97,16 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 		}
 
 		publishWorkBranch := !noPush
-		if err := gitutils.EnsureWorkingTreeClean(); err != nil {
+		gitSession, err := gitutils.NewGitSession()
+		if err != nil {
+			return err
+		}
+		if err := gitSession.EnsureWorkingTreeClean(); err != nil {
 			return err
 		}
 
-		if gitutils.MergeInProgress() {
-			return fmt.Errorf("A merge is already in progress. Resolve or abort it before running `dflow finish`.")
+		if gitSession.MergeInProgress() {
+			return fmt.Errorf("a merge is already in progress. Resolve or abort it before running `dflow finish`")
 		}
 
 		cfg, err := utils.LoadConfig()
@@ -107,7 +114,7 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 			return err
 		}
 
-		currentBranch, err := gitutils.CurrentBranch()
+		currentBranch, err := gitSession.CurrentBranch()
 		if err != nil {
 			return err
 		}
@@ -171,7 +178,7 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 				return nil
 			}
 
-			return gitutils.PushWorkBranch(plan.CurrentBranch)
+			return gitSession.PushWorkBranch(plan.CurrentBranch)
 		}
 
 		if dryRun {
@@ -198,14 +205,14 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 			return nil
 		}
 
-		if err := gitutils.FetchOrigin(); err != nil {
+		if err := gitSession.FetchOrigin(); err != nil {
 			return err
 		}
 
 		// The publish comes before the first merge so a merge that fails still
 		// leaves the candidate on origin.
 		if publishWorkBranch {
-			if err := gitutils.PushWorkBranch(plan.CurrentBranch); err != nil {
+			if err := gitSession.PushWorkBranch(plan.CurrentBranch); err != nil {
 				return err
 			}
 		}
@@ -214,7 +221,7 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 		allSucceeded := false
 		defer func() {
 			if allSucceeded {
-				if err := gitutils.CheckoutExistingBranch(returnBranch); err != nil {
+				if err := gitSession.CheckoutExistingBranch(returnBranch); err != nil {
 					utils.Warn("Finished all auto merges, but could not switch to '%s': %v", returnBranch, err)
 				}
 			}
@@ -223,20 +230,24 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 		for _, target := range autoTargets {
 			utils.Info("Processing auto target '%s'...", target)
 
-			if err := gitutils.PullBranch(target); err != nil {
-				return err
+			if err := gitSession.PullBranch(target); err != nil {
+				return finishTargetFailure(gitSession, plan.CurrentBranch, target, "pull/sync", mergedTargets, false, err)
 			}
 
-			if err := gitutils.MergeBranchIntoCurrent(plan.CurrentBranch); err != nil {
-				if gitutils.MergeInProgress() {
-					return fmt.Errorf("Merge conflict while merging '%s' into '%s'. Resolve or abort the merge on '%s' and try again.", plan.CurrentBranch, target, target)
+			if err := gitSession.MergeBranchIntoCurrent(plan.CurrentBranch); err != nil {
+				conflict := gitSession.MergeInProgress()
+				if conflict {
+					// A failed merge owns the index and working tree. Clean it up before
+					// attempting restoration so the caller is not stranded on a target.
+					if abortErr := gitSession.AbortMerge(); abortErr != nil {
+						return finishTargetFailure(gitSession, plan.CurrentBranch, target, "merge conflict (abort)", mergedTargets, true, fmt.Errorf("%v; merge-abort cleanup failed: %w", err, abortErr))
+					}
 				}
-
-				return err
+				return finishTargetFailure(gitSession, plan.CurrentBranch, target, "merge", mergedTargets, conflict, err)
 			}
 
-			if err := gitutils.PushBranchUpdate(target); err != nil {
-				return err
+			if err := gitSession.PushBranchUpdate(target); err != nil {
+				return finishTargetFailure(gitSession, plan.CurrentBranch, target, "push", mergedTargets, false, err)
 			}
 
 			mergedTargets = append(mergedTargets, target)
@@ -258,7 +269,7 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 				return nil
 			}
 
-			if err := gitutils.Delete(plan.CurrentBranch); err != nil {
+			if err := gitSession.Delete(plan.CurrentBranch); err != nil {
 				return err
 			}
 			utils.Success("Deleted finished branch '%s'", plan.CurrentBranch)
@@ -266,6 +277,24 @@ Use --dry-run to inspect the finish plan without fetching, merging, or pushing.`
 
 		return nil
 	}),
+}
+
+// finishTargetFailure makes target-side failures actionable without hiding the
+// original command error. Restoration is best effort, but its failure is called
+// out as a separate state because the operator may still be on the target.
+func finishTargetFailure(gitSession *gitutils.GitSession, workBranch, target, phase string, completed []string, conflict bool, cause error) error {
+	completedText := formatBranchList(completed)
+	restoreErr := gitSession.CheckoutExistingBranch(workBranch)
+
+	state := "target-side command failure"
+	if conflict {
+		state = "Merge conflict"
+	}
+	message := fmt.Sprintf("finish failed during %s for target '%s' (%s); completed auto targets: %s; original work branch: '%s'", phase, target, state, completedText, workBranch)
+	if restoreErr != nil {
+		return fmt.Errorf("%s; restoration failure: could not restore '%s': %v; cause: %w", message, workBranch, restoreErr, cause)
+	}
+	return fmt.Errorf("%s; restored to '%s': %w", message, workBranch, cause)
 }
 
 func formatBranchList(branches []string) string {

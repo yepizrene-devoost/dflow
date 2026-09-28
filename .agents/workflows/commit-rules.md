@@ -34,7 +34,8 @@ This file contains guidelines for the AI agent (Antigravity) to follow the proje
 
 ## 🤖 Instructions for the Agent
 
-1. **Before coding**: Check which branch the project is currently on.
-2. **New branches**: Use `dflow start ...` to create workflow branches.
-3. **Commit messages**: Follow the repository's observed conventional-commit style rather than inventing a ticket prefix that is not present in the branch name or recent history.
-4. **Persistence**: Keep this file updated if `.dflow.yaml` rules change.
+1. **Before any repository write**: Check the current branch and use `dflow start ...` to create and switch to the agent's own work branch before creating or modifying any file, including instruction, planning, and tracking files.
+2. **Base branches**: Treat `develop`, `uat`, and `main` as integration targets; do not create direct authoring commits on them.
+3. **Finish exception**: A separately authorized `dflow finish` may merge a completed work branch into configured `auto` targets. This integration merge is not direct authoring on the base branch.
+4. **Commit messages**: Follow the repository's observed conventional-commit style rather than inventing a ticket prefix that is not present in the branch name or recent history.
+5. **Persistence**: Keep this file updated if `.dflow.yaml` rules change.

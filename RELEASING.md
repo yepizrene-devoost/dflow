@@ -153,6 +153,36 @@ The release target:
   a stale or mismatched `CHANGELOG.md` stops the release instead of overwriting
   the published body with the wrong notes
 - runs `goreleaser release --clean --release-notes=RELEASE_NOTES.md`
+- after GoReleaser succeeds, requests the tagged module's `.info` endpoint from
+  `proxy.golang.org`; if this post-publish step fails, the release may already
+  exist and the command prints the standalone retry command
+
+### Retry and verify Go module discovery
+
+The proxy warm-up can be run independently without rebuilding or republishing:
+
+```bash
+make warm-module-proxy VERSION=v0.2.0
+```
+
+The target rejects `VERSION=dev` before making a request. For a tagged version,
+it fetches the public proxy endpoint directly, so a populated local Go module
+cache cannot hide a publication problem:
+
+```text
+https://proxy.golang.org/github.com/yepizrene-devoost/dflow/@v/v0.2.0.info
+```
+
+After the target succeeds, manually verify the `.info` URL in a browser or with
+`curl -f`. You can also check the module page:
+
+```text
+https://pkg.go.dev/github.com/yepizrene-devoost/dflow@v0.2.0
+```
+
+`pkg.go.dev` indexing is asynchronous and may lag behind a successful public
+proxy response. Retry the module page later; do not republish solely because the
+page has not appeared yet.
 
 GoReleaser is configured to:
 
