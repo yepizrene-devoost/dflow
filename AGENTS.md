@@ -39,6 +39,7 @@ Repository instructions for coding agents working in this project.
 - For `bugfix` branches, use `uat` as the base branch.
 - For `hotfix` branches, use `main` as the base branch.
 - `develop` merges directly (`auto`); `main` requires a PR (`manual`). Never suggest a PR toward an `auto` target.
+- GitHub's default branch is `main`; `develop` is the configured automatic integration branch. `.dflow.yaml` does not define the forge default.
 - A separately authorized `dflow finish` may merge a completed work branch into configured `auto` targets; that integration merge is not direct authoring on a base branch.
 
 ## Relevant Skills
@@ -78,6 +79,11 @@ is always a standalone decision with its own explicit confirmation.
   issue #30 como completed"); execution waits for a plain, standalone yes.
 - When one message approves several steps, only the explicitly confirmed step
   runs; every other step re-asks at its own boundary.
+- The local branch-PR policy preserves issue approval and `type:` label checks.
+  However, when a release issue still tracks tagging or publication after its
+  `main` merge, the PR must use `References #<n>` rather than `Closes`, `Fixes`,
+  or `Resolves`. Close it only through a separate explicit decision after all
+  tracked release work is complete.
 
 ## Task Tracking (odd/)
 

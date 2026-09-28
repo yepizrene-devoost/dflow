@@ -100,39 +100,28 @@ or target-push failure. There is no automatic rollback or merge abort.
 
 ## Issue lifecycle
 
-- The repository default branch is `develop`, so the delivering merge lands
-  there — not on `main`. **When** that closes the issue is the trigger in
-  "Closing an issue" below; nothing else is a trigger.
-- Closing is an explicit step, not a side effect of merging. A `Closes #<n>`
-  keyword needs a pull request merged into the default branch to carry it; here
-  `develop` is an `auto` finish target merged by `dflow finish` with no PR, and
-  `git merge --no-ff --no-edit` writes the merge message itself, so the keyword
-  has no reliable carrier in this flow.
-- `main` and release branches do not close issues. The release promotion
-  (`develop` → `main`) is recorded in the changelog, not in issues.
+- GitHub's actual default branch is `main`. The configured `develop` `auto`
+  target is the integration branch; `.dflow.yaml` does not declare the forge
+  default.
+- Closing keywords in a PR merged to `main` can auto-close an issue. Do not
+  predict that behavior from branch bases, finish targets, or merge modes.
+- Keep the branch-PR skill's issue approval and `type:` label checks. Its closing
+  keyword rule has one project-local exception: when a release issue still
+  tracks tagging, publication, or other post-merge work, use `References #<n>`
+  instead of `Closes`, `Fixes`, or `Resolves`.
 - Issues track any work unit (feature, bug, chore, docs), not only production
   incidents.
 
 ### Closing an issue
 
-Close the issue when the finished branch has no manual targets left, and only then:
+Issue closure is a standalone human decision after all tracked scope is complete,
+not an automatic consequence of `dflow finish`, a PR merge, a tag, or publication:
 
-- **Trigger** — `dflow finish --dry-run` prints a line containing
-  `Manual targets: none`; the `ℹ️` icon and the two spaces after it are chrome,
-  not part of what you match. The machine-readable equivalent is the
-  `manual_targets` field of `dflow finish --dry-run --json`, which reads
-  `"manual_targets":[]` — parse the field, never the spacing. Check it at the
-  finish, while the branch is still a work branch: `dflow finish` does **not**
-  delete the branch, `--delete` is the only thing that removes it, and only when
-  no manual target remains. A later check from `develop` fails only because the
-  base branch is not a work branch, not because a branch was deleted, so
-  re-check from the branch, which survives:
-  - No manual target: close the issue as part of that finish.
-  - A manual target remains — the PR toward `main` on a `release` or `hotfix`
-    branch: the merge into `develop` does **not** close the issue. Close it when
-    the last manual target is completed, that is, when that PR merges.
-  Work a human still has to finish is not finished, which is why the issue stays
-  open until then.
+- **Completion** — verify that no implementation, manual target, tagging,
+  publication, or other tracked delivery work remains. A release issue stays
+  open after its `main` merge while tagging or publication is pending.
+- **Confirmation** — ask explicitly to close the exact issue. Approval for a
+  merge, tag, publication, or another action does not authorize closure.
 - **Labels** — remove every `status:` label naming a state that has ended,
   whatever its name: `status:approved` ("Approved for implementation — PRs can
   now be opened"), `status:needs-review` ("Awaiting maintainer review"),
@@ -140,14 +129,11 @@ Close the issue when the finished branch has no manual targets left, and only th
   PR") and any other. Keep the issue's `type:` label. Issue #22 is the case that
   exposed this: it carried `status:needs-design`, so naming only the other two
   would have left a stale status behind. There is no `status:delivered` label.
-- **Closing comment** — one comment, naming the merge commit that landed the
-  branch on `develop`: `git log --merges -1 --format=%H develop` taken right
-  after the finish, or, for a branch already merged, the merge commit whose
-  subject is `Merge branch '<branch>' into develop`. Add the review lineage when
-  the candidate went through review.
+- **Closing comment** — name the relevant delivery commit and add the review
+  lineage when the candidate went through review.
 
-Issues closed as rejected, duplicate or invalid keep their own terminal handling:
-that is a human decision. This policy covers delivered work only.
+Issues closed as rejected, duplicate or invalid keep their own terminal handling;
+those are also standalone human decisions. This policy covers delivered work only.
 
 ## Chained branches
 
