@@ -345,7 +345,7 @@ func initTempGitRepo(t *testing.T) string {
 	t.Helper()
 
 	repoDir := t.TempDir()
-	probeGitInitBranch(t, repoDir)
+	initGitRepoWithMainBranchOrSkipUnsupported(t, repoDir)
 	runGit(t, repoDir, "config", "user.name", "Dflow Test")
 	runGit(t, repoDir, "config", "user.email", "test@example.com")
 	runGit(t, repoDir, "config", "commit.gpgsign", "false")
@@ -353,7 +353,7 @@ func initTempGitRepo(t *testing.T) string {
 	return repoDir
 }
 
-func probeGitInitBranch(t *testing.T, repoDir string) {
+func initGitRepoWithMainBranchOrSkipUnsupported(t *testing.T, repoDir string) {
 	t.Helper()
 
 	probe := exec.Command("git", "init", "-b", "main")
