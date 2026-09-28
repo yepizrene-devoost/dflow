@@ -7,6 +7,21 @@ changes in each release, see [`CHANGELOG.md`](./CHANGELOG.md).
 
 ---
 
+## 📦 v0.5.0 – Repository Context & Safer Recovery
+
+**Status:** Planned release<br>
+**Date:** Pending publication
+
+**Highlights:**
+
+- Commands resolve the canonical repository from nested directories, linked worktrees, and `DFLOW_CWD`, keeping configuration access anchored to the worktree root.
+- Configuration and onboarding fail before persistence when branch, flow, or merge rules are invalid, and `dflow init` preserves clear retry state after partial branch setup.
+- `dflow finish` reports the exact failed phase and completed targets, cleans up conflicted merges, and attempts to restore the original work branch.
+- `dflow start` preserves underlying Git diagnostics and gives an actionable recovery command when branch publication fails.
+- The public Go API adds repository discovery and session types plus explicit configuration validation, without removing or renaming existing exported `pkg/*` symbols.
+
+---
+
 ## 📦 v0.4.1 – Release Contracts & Version Display
 
 **Tag:** [`v0.4.1`](https://github.com/yepizrene-devoost/dflow/releases/tag/v0.4.1)<br>
