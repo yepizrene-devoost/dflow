@@ -146,15 +146,27 @@ func TestGenerateAgentDocContainsFrontmatter(t *testing.T) {
 	}
 }
 
-func TestGenerateAgentDocDefaultBranch(t *testing.T) {
+func TestGenerateAgentDocDoesNotInferForgeDefaultBranch(t *testing.T) {
 	doc := string(GenerateAgentDoc(testConfig()))
 
-	// DefaultBranch should be develop (cfg.Branches.Develop)
-	if !strings.Contains(doc, "The repository default branch is `develop`") {
-		t.Error("output missing default branch reference to develop")
+	for _, want := range []string{
+		"It does not declare the forge's default branch.",
+		"Do not infer issue auto-closing behavior from configured integration targets.",
+		"`References #<n>` instead of `Closes`, `Fixes`, or `Resolves`.",
+		"Close an issue only after all tracked scope is complete and a human explicitly",
+	} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("output missing issue lifecycle policy %q", want)
+		}
 	}
-	if !strings.Contains(doc, "the merge commit on `develop`") {
-		t.Error("output missing closing comment reference to develop")
+
+	for _, unwanted := range []string{
+		"The repository default branch is `develop`",
+		"`main` and release branches do not close issues",
+	} {
+		if strings.Contains(doc, unwanted) {
+			t.Errorf("output infers forge behavior from dflow configuration: %q", unwanted)
+		}
 	}
 }
 
