@@ -8,6 +8,18 @@ publication. For the detailed changes, see [`CHANGELOG.md`](./CHANGELOG.md).
 
 ---
 
+## 📦 v0.5.1 – Safer Onboarding & Local Repositories
+
+**Tag:** [`v0.5.1`](https://github.com/yepizrene-devoost/dflow/releases/tag/v0.5.1)<br>
+**Date:** 2026-10-03
+
+**Highlights:**
+
+- `dflow init` refuses a repository with no commits before it asks anything, naming the missing first commit and leaving `.dflow.yaml` untouched, while `--force` keeps its single meaning: regenerating the configuration.
+- Onboarding completes in a repository without an `origin` remote: base-branch publication is skipped in the wording the CLI already uses for that condition, and a question whose answer cannot be acted on is no longer asked.
+
+---
+
 ## 📦 v0.5.0 – Repository Context & Safer Recovery
 
 **Tag:** [`v0.5.0`](https://github.com/yepizrene-devoost/dflow/releases/tag/v0.5.0)<br>
