@@ -1,5 +1,17 @@
 # Changelog
 
+## 📦 v0.5.1 – Safer Onboarding & Local Repositories
+
+### Changed
+- `dflow init` offers the question about pushing the base branches to `origin` only when that remote exists. Its default answer is "yes", so asking it where publication cannot happen was precisely how accepting the default aborted the run: a question the run cannot act on is not a question worth asking.
+
+### Fixed
+- `dflow init` no longer dies on a repository with no commits. It refuses before asking any question, with `` this repository has no commits yet; create the first commit, then rerun `dflow init` ``, and leaves `.dflow.yaml` untouched. The old failure surfaced Git's own branch-creation diagnostic, which named neither the missing first commit nor the step to take, and `--force` does not bypass the check because regenerating a configuration is all `--force` ever authorized.
+- `dflow init` no longer aborts onboarding in a repository without an `origin` remote. Base-branch publication is skipped with `Remote 'origin' not found. Skipping base branch publication.`, the same wording the CLI already uses when it skips a pull, a fetch or a push for the same reason, so the run completes and `.dflow.yaml` is written instead of failing on a remote lookup Git reports as an unknown repository.
+
+### Maintenance
+- `github.com/spf13/pflag` is declared as a direct requirement instead of an indirect one, with no version or module graph change.
+
 ## 📦 v0.5.0 – Repository Context & Safer Recovery
 
 ### Added
