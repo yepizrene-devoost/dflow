@@ -129,6 +129,113 @@ func TestInitFirstRunStillReachesPrompt(t *testing.T) {
 	}
 }
 
+// initNoCommitsCLIWording and initNoOriginSkipWording are the exact sentences the
+// real binary must render for the two issue #60 defects. They repeat the CLI's
+// own wording on purpose, in the same style as initRefusalMessage above: a test
+// that reaches into the command package could not pin what the user reads.
+const (
+	initNoCommitsCLIWording = "this repository has no commits yet; create the first commit, then rerun `dflow init`"
+	initNoOriginSkipWording = "Remote 'origin' not found. Skipping base branch publication."
+)
+
+// TestInitFailsFastOnRepositoryWithoutCommits pins the WU1 preflight on the real
+// binary. A repository with no commits cannot have base branches created at all,
+// so init must refuse before the terminal check — which is what lets a plain pipe
+// reach the refusal — and before any question or mutation. --force authorizes
+// regenerating .dflow.yaml only, so it must reach the same refusal.
+func TestInitFailsFastOnRepositoryWithoutCommits(t *testing.T) {
+	setUpCLIEnv(t)
+	binary := buildDflowCLI(t)
+
+	repo := initTempEmptyGitRepo(t)
+
+	for _, args := range [][]string{{"init"}, {"init", "--force"}} {
+		output, exitCode := startCLIRawOutput(t, 15*time.Second, repo, binary, args...)
+		if exitCode == 0 {
+			t.Fatalf("%v in a commitless repository exited 0, want non-zero\n%s", args, output)
+		}
+		if !strings.Contains(output, initNoCommitsCLIWording) {
+			t.Fatalf("%v is missing the exact refusal %q:\n%s", args, initNoCommitsCLIWording, output)
+		}
+		if strings.Contains(output, "interactive") {
+			t.Fatalf("%v must fail at the preflight before the terminal check:\n%s", args, output)
+		}
+		requireFileAbsent(t, filepath.Join(repo, ".dflow.yaml"))
+	}
+}
+
+// TestInitCompletesOnboardingWithoutOriginRemote pins WU2 end to end: the
+// repository has a commit but no remote, which is exactly the local-only project
+// whose onboarding used to abort on `git ls-remote --heads origin`. The run must
+// complete, publish nothing, and report the skip exactly once.
+func TestInitCompletesOnboardingWithoutOriginRemote(t *testing.T) {
+	setUpCLIEnv(t)
+	binary := buildDflowCLI(t)
+
+	repo := initTempGitRepo(t)
+
+	output, exitCode := runInteractiveCLI(t, 60*time.Second, repo, binary, initTerminalAnswers, "init")
+	if exitCode != 0 {
+		t.Fatalf("init in a remote-less repository exited %d, want 0\n%s", exitCode, output)
+	}
+	if !strings.Contains(output, "Created .dflow.yaml") {
+		t.Fatalf("onboarding did not complete:\n%s", output)
+	}
+	if got := strings.Count(output, initNoOriginSkipWording); got != 1 {
+		t.Fatalf("skip report rendered %d times, want exactly one line %q:\n%s", got, initNoOriginSkipWording, output)
+	}
+	if strings.Contains(output, "does not appear to be a git repository") {
+		t.Fatalf("init reached an unguarded remote operation:\n%s", output)
+	}
+
+	if _, err := os.Stat(filepath.Join(repo, ".dflow.yaml")); err != nil {
+		t.Fatalf(".dflow.yaml was not written: %v", err)
+	}
+	if got := runGitOutput(t, repo, "remote", "-v"); got != "" {
+		t.Fatalf("repository gained a remote during onboarding: %q", got)
+	}
+}
+
+// initTerminalAnswersWithPublication is initTerminalAnswers plus the answer to
+// the publication question: the driver has to know about that question only when
+// the command renders it, which is exactly what the test below pins.
+var initTerminalAnswersWithPublication = []terminalAnswer{
+	{trigger: "Main branch name:", reply: "\n"},
+	{trigger: "Development branch name:", reply: "\n"},
+	{trigger: "UAT branch name:", reply: "\n"},
+	{trigger: "How do you manage merges by default in this project?", reply: "\n"},
+	{trigger: "Which branches should behave differently", reply: "\n"},
+	{trigger: "Do you want to push the base branches to 'origin'?", reply: "n\n"},
+	{trigger: "Generate an agent workflow file", reply: "\n"},
+}
+
+// TestInitOffersPublicationPromptWhenOriginExists guards the other half of WU2: a
+// repository that can be published still gets asked. Answering "n" keeps the test
+// off the remote, and the bare origin is asserted empty so the refusal is real.
+func TestInitOffersPublicationPromptWhenOriginExists(t *testing.T) {
+	setUpCLIEnv(t)
+	binary := buildDflowCLI(t)
+
+	repo := initTempGitRepo(t)
+	origin := initBareGitRepo(t)
+	runGit(t, repo, "remote", "add", "origin", origin)
+
+	output, exitCode := runInteractiveCLI(t, 60*time.Second, repo, binary, initTerminalAnswersWithPublication, "init")
+	if exitCode != 0 {
+		t.Fatalf("init with an origin remote exited %d, want 0\n%s", exitCode, output)
+	}
+	if !strings.Contains(output, "Do you want to push the base branches to 'origin'?") {
+		t.Fatalf("the publication question must still be offered when origin exists:\n%s", output)
+	}
+	if strings.Contains(output, initNoOriginSkipWording) {
+		t.Fatalf("a repository with origin must not report the skip:\n%s", output)
+	}
+
+	if refs := strings.TrimSpace(runGitOutput(t, origin, "for-each-ref", "--format=%(refname)")); refs != "" {
+		t.Fatalf("init published to origin without asking for it: %q", refs)
+	}
+}
+
 // TestEnsureDflowNotInitializedUnit covers the validator in isolation with the
 // repo's manual os.Chdir pattern (withWorkingDir), because Go 1.21 has no
 // t.Chdir.

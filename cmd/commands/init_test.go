@@ -2,6 +2,7 @@ package commands
 
 import (
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,84 @@ import (
 
 	"github.com/yepizrene-devoost/dflow/pkg/flow"
 )
+
+// initNoCommitsWording and initPublicationSkipWording are the exact user-facing
+// sentences the two new guards must emit. They are spelled out here, rather than
+// referenced from the implementation, so the tests pin the wording itself: a
+// reworded message has to be a deliberate change to these literals.
+const (
+	initNoCommitsWording       = "this repository has no commits yet; create the first commit, then rerun `dflow init`"
+	initPublicationSkipWording = "Remote 'origin' not found. Skipping base branch publication."
+)
+
+// TestInitApplyAbortsCommitlessRepositoryBeforeMutation pins the WU1 guard at the
+// apply path: a repository with no commits cannot have base branches created, so
+// the run must refuse before any step that could mutate anything.
+func TestInitApplyAbortsCommitlessRepositoryBeforeMutation(t *testing.T) {
+	draft := validInitDraft()
+	draft.push = true
+	draft.generateAgent = true
+	ops, calls := recordingInitOperations()
+	ops.hasCommits = func() bool { return false }
+
+	err := applyInitDraft(draft, ops)
+	if err == nil || err.Error() != initNoCommitsWording {
+		t.Fatalf("applyInitDraft() error = %v, want the exact refusal %q", err, initNoCommitsWording)
+	}
+	assertNoInitMutations(t, *calls)
+	if len(*calls) != 0 {
+		t.Fatalf("commitless repository reached onboarding steps: %v", *calls)
+	}
+}
+
+// TestInitApplySkipsPublicationWithoutOrigin pins WU2: publication is dropped
+// with the informational line, no remote lookup and no push are attempted (the
+// old unguarded `git ls-remote` is what aborted onboarding), and the run still
+// finishes by persisting the configuration last.
+func TestInitApplySkipsPublicationWithoutOrigin(t *testing.T) {
+	draft := validInitDraft()
+	draft.push = true
+	draft.generateAgent = true
+	ops, calls := recordingInitOperations()
+	ops.hasOriginRemote = func() bool { return false }
+
+	var err error
+	output := captureInitStdout(t, func() { err = applyInitDraft(draft, ops) })
+	if err != nil {
+		t.Fatalf("applyInitDraft() error = %v, want a run that completes without origin", err)
+	}
+
+	want := []string{
+		"validate:main", "validate:develop", "validate:uat",
+		"ensure:main", "ensure:develop", "ensure:uat",
+		"agent", "save",
+	}
+	if !reflect.DeepEqual(*calls, want) {
+		t.Fatalf("calls = %v, want no remote/push operations and config saved last %v", *calls, want)
+	}
+	if got := strings.Count(output, initPublicationSkipWording); got != 1 {
+		t.Fatalf("skip report rendered %d times, want exactly one line %q in:\n%s", got, initPublicationSkipWording, output)
+	}
+}
+
+// TestInitApplyTreatsMissingProbesAsAnAvailableRepository keeps the nil seam the
+// file already uses for generateAgentFiles: an operation that is not wired must
+// not fabricate a failure, or a partially built initOperations would block a
+// legitimate run.
+func TestInitApplyTreatsMissingProbesAsAnAvailableRepository(t *testing.T) {
+	draft := validInitDraft()
+	draft.push = true
+	ops, calls := recordingInitOperations()
+	ops.hasCommits = nil
+	ops.hasOriginRemote = nil
+
+	if err := applyInitDraft(draft, ops); err != nil {
+		t.Fatalf("applyInitDraft() error = %v, want unset probes to stay permissive", err)
+	}
+	if !containsCall(*calls, "push:main") || !containsCall(*calls, "save") {
+		t.Fatalf("unset probes changed the run: %v", *calls)
+	}
+}
 
 func TestInitApplyRejectsInvalidPrimaryBranchBeforeMutation(t *testing.T) {
 	draft := validInitDraft()
@@ -313,8 +392,14 @@ func validInitDraft() initDraft {
 func recordingInitOperations() (initOperations, *[]string) {
 	calls := []string{}
 	return initOperations{
-		validateBranch: func(branch string) error { calls = append(calls, "validate:"+branch); return nil },
-		ensureBranch:   func(branch string) error { calls = append(calls, "ensure:"+branch); return nil },
+		// The repository-state probes default to the healthy case and record
+		// nothing, so every existing sequence assertion keeps describing the
+		// onboarding steps rather than the preflights in front of them. Tests that
+		// need the other answer replace one of these two.
+		hasCommits:      func() bool { return true },
+		hasOriginRemote: func() bool { return true },
+		validateBranch:  func(branch string) error { calls = append(calls, "validate:"+branch); return nil },
+		ensureBranch:    func(branch string) error { calls = append(calls, "ensure:"+branch); return nil },
 		inspectRemoteBranch: func(branch string) (initRemoteBranch, error) {
 			calls = append(calls, "remote:"+branch)
 			return initRemoteBranch{localRevision: branch + "-revision"}, nil
@@ -326,6 +411,36 @@ func recordingInitOperations() (initOperations, *[]string) {
 		},
 		saveConfig: func(*flow.Config) error { calls = append(calls, "save"); return nil },
 	}, &calls
+}
+
+// captureInitStdout runs fn with os.Stdout redirected to a pipe and returns what
+// it wrote. The onboarding progress lines go through the shared output helpers,
+// which print to stdout, so redirection is the only way to observe them in a
+// plain unit test without a pseudo-terminal.
+func captureInitStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create stdout capture pipe: %v", err)
+	}
+	original := os.Stdout
+	os.Stdout = writer
+	t.Cleanup(func() { os.Stdout = original })
+
+	fn()
+
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close stdout capture writer: %v", err)
+	}
+	captured, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read captured stdout: %v", err)
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatalf("close stdout capture reader: %v", err)
+	}
+	return string(captured)
 }
 
 func assertNoInitMutations(t *testing.T, calls []string) {
