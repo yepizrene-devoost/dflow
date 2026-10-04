@@ -41,8 +41,8 @@ Two consequences made this worth fixing now rather than tolerating:
    `cmd.Stdout` and `cmd.Stderr`, so `os/exec` owns the copy goroutine and `Wait` waits for it.
 3. [x] WU3 — pin it and verify it. A deterministic regression pin, an independent verification, and a
    run on the CI platform itself.
-4. [ ] WU4 — commit identity: recorded by the follow-up `docs(odd)` commit, the repository's one
-   allowed exception, because a commit cannot contain its own id.
+4. [x] WU4 — commit identity: recorded by the follow-up `docs(odd)` commit, the repository's one
+   allowed exception, because a commit cannot contain its own id — the commit that carries this line
 
 ## Decisions recorded
 
@@ -132,8 +132,23 @@ Recorded because a reader of this evidence will meet that intermediate output.
 
 ### WU4 — commit identity
 
-OUTCOME: pending, written by the follow-up `docs(odd)` commit that records this work unit's commit id.
+OUTCOME: done. The work unit is the single commit `3e8f511` — `fix(tests): keep the interactive
+harness from dropping final output`: three paths (the harness, the pin, and this document), 292
+insertions and 27 deletions, no trailers. This stage is closed by the short follow-up `docs(odd)`
+commit that carries this line.
 
 ## Native review
 
-Pending: the candidate is this work unit's commit, and the review runs after the freeze.
+The work unit was reviewed as candidate `review-68acbcf6fbe9f681` over the committed range
+`develop (a4e0303)..3e8f511` (3 changed paths, 319 changed lines): tier `medium`, one consolidated
+lens (`review-reliability`), **approved** with no correction opened, and the authority burned as
+`gentle-ai.review-acknowledged/v1`. The frozen correction budget of 160 lines went unused.
+
+Two advisory findings were recorded as `SUGGESTION` and informational, and neither opens or reopens
+a correction: R3-001 at `cmd/tests/pty_transcript_test.go:62` and R3-002 at
+`cmd/tests/agent_cli_test.go:1061-1062`. They are later, separate work and are deliberately not
+addressed here, because this candidate is approved and closed: an edit would mint a new candidate
+instead of improving this one.
+
+Delivery is a separate decision under ordinary repository policy. The approval is a review outcome,
+not an authorization to push or merge.
