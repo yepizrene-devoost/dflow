@@ -7,6 +7,7 @@ package commands
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -36,7 +37,11 @@ import (
 //   - Flow rules for each type of branch (feature, release, bugfix, hotfix).
 //
 // It also ensures the specified base branches exist locally, offering to create them
-// if missing, and provides an option to push them to the remote origin.
+// if missing. With an `origin` remote configured it asks whether to push those base
+// branches there; without one, publication is skipped and the question is not asked.
+//
+// A repository with no commits cannot have its base branches created, so `init`
+// refuses there before asking anything: create the first commit and rerun it.
 //
 // The `.dflow.yaml` file is stored at the root of the repository and is used by all
 // subsequent dflow commands (`start`, `config`, `delete`, etc).
@@ -70,9 +75,14 @@ var InitCmd = &cobra.Command{
       - Bugfixes start from UAT and sync back to UAT and Develop
       - Hotfixes start from Main and sync back to Main, Develop, and UAT
     - Ensure the specified branches exist locally.
-    - Ask whether to push those base branches to origin.
+    - Ask whether to push those base branches to origin, when the repository has an
+      origin remote that can receive them.
 
   The resulting .dflow.yaml is stored in the project root and used by all dflow commands.
+
+  A repository with no commits cannot have its base branches created, so init refuses
+  there, before asking any question: create the first commit, then rerun init. No
+  --force opens that door.
 
   If .dflow.yaml already exists, init refuses to run instead of overwriting it.
   Pass --force to regenerate the file deliberately. --force only authorizes the
@@ -95,6 +105,14 @@ var InitCmd = &cobra.Command{
 				return err
 			}
 		}
+		ops := defaultInitOperations()
+		// The history preflight runs before the terminal check on purpose: a
+		// repository with no commits cannot be onboarded at all, so it must hear the
+		// real reason rather than be told to open a terminal it is already in, and the
+		// wizard must never interrogate the user before failing.
+		if err := requireInitRepositoryHistory(ops); err != nil {
+			return err
+		}
 		if !utils.IsInteractive() {
 			return fmt.Errorf("dflow init is interactive and requires a terminal")
 		}
@@ -104,7 +122,7 @@ var InitCmd = &cobra.Command{
 			return err
 		}
 		draft.force = force
-		if err := applyInitDraft(draft, defaultInitOperations()); err != nil {
+		if err := applyInitDraft(draft, ops); err != nil {
 			return err
 		}
 
@@ -140,12 +158,50 @@ type initRemoteBranch struct {
 }
 
 type initOperations struct {
+	hasCommits          func() bool
+	hasOriginRemote     func() bool
 	validateBranch      func(string) error
 	ensureBranch        func(string) error
 	inspectRemoteBranch func(string) (initRemoteBranch, error)
 	pushBranch          func(string) error
 	generateAgentFiles  func(*flow.Config) error
 	saveConfig          func(*flow.Config) error
+}
+
+// The two repository-state guards hold their exact user-facing sentences in one
+// place each. The publication line mirrors the wording of the existing
+// "Remote 'origin' not found. Skipping pull" line: a step that cannot happen is
+// reported as skipped, never as a failure.
+const (
+	initNoCommitsMessage = "this repository has no commits yet; create the first commit, then rerun `dflow init`"
+	initNoOriginMessage  = "Remote 'origin' not found. Skipping base branch publication."
+)
+
+// hasInitCommits reports whether HEAD resolves, probed the way the rest of the CLI
+// asks the same question: a Git command through the shared capture boundary whose
+// success is the whole answer.
+//
+// An unborn HEAD is not a repository dflow can onboard. `git branch <name>` needs
+// an object to point a new branch at, so every base branch would fail with a Git
+// diagnostic naming neither the cause nor the fix.
+func hasInitCommits() bool {
+	session, err := repository.NewSession()
+	if err != nil {
+		return false
+	}
+	_, err = gitutils.RunGit(session.Command("rev-parse", "--verify", "--quiet", "HEAD"))
+	return err == nil
+}
+
+// requireInitRepositoryHistory refuses to onboard a repository with no commits.
+//
+// It is a preflight and not a hint: `--force` authorizes regenerating .dflow.yaml
+// only, so it must not open the door to a run that can only fail later.
+func requireInitRepositoryHistory(ops initOperations) error {
+	if ops.hasCommits != nil && !ops.hasCommits() {
+		return errors.New(initNoCommitsMessage)
+	}
+	return nil
 }
 
 func collectInitDraft() (initDraft, error) {
@@ -209,8 +265,13 @@ func collectInitDraft() (initDraft, error) {
 	}
 
 	draft := initDraft{config: cfg, branches: branches}
-	if err := survey.AskOne(&survey.Confirm{Message: "Do you want to push the base branches to 'origin'?", Default: true}, &draft.push); err != nil {
-		return initDraft{}, fmt.Errorf("push prompt failed: %w", err)
+	// The publication question is only offered where its answer can be acted on:
+	// its default is "yes", so asking it in a repository without an 'origin' remote
+	// invited the user to abort their own onboarding.
+	if gitutils.HasOriginRemote() {
+		if err := survey.AskOne(&survey.Confirm{Message: "Do you want to push the base branches to 'origin'?", Default: true}, &draft.push); err != nil {
+			return initDraft{}, fmt.Errorf("push prompt failed: %w", err)
+		}
 	}
 	if err := survey.AskOne(&survey.Confirm{Message: "Generate an agent workflow file for AI coding assistants?", Default: true}, &draft.generateAgent); err != nil {
 		return initDraft{}, fmt.Errorf("agent workflow prompt failed: %w", err)
@@ -220,6 +281,8 @@ func collectInitDraft() (initDraft, error) {
 
 func defaultInitOperations() initOperations {
 	return initOperations{
+		hasCommits:          hasInitCommits,
+		hasOriginRemote:     gitutils.HasOriginRemote,
 		validateBranch:      validateInitBranch,
 		ensureBranch:        gitutils.CheckOrCreateBranch,
 		inspectRemoteBranch: inspectInitRemoteBranch,
@@ -230,6 +293,9 @@ func defaultInitOperations() initOperations {
 }
 
 func applyInitDraft(draft initDraft, ops initOperations) error {
+	if err := requireInitRepositoryHistory(ops); err != nil {
+		return err
+	}
 	if err := draft.config.Validate(); err != nil {
 		return fmt.Errorf("validate onboarding configuration: %w", err)
 	}
@@ -251,7 +317,14 @@ func applyInitDraft(draft initDraft, ops initOperations) error {
 		}
 		local = append(local, branch)
 	}
-	if draft.push {
+	if !initHasOriginRemote(ops) {
+		// One report per run, emitted from this single place: the wizard never asks
+		// about publication without a remote, so no other path can print it. The
+		// guard still covers a requested publication, because an unguarded
+		// `git ls-remote --heads origin` in a repository without that remote is what
+		// aborted onboarding.
+		utils.Icon("📁", "%s", initNoOriginMessage)
+	} else if draft.push {
 		for _, branch := range draft.branches {
 			state, err := ops.inspectRemoteBranch(branch)
 			if err != nil {
@@ -280,6 +353,13 @@ func applyInitDraft(draft initDraft, ops initOperations) error {
 		return initProgressError(draft.force, "write final .dflow.yaml", err, local, remote)
 	}
 	return nil
+}
+
+// initHasOriginRemote answers the publication guard through the injectable
+// operation. An unwired probe means "the remote exists": like generateAgentFiles,
+// a missing operation must not fabricate a failure.
+func initHasOriginRemote(ops initOperations) bool {
+	return ops.hasOriginRemote == nil || ops.hasOriginRemote()
 }
 
 func validateInitBranch(branch string) error {

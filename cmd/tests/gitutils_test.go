@@ -353,6 +353,22 @@ func initTempGitRepo(t *testing.T) string {
 	return repoDir
 }
 
+// initTempEmptyGitRepo creates a repository that has no commits at all: the
+// state issue #60 reports, where `git branch <name>` has no object to point a
+// new branch at. It is deliberately separate from initTempGitRepo rather than a
+// flag on it, because that helper's committed state is what
+// TestInitFirstRunStillReachesPrompt and the interactive init driver rely on.
+func initTempEmptyGitRepo(t *testing.T) string {
+	t.Helper()
+
+	repoDir := t.TempDir()
+	initGitRepoWithMainBranchOrSkipUnsupported(t, repoDir)
+	runGit(t, repoDir, "config", "user.name", "Dflow Test")
+	runGit(t, repoDir, "config", "user.email", "test@example.com")
+	runGit(t, repoDir, "config", "commit.gpgsign", "false")
+	return repoDir
+}
+
 func initGitRepoWithMainBranchOrSkipUnsupported(t *testing.T, repoDir string) {
 	t.Helper()
 

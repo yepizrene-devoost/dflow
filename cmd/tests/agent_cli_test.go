@@ -945,21 +945,24 @@ type terminalAnswer struct {
 
 // initTerminalAnswers drives `dflow init` through its prompts, in order: three
 // line answers accepted as their defaults (main, develop, uat), Enter on the
-// default merge mode, Enter on an empty exception list, "n" to the push
-// confirmation — the test repository has no origin and a test must never push —
-// and Enter to accept the default "yes" on the agent-workflow confirmation.
+// default merge mode, Enter on an empty exception list, and Enter to accept the
+// default "yes" on the agent-workflow confirmation.
+//
+// There is no push confirmation here on purpose: the test repository has no
+// origin remote, and init only asks about publication where it can act on the
+// answer. It must never push from a test either.
 //
 // The triggers are the questions init renders. They are matched on their
 // distinctive prefix rather than the whole sentence, but they are still a pin
-// on init's user-visible prompts: rewording one makes the driver wait for an
-// answer that never comes and the run fails with the captured transcript.
+// on init's user-visible prompts: rewording one, or dropping one, makes the
+// driver wait for an answer that never comes and the run fails with the captured
+// transcript.
 var initTerminalAnswers = []terminalAnswer{
 	{trigger: "Main branch name:", reply: "\n"},
 	{trigger: "Development branch name:", reply: "\n"},
 	{trigger: "UAT branch name:", reply: "\n"},
 	{trigger: "How do you manage merges by default in this project?", reply: "\n"},
 	{trigger: "Which branches should behave differently", reply: "\n"},
-	{trigger: "Do you want to push the base branches to 'origin'?", reply: "n\n"},
 	{trigger: "Generate an agent workflow file", reply: "\n"},
 }
 
