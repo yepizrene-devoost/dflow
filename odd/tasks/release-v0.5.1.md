@@ -56,9 +56,10 @@ neither is committed.
   absence is correct rather than an omission; the Makefile extraction yields `v0.5.1` with content
   below the heading; and the candidate was exactly the three declared paths. Its findings were two
   wording issues and one unprovable attribution, all corrected here.
-- [ ] **R51-4 — Record work-unit commit identity (exception).** The metadata work unit's commit
-  id is recorded by the short follow-up `docs(odd)` commit, the one exception the repository
-  allows, because a commit cannot contain its own id.
+- [x] **R51-4 — Record work-unit commit identity (exception).** The metadata work unit is
+  `79d2e74` (`docs(release): prepare v0.5.1 notes`): three paths, 111 insertions, no trailers. This
+  stage is closed by the short follow-up `docs(odd)` commit that carries this line, the one
+  exception the repository allows, because a commit cannot contain its own id.
 
 No separate date work unit exists: the date is recorded by R51-2, so this release has no
 `Set the release-history date` stage and no date-correction identity stage.
@@ -78,10 +79,9 @@ reference — then the tag, then `make release`, which requires a readable `.env
 
 ## Progress and next step
 
-R51-1, R51-2 and R51-3 are complete. R51-4 is the last open stage and is the documented exception:
-it is closed by the short `docs(odd)` commit that records this work unit's commit id, because a
-commit cannot contain its own. No push, PR, merge, tag, or publication has happened.
+R51-1 through R51-4 are complete. The candidate's committed range (`256e39f..79d2e74`, three changed
+paths, 111 changed lines) was classified by the provider as non-executable — documentation only —
+and closed as **approved** at tier `low`: no lens was required, no findings were recorded and no
+correction was opened, and the authority burned as `gentle-ai.review-acknowledged/v1`.
 
-Review declaration: assess and review the complete committed range from the release cut once
-this candidate's commits and their identity record land. No verdict and no approval is presumed
-here.
+No push, PR, merge, tag or publication has happened, and each remains its own authorized step.
