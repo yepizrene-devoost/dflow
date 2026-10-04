@@ -945,21 +945,24 @@ type terminalAnswer struct {
 
 // initTerminalAnswers drives `dflow init` through its prompts, in order: three
 // line answers accepted as their defaults (main, develop, uat), Enter on the
-// default merge mode, Enter on an empty exception list, "n" to the push
-// confirmation — the test repository has no origin and a test must never push —
-// and Enter to accept the default "yes" on the agent-workflow confirmation.
+// default merge mode, Enter on an empty exception list, and Enter to accept the
+// default "yes" on the agent-workflow confirmation.
+//
+// There is no push confirmation here on purpose: the test repository has no
+// origin remote, and init only asks about publication where it can act on the
+// answer. It must never push from a test either.
 //
 // The triggers are the questions init renders. They are matched on their
 // distinctive prefix rather than the whole sentence, but they are still a pin
-// on init's user-visible prompts: rewording one makes the driver wait for an
-// answer that never comes and the run fails with the captured transcript.
+// on init's user-visible prompts: rewording one, or dropping one, makes the
+// driver wait for an answer that never comes and the run fails with the captured
+// transcript.
 var initTerminalAnswers = []terminalAnswer{
 	{trigger: "Main branch name:", reply: "\n"},
 	{trigger: "Development branch name:", reply: "\n"},
 	{trigger: "UAT branch name:", reply: "\n"},
 	{trigger: "How do you manage merges by default in this project?", reply: "\n"},
 	{trigger: "Which branches should behave differently", reply: "\n"},
-	{trigger: "Do you want to push the base branches to 'origin'?", reply: "n\n"},
 	{trigger: "Generate an agent workflow file", reply: "\n"},
 }
 
@@ -1008,24 +1011,60 @@ func runInteractiveCLI(t *testing.T, timeout time.Duration, repo, binary string,
 	}
 	cmd.Dir = repo
 
+	// Ordinary runs need no extra sink pacing: replyGap already keeps the driver
+	// busy between replies, and that is the window in which output used to go
+	// missing.
+	return runCapturedCLI(t, timeout, cmd, answers, 0)
+}
+
+// runCapturedCLI starts cmd, feeds everything it writes to a terminalDriver that
+// answers `answers` reactively, and returns the transcript plus the exit code.
+//
+// sinkPacing is how long the output path stays busy with each chunk after the
+// driver has taken it. Ordinary runs pass 0 and rely on replyGap; a regression
+// pin passes a delay long enough to outlast the child's remaining lifetime, so
+// that the window in which output can go missing is forced rather than raced.
+//
+// The output is consumed through a Writer on cmd.Stdout, never a hand-drained
+// StdoutPipe: see the comment on the wiring below for why only that shape
+// promises delivery.
+func runCapturedCLI(t *testing.T, timeout time.Duration, cmd *exec.Cmd, answers []terminalAnswer, sinkPacing time.Duration) (string, int) {
+	t.Helper()
+
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatalf("failed to open the interactive command's input: %v", err)
 	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		t.Fatalf("failed to open the interactive command's output: %v", err)
-	}
-	// Prompts are written to stdout; folding stderr into the same stream leaves
-	// one transcript to read and one to report on failure.
-	cmd.Stderr = cmd.Stdout
-
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("failed to start %s: %v", filepath.Base(binary), err)
-	}
 
 	driver := &terminalDriver{answers: answers}
-	go driver.drive(stdin, stdout)
+	sink := &outputSink{driver: driver, input: stdin, pacing: sinkPacing}
+	// The child's output is given to os/exec as a Writer, NOT drained from a
+	// hand-opened cmd.StdoutPipe().
+	//
+	// StdoutPipe is a trap here: its own documentation says Wait closes the pipe
+	// once the process exits, so any byte the reader has not taken yet is
+	// discarded without an error -- the transcript simply stops, while the
+	// exit code still reads 0. This harness reads in a goroutine that is
+	// deliberately busy elsewhere (consume holds the driver's mutex across
+	// replyGap, because survey's cursor reader needs paced replies), so on a
+	// loaded CI runner the child can finish inside that window. That is how
+	// TestInitCompletesOnboardingWithoutOriginRemote failed on ubuntu-latest with
+	// exit code 0 and a transcript cut off right after the last prompt while
+	// passing on macOS. Re-introducing the pipe re-creates that flake; see
+	// TestCapturedCLIKeepsOutputWrittenBeforeExit, which pins it.
+	//
+	// With a Writer, os/exec copies the child's output in a goroutine it owns and
+	// Wait waits for that copy to return before it returns, however slow this
+	// sink is, so delivery is guaranteed by the standard library rather than by
+	// timing luck. Stdout and Stderr get the same writer value, so exec shares one
+	// pipe and one goroutine between them: one transcript, in order, to read and to
+	// report on failure.
+	cmd.Stdout = sink
+	cmd.Stderr = sink
+
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("failed to start %s: %v", filepath.Base(cmd.Path), err)
+	}
 
 	waited := make(chan error, 1)
 	go func() { waited <- cmd.Wait() }()
@@ -1038,14 +1077,40 @@ func runInteractiveCLI(t *testing.T, timeout time.Duration, repo, binary string,
 		}
 		var exitErr *exec.ExitError
 		if !errors.As(waitErr, &exitErr) {
-			t.Fatalf("%s %v did not run: %v\n%s", filepath.Base(binary), args, waitErr, output)
+			t.Fatalf("%v did not run: %v\n%s", cmd.Args, waitErr, output)
 		}
 		return output, exitErr.ExitCode()
 	case <-time.After(timeout):
 		_ = cmd.Process.Kill()
-		t.Fatalf("%s %v did not finish within %s; the driver never answered one of its prompts:\n%s", filepath.Base(binary), args, timeout, driver.transcript())
+		t.Fatalf("%v did not finish within %s; the driver never answered one of its prompts:\n%s", cmd.Args, timeout, driver.transcript())
 	}
 	return "", 0
+}
+
+// outputSink is how the harness takes the child's output: it is the io.Writer
+// handed to cmd.Stdout and cmd.Stderr, and it feeds every chunk to the driver,
+// which records the transcript and answers the prompts the chunk makes
+// answerable.
+type outputSink struct {
+	driver *terminalDriver
+	input  io.Writer
+	// pacing is how long the sink stays busy with a chunk after the driver has
+	// taken it. It is 0 for ordinary interactive runs, where replyGap already
+	// paces the driver; a regression pin sets it, so the window in which output
+	// could be lost is open by construction rather than by luck.
+	pacing time.Duration
+}
+
+// Write hands the chunk to the driver. It always reports the whole chunk as
+// written: the driver only records bytes, so it cannot fail, and os/exec's copy
+// goroutine must not see a short write and stop. The error return exists for that
+// io.Writer contract, never for a real failure.
+func (s *outputSink) Write(p []byte) (int, error) {
+	s.driver.consume(s.input, string(p))
+	if s.pacing > 0 {
+		time.Sleep(s.pacing)
+	}
+	return len(p), nil
 }
 
 // terminalDriver answers an interactive child as its output arrives.
@@ -1061,20 +1126,6 @@ type terminalDriver struct {
 	output     strings.Builder
 	pending    string
 	nextAnswer int
-}
-
-// drive reads the child's output until it ends or the process goes away.
-func (d *terminalDriver) drive(input io.Writer, output io.Reader) {
-	buf := make([]byte, 4096)
-	for {
-		n, err := output.Read(buf)
-		if n > 0 {
-			d.consume(input, string(buf[:n]))
-		}
-		if err != nil {
-			return
-		}
-	}
 }
 
 // transcript returns everything the child has written so far.
