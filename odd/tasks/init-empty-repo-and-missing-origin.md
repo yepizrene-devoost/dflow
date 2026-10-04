@@ -42,8 +42,8 @@ git 2.50.1:
 1. [x] WU1 — a repository without commits fails fast with an actionable message
 2. [x] WU2 — no `origin` means no publication and no publication question
 3. [x] WU3 — regression coverage and the behavior's own help text
-4. [ ] WU4 — commit identity: recorded by the follow-up `docs(odd)` commit (the repository's one
-   allowed exception, because a commit cannot contain its own id)
+4. [x] WU4 — commit identity: recorded by the follow-up `docs(odd)` commit (the repository's one
+   allowed exception, because a commit cannot contain its own id) — the commit that carries this line
 
 ## Decisions recorded
 
@@ -170,8 +170,12 @@ Accepted residuals, all non-blocking and all recorded rather than hidden:
 
 ### WU4 — commit identity
 
-OUTCOME: pending. Written by the follow-up `docs(odd)` commit that records this work unit's
-commit id.
+OUTCOME: done. The work unit is the single commit `4f07bc89095c5f038b0cd497bc616f28cebe1910` —
+`fix(init): handle a repository without commits or an origin remote`: six paths (the five
+production and test files plus this document), 518 insertions and 14 deletions, no closing
+keyword and no trailers. This stage is closed by the short follow-up `docs(odd)` commit that
+carries this line, the one exception the repository allows for recording a commit identity.
+`CHANGELOG.md` carries no entry, by the release-branch decision recorded above.
 
 ### Repository state checks
 
@@ -180,4 +184,17 @@ feature document. `CHANGELOG.md` is byte-identical to `develop`.
 
 ## Native review
 
-Pending: the candidate is this work unit's commit, and the review runs after the freeze.
+The work unit was reviewed as candidate `review-b76bdadeec64f2cb` over the committed range
+`develop (0bd14c46)..4f07bc8` (6 changed paths, 532 changed lines): tier `medium`, one
+consolidated lens (`review-reliability`), **approved** with no correction opened, and the authority
+burned as `gentle-ai.review-acknowledged/v1`. The frozen correction budget of 200 lines went
+unused.
+
+Three advisory findings were recorded as `SUGGESTION` and informational, and none of them opens or
+reopens a correction: R3-001 at `cmd/commands/init.go:186-193`, R3-002 at
+`cmd/commands/init_test.go:420-444` and R3-003 at `cmd/commands/init.go:320-327`. They are later,
+separate work and are deliberately not addressed here: this candidate is approved and closed, so an
+edit would mint a new candidate instead of improving this one.
+
+Delivery is a separate decision under ordinary repository policy. The approval is a review
+outcome, not an authorization to merge, and issue #60 stays open until its own decision.
